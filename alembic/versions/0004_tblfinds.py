@@ -53,10 +53,10 @@ def upgrade() -> None:
         sa.Column("recordenteredby", sa.String(length=50), nullable=True),
         sa.Column(
             "recordenteredon",
-            sa.Date(),
+            sa.TIMESTAMP(timezone=False),
             nullable=False,
-            server_default=sa.text("CURRENT_DATE"),
-        ),
+            server_default=sa.text("now()"),
+        )
     )
 
 

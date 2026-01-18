@@ -45,47 +45,74 @@ def upgrade() -> None:
     if not _column_exists("tblregistered", "role"):
         op.add_column(
             "tblregistered",
-            sa.Column("role", sa.String(length=16), nullable=False, server_default="user"),
+            sa.Column(
+                "role",
+                sa.String(length=16),
+                nullable=False,
+                # Align with ORM and Postgres literal default
+                server_default=sa.text("'user'"),
+            ),
         )
+
     if not _column_exists("tblregistered", "is_active"):
         op.add_column(
             "tblregistered",
-            sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+            sa.Column(
+                "is_active",
+                sa.Boolean(),
+                nullable=False,
+                server_default=sa.text("false"),
+            ),
         )
+
     if not _column_exists("tblregistered", "invited_at"):
         op.add_column(
             "tblregistered",
             sa.Column("invited_at", sa.DateTime(timezone=True), nullable=True),
         )
+
     if not _column_exists("tblregistered", "invite_token_hash"):
         op.add_column(
             "tblregistered",
             sa.Column("invite_token_hash", sa.String(length=128), nullable=True),
         )
+
     if not _column_exists("tblregistered", "invite_expires_at"):
         op.add_column(
             "tblregistered",
             sa.Column("invite_expires_at", sa.DateTime(timezone=True), nullable=True),
         )
+
     if not _column_exists("tblregistered", "last_login_at"):
         op.add_column(
             "tblregistered",
             sa.Column("last_login_at", sa.DateTime(timezone=True), nullable=True),
         )
 
-    if not _check_exists("tblregistered", "ck_tblregistered_role_allowed"):
+    # Use the same constraint name as the ORM (role_allowed)
+    if not _check_exists("tblregistered", "role_allowed"):
         op.create_check_constraint(
-            "ck_tblregistered_role_allowed",
+            "role_allowed",
             "tblregistered",
             f"role IN ({_in_list(USER_ROLE_VALUES)})",
         )
 
 
 def downgrade() -> None:
-    op.drop_constraint("ck_tblregistered_role_allowed", "tblregistered", type_="check")
-    op.drop_column("tblregistered", "last_login_at")
-    op.drop_column("tblregistered", "invite_expires_at")
-    op.drop_column("tblregistered", "invite_token_hash")
-    op.drop_column("tblregistered", "invited_at")
-    op.drop_column("tblregistered", "is_active")
-    op.drop_column("tblregistered", "role")
+    # Drop check if present (idempotent downgrade)
+    if _check_exists("tblregistered", "role_allowed"):
+        op.drop_constraint("role_allowed", "tblregistered", type_="check")
+
+    # Columns: drop only if present
+    if _column_exists("tblregistered", "last_login_at"):
+        op.drop_column("tblregistered", "last_login_at")
+    if _column_exists("tblregistered", "invite_expires_at"):
+        op.drop_column("tblregistered", "invite_expires_at")
+    if _column_exists("tblregistered", "invite_token_hash"):
+        op.drop_column("tblregistered", "invite_token_hash")
+    if _column_exists("tblregistered", "invited_at"):
+        op.drop_column("tblregistered", "invited_at")
+    if _column_exists("tblregistered", "is_active"):
+        op.drop_column("tblregistered", "is_active")
+    if _column_exists("tblregistered", "role"):
+        op.drop_column("tblregistered", "role")

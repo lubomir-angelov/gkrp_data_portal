@@ -1,7 +1,7 @@
 """Base schema (legacy ceramics tables).
 
 Revision ID: 0001_base_schema
-Revises: 
+Revises:
 Create Date: 2026-01-18
 
 This revision creates the initial database schema based on the legacy ceramics
@@ -75,9 +75,10 @@ def upgrade() -> None:
         sa.Column("handfragments", sa.Integer(), nullable=True),
         sa.Column("wheelfragment", sa.Integer(), nullable=True),
         sa.Column("recordenteredby", sa.Text(), nullable=True),
+        # Option 2: backup uses TIMESTAMP (not DATE)
         sa.Column(
             "recordenteredon",
-            sa.Date(),
+            sa.TIMESTAMP(timezone=False),
             nullable=False,
             server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
@@ -138,6 +139,23 @@ def upgrade() -> None:
         sa.Column("type", sa.Integer(), nullable=True),
         sa.Column("subtype", sa.String(length=1), nullable=True),
         sa.Column("variant", sa.Integer(), nullable=True),
+
+        # Option 2: columns present in backup but missing originally
+        sa.Column("speed", sa.Text(), nullable=True),
+        sa.Column("includestype", sa.Text(), nullable=True),
+
+        sa.Column("topsize", sa.Numeric(), nullable=True),
+        sa.Column("necksize", sa.Numeric(), nullable=True),
+        sa.Column("bodysize", sa.Numeric(), nullable=True),
+        sa.Column("bottomsize", sa.Numeric(), nullable=True),
+        sa.Column("dishheight", sa.Numeric(), nullable=True),
+
+        sa.Column("decoration", sa.Text(), nullable=True),
+        sa.Column("composition", sa.Text(), nullable=True),
+        sa.Column("parallels", sa.Text(), nullable=True),
+
+        sa.Column("image", sa.LargeBinary(), nullable=True),
+
         sa.Column("note", sa.Text(), nullable=True),
         sa.Column("inventory", sa.Text(), nullable=True),
         sa.Column("recordenteredby", sa.Text(), nullable=True),
@@ -225,17 +243,19 @@ def upgrade() -> None:
             "locationid",
             sa.Integer(),
             sa.ForeignKey("tbllayers.layerid", ondelete="CASCADE"),
-            nullable=False,
+            # Option 2: backup allows NULL
+            nullable=True,
         ),
         sa.Column("includetype", sa.Text(), nullable=True),
         sa.Column("includetext", sa.Text(), nullable=True),
         sa.Column("includesize", sa.Text(), nullable=True),
         sa.Column("includeconc", sa.Text(), nullable=True),
+        # Option 2: backup uses TIMESTAMP with now()
         sa.Column(
             "recordenteredon",
-            sa.Date(),
+            sa.TIMESTAMP(timezone=False),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
+            server_default=sa.text("now()"),
         ),
         sa.CheckConstraint(
             f"includetype IN ({_in_list(INCLUDETYPE_VALUES)})",
@@ -259,17 +279,19 @@ def upgrade() -> None:
             "locationid",
             sa.Integer(),
             sa.ForeignKey("tbllayers.layerid", ondelete="CASCADE"),
-            nullable=False,
+            # Option 2: backup allows NULL
+            nullable=True,
         ),
         sa.Column("type", sa.Text(), nullable=True),
         sa.Column("quantity", sa.Integer(), nullable=True),
         sa.Column("weight", sa.Numeric(6, 3), nullable=True),
         sa.Column("sok_weight", sa.Numeric(6, 3), nullable=True),
+        # Option 2: backup uses TIMESTAMP with now()
         sa.Column(
             "recordenteredon",
-            sa.Date(),
+            sa.TIMESTAMP(timezone=False),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
+            server_default=sa.text("now()"),
         ),
     )
 
@@ -281,22 +303,32 @@ def upgrade() -> None:
             "fragmentid",
             sa.Integer(),
             sa.ForeignKey("tblfragments.fragmentid", ondelete="CASCADE"),
-            nullable=False,
+            # Option 2: backup allows NULL
+            nullable=True,
         ),
         sa.Column("location", sa.Text(), nullable=True),
         sa.Column("relationship", sa.Text(), nullable=True),
+
+        # Option 2: columns present in backup but missing originally
+        sa.Column("color1", sa.Text(), nullable=True),
+        sa.Column("color2", sa.Text(), nullable=True),
+
         sa.Column("onornament", sa.Integer(), nullable=True),
         sa.Column("encrustcolor1", sa.String(length=10), nullable=True),
         sa.Column("encrustcolor2", sa.String(length=10), nullable=True),
         sa.Column("primary_", sa.Text(), nullable=True),
-        sa.Column("secondary", sa.Text(), nullable=True),
+
+        # Option 2: backup indicates varchar(5)
+        sa.Column("secondary", sa.String(length=5), nullable=True),
+
         sa.Column("tertiary", sa.Text(), nullable=True),
         sa.Column("quarternary", sa.Integer(), nullable=True),
+        # Option 2: backup uses TIMESTAMP with now()
         sa.Column(
             "recordenteredon",
-            sa.Date(),
+            sa.TIMESTAMP(timezone=False),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
+            server_default=sa.text("now()"),
         ),
         sa.CheckConstraint(
             f"primary_ IN ({_in_list(PRIMARY_ORN_VALUES)})",
@@ -316,11 +348,11 @@ def upgrade() -> None:
     op.create_table(
         "tblregistered",
         sa.Column("id", sa.Integer(), sa.Identity(), primary_key=True),
-        sa.Column("username", sa.String(length=25), nullable=True),
-        sa.Column("email", sa.String(), nullable=True),
-        sa.Column("password_hash", sa.String(), nullable=True),
-        sa.UniqueConstraint("username"),
-        sa.UniqueConstraint("email"),
+        sa.Column("username", sa.CHAR(length=25), nullable=True),
+        sa.Column("email", sa.Text(), nullable=True),
+        sa.Column("password_hash", sa.String(length=256), nullable=True),
+        sa.UniqueConstraint("username", name="uq_tblregistered_username"),
+        sa.UniqueConstraint("email", name="uq_tblregistered_email"),
     )
 
 
