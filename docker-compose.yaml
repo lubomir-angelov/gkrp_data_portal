@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: gkrp-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (use `make configure-env`)}
+      POSTGRES_DB: postgres
+    ports:
+      - "${PG_HOST_PORT:-5433}:5432"
+    volumes:
+      - gkrp_pg_data:/var/lib/postgresql/data
+      # optional: keep a writable area inside repo for convenience
+      - ./postgres:/workspace:rw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d postgres"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  gkrp_pg_data:
