@@ -8,6 +8,9 @@ from nicegui import ui
 from gkrp_data_portal.ui.pages.layers import page_layers  # noqa: F401
 from gkrp_data_portal.ui.pages.fragments import page_fragments  # noqa: F401
 from gkrp_data_portal.ui.pages.ornaments import page_ornaments  # noqa: F401
+from gkrp_data_portal.ui.pages.admin import page_admin  # noqa: F401
+from gkrp_data_portal.ui.pages.accept_invite import page_accept_invite  # noqa: F401
+from gkrp_data_portal.ui.pages.dev_login import page_dev_login  # noqa: F401
 
 
 @ui.page("/")

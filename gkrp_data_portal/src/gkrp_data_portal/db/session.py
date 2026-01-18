@@ -31,7 +31,7 @@ def init_db() -> None:
     if ENGINE is not None and SessionLocal is not None:
         return
     ENGINE = create_engine_from_env()
-    SessionLocal = sessionmaker(bind=ENGINE, autocommit=False, autoflush=False)
+    SessionLocal = sessionmaker(bind=ENGINE, autocommit=False, autoflush=False, expire_on_commit=False)
 
 
 def get_session() -> Iterator[Session]:
