@@ -16,6 +16,8 @@ authors = [
 dependencies = [
     "alembic==1.18.1",
     "loguru==0.7.3,",
+    "nicegui-3.5.0",
+    "fastapi==0.128.0",
 ]
 
 # This tells installers where the importable code actually lives.
