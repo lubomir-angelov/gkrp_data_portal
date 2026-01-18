@@ -1,1 +1,2 @@
-alembic
+alembic==1.18.1
+loguru==0.7.3
