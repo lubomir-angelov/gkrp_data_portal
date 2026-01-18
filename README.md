@@ -56,3 +56,9 @@ Override host port (if 5433 is busy)
 make configure-env BACKUP_FILE=/abs/path/to/backup.dump PG_HOST_PORT=5544
 make up-db
 ```
+
+Single-command bootstrap:
+```bash
+make initial-setup BACKUP_FILE=/abs/path/to/Pottery_backup_260118.dump
+make run
+```
