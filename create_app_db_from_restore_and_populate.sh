@@ -1,25 +1,52 @@
 #!/bin/bash
 set -euo pipefail
 
-# 1) create DB
-docker exec -e PGPASSWORD=postgres gkrp-pg psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
-  -c "DROP DATABASE IF EXISTS app_db;"
-docker exec -e PGPASSWORD=postgres gkrp-pg psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
-  -c "CREATE DATABASE app_db;"
+PG_CONTAINER="${PG_CONTAINER:-gkrp-pg}"
+POSTGRES_USER="${POSTGRES_USER:-postgres}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
+APP_DB="${APP_DB:-app_db}"
+PG_HOST_PORT="${PG_HOST_PORT:-5433}"
 
-# 2) restore dump (custom format assumed)
-docker exec -e PGPASSWORD=postgres gkrp-pg pg_restore \
-  -U postgres -d app_db \
-  --no-owner --no-privileges \
-  /tmp/Pottery_backup_260118.dump
+# Path to dump inside container (Makefile docker cp copies it here)
+DUMP_IN_CONTAINER="${DUMP_IN_CONTAINER:-/tmp/Pottery_backup_260118.dump}"
 
-# 2.1) Drop alembic versioning AFTER restore (because restore recreates it)
-docker exec -e PGPASSWORD=postgres gkrp-pg psql -U postgres -d app_db -X -v ON_ERROR_STOP=1 \
-  -c "DROP TABLE IF EXISTS public.alembic_version;"
+# Used by alembic
+DATABASE_URL="${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${PG_HOST_PORT}/${APP_DB}}"
+export DATABASE_URL
 
-# 3) stamp baseline (so Alembic won't try to recreate the restored schema)
-export DATABASE_URL="postgresql+psycopg://postgres:postgres@127.0.0.1:5433/app_db"
+echo "Using:"
+echo "  PG_CONTAINER=$PG_CONTAINER"
+echo "  APP_DB=$APP_DB"
+echo "  DUMP_IN_CONTAINER=$DUMP_IN_CONTAINER"
+echo "  DATABASE_URL=$DATABASE_URL"
+
+# 1) Create DB fresh
+docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" "${PG_CONTAINER}" \
+  psql -U "${POSTGRES_USER}" -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS ${APP_DB};"
+
+docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" "${PG_CONTAINER}" \
+  psql -U "${POSTGRES_USER}" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${APP_DB};"
+
+# 2) Restore dump
+case "${DUMP_IN_CONTAINER}" in
+  *.sql)
+    docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" "${PG_CONTAINER}" \
+      psql -U "${POSTGRES_USER}" -d "${APP_DB}" -v ON_ERROR_STOP=1 -f "${DUMP_IN_CONTAINER}"
+    ;;
+  *)
+    docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" "${PG_CONTAINER}" \
+      pg_restore -U "${POSTGRES_USER}" -d "${APP_DB}" --no-owner --no-privileges "${DUMP_IN_CONTAINER}"
+    ;;
+esac
+
+# IMPORTANT: dump may include alembic_version from some other project/revisions
+docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" "${PG_CONTAINER}" \
+  psql -U "${POSTGRES_USER}" -d "${APP_DB}" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS public.alembic_version;"
+
+# 3) Stamp baseline (so Alembic will treat restored schema as baseline)
 alembic stamp 0001_base_schema
 
-# 4) apply your app migrations (auth extensions, image_url, finds, indexes)
+# 4) Apply app migrations
 alembic upgrade head
+
+echo "Restore + migrations complete."
