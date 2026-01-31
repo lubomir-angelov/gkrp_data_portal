@@ -40,6 +40,9 @@ QUERY_OPTIONS = {
 
 DEFAULT_LIMIT = 500
 
+TABLE_MAX_LIMIT = 50000      # increase/remove the 5000 cap for the TABLE
+CHART_MAX_FETCH = 250000     # safety cap to avoid pulling millions of rows
+
 
 def _parse_date(s: Optional[str]) -> Optional[date]:
     if not s:
@@ -141,50 +144,50 @@ def page_analytics() -> None:
         # Left panel
         with ui.column().classes("w-[340px] shrink-0"):  # <-- shrink-0 keeps it from collapsing
             ui.label("Query + Filters").classes("text-subtitle1 font-medium")
-    
+
             sel_query = ui.select(
                 options=list(QUERY_OPTIONS.keys()),
                 value="Filter #1 (Layers + Fragments)",
                 label="Predefined query",
             ).classes("w-full")
-    
+
             inp_site = ui.input("site").props("clearable").classes("w-full")
             inp_sector = ui.input("sector").props("clearable").classes("w-full")
             inp_square = ui.input("square").props("clearable").classes("w-full")
             inp_q = ui.input("free text (inventory/note/piecetype or finds fields)").props("clearable").classes("w-full")
-    
+
             # ✅ compact date inputs (instead of huge calendars)
             with ui.row().classes("w-full gap-2"):
                 inp_date_from = ui.input("from").props("type=date clearable").classes("w-1/2")
                 inp_date_to = ui.input("to").props("type=date clearable").classes("w-1/2")
-    
+
             inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
-    
+
             ui.separator()
             ui.label("Columns").classes("text-subtitle1 font-medium")
-    
+
             with ui.row().classes("w-full justify-between"):
                 btn_select_all = ui.button("Select all")
                 btn_clear_all = ui.button("Deselect all")
-    
+
             columns_container = ui.scroll_area().classes(
                 "w-full h-[420px] border rounded p-2 bg-white"
             )
-    
+
         # Center panel  ✅ min-w-0 prevents Plotly/table from forcing wrapping
         with ui.column().classes("flex-1 min-w-0"):
             ui.label("Chart").classes("text-subtitle1 font-medium")
             dbg = ui.label("").classes("text-xs text-gray-500")
-    
+
             chart = ui.plotly({"data": [], "layout": {"height": 420}}).classes(
                 "w-full border rounded bg-white"
             ).style("height: 420px;")
-    
+
             chart_id = chart.id
-    
+
             with ui.row().classes("w-full items-center justify-between gap-2"):
                 sel_x = ui.select(options=[], label="Group by (x-axis)").classes("w-[420px]")
-    
+
                 with ui.row().classes("gap-2"):
                     ui.button(
                         "Download PNG",
@@ -222,16 +225,16 @@ def page_analytics() -> None:
                             "window.open('/api/analytics/chart.html?query_id=' + encodeURIComponent(window.__gkrp_query_id || 'q1'), '_blank');"
                         ),
                     )
-    
+
             ui.separator()
             ui.label("Table (scrollable)").classes("text-subtitle1 font-medium")
-    
+
             table_wrap = ui.element("div").classes("w-full border rounded bg-white").style(
                 "height: 340px; overflow: auto;"
             )
             with table_wrap:
                 table = ui.table(columns=[], rows=[], row_key="__rowid__", pagination=25).classes("w-full")
-    
+
         # Right panel
         with ui.column().classes("w-[320px] shrink-0"):
             ui.label("Images").classes("text-subtitle1 font-medium")
@@ -343,7 +346,7 @@ def page_analytics() -> None:
         date_to = _parse_date(inp_date_to.value)
 
         limit = int(inp_limit.value or DEFAULT_LIMIT)
-        limit = max(1, min(limit, 5000))
+        limit = max(1, min(limit, TABLE_MAX_LIMIT))
 
         # store for export endpoint
         state["query_id"] = query_id
