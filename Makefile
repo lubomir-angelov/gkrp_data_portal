@@ -23,8 +23,10 @@ BACKUP_FILE        ?=
 
 help:
 	@echo "Targets:"
-	@echo "  make configure-env BACKUP_FILE=/path/to/backup.dump [STORAGE_SECRET=..] [POSTGRES_PASSWORD=..]"
-	@echo "      - writes $(ENV_FILE) with generated secrets if not provided"
+	@echo "  make install-app"
+	@echo "      - installs the gkrp_data_portal package into the current python environment"
+	@echo "  make show-env"
+	@echo "      - shows the contents of $(ENV_FILE) with secrets redacted"
 	@echo "  make initial-setup BACKUP_FILE=/path/to/backup.dump"
 	@echo "      - configure env, start postgres, copy backup into container, restore+stamp+upgrade"
 	@echo "  make run"
@@ -40,6 +42,11 @@ help:
 	@echo "  - $(ENV_FILE) is the source of truth for DATABASE_URL/STORAGE_SECRET/POSTGRES_PASSWORD"
 	@echo "  - BACKUP_FILE should be a local path to a pg_dump custom file (.dump/.backup)."
 	@echo "  - Host Postgres port defaults to 5433 (override via PG_HOST_PORT=xxxx)."
+
+install-app:
+	@set -euo pipefail; \
+	$(PYTHON) -m pip install --upgrade pip; \
+	$(PYTHON) -m pip install -e ./gkrp_data_portal
 
 show-env:
 	@set -euo pipefail; \
