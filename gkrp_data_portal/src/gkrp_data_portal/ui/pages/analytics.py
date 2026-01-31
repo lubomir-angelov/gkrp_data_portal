@@ -137,106 +137,106 @@ def page_analytics() -> None:
     }
 
     # ---- Layout ----
-    with ui.row().classes("w-full gap-3"):
+    with ui.row().classes("w-full gap-4 items-start flex-nowrap"):  # <-- IMPORTANT: flex-nowrap
         # Left panel
-        with ui.column().classes("w-[320px]"):
-            ui.label("Query + Filters").classes("text-subtitle1")
-
+        with ui.column().classes("w-[340px] shrink-0"):  # <-- shrink-0 keeps it from collapsing
+            ui.label("Query + Filters").classes("text-subtitle1 font-medium")
+    
             sel_query = ui.select(
                 options=list(QUERY_OPTIONS.keys()),
                 value="Filter #1 (Layers + Fragments)",
                 label="Predefined query",
             ).classes("w-full")
-
+    
             inp_site = ui.input("site").props("clearable").classes("w-full")
             inp_sector = ui.input("sector").props("clearable").classes("w-full")
             inp_square = ui.input("square").props("clearable").classes("w-full")
             inp_q = ui.input("free text (inventory/note/piecetype or finds fields)").props("clearable").classes("w-full")
-
-            with ui.row().classes("w-full"):
-                inp_date_from = ui.date("from").classes("w-full")
-                inp_date_to = ui.date("to").classes("w-full")
-
+    
+            # ✅ compact date inputs (instead of huge calendars)
+            with ui.row().classes("w-full gap-2"):
+                inp_date_from = ui.input("from").props("type=date clearable").classes("w-1/2")
+                inp_date_to = ui.input("to").props("type=date clearable").classes("w-1/2")
+    
             inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
-
+    
             ui.separator()
-            ui.label("Columns").classes("text-subtitle1")
-
-            btn_row = ui.row().classes("w-full justify-between")
-            with btn_row:
+            ui.label("Columns").classes("text-subtitle1 font-medium")
+    
+            with ui.row().classes("w-full justify-between"):
                 btn_select_all = ui.button("Select all")
                 btn_clear_all = ui.button("Deselect all")
-
-            columns_container = ui.scroll_area().classes("w-full h-[420px] border rounded p-2")
-
-        # Center panel
-        with ui.column().classes("flex-1"):
-            ui.label("Chart").classes("text-subtitle1")
-
+    
+            columns_container = ui.scroll_area().classes(
+                "w-full h-[420px] border rounded p-2 bg-white"
+            )
+    
+        # Center panel  ✅ min-w-0 prevents Plotly/table from forcing wrapping
+        with ui.column().classes("flex-1 min-w-0"):
+            ui.label("Chart").classes("text-subtitle1 font-medium")
             dbg = ui.label("").classes("text-xs text-gray-500")
-
-            #chart = ui.plotly({}).classes("w-full border rounded").style("height: 420px;") # width: 420px;
-
-            chart = ui.plotly({"data": [], "layout": {"height": 420}}).classes("w-full border rounded").style("height: 420px;")
-
-
-
-            # chart.id is used by client-side export
+    
+            chart = ui.plotly({"data": [], "layout": {"height": 420}}).classes(
+                "w-full border rounded bg-white"
+            ).style("height: 420px;")
+    
             chart_id = chart.id
-
-            with ui.row().classes("w-full justify-between"):
+    
+            with ui.row().classes("w-full items-center justify-between gap-2"):
                 sel_x = ui.select(options=[], label="Group by (x-axis)").classes("w-[420px]")
-                ui.button(
-                    "Download PNG",
-                    on_click=lambda: ui.run_javascript(
-                        f"""
-                        (function() {{
-                          const el = document.getElementById('{chart_id}');
-                          if (!el) return;
-                          const gd = el.querySelector('.js-plotly-plot') || el;
-                          if (window.Plotly && gd) {{
-                            Plotly.downloadImage(gd, {{format:'png', filename:'analytics_chart', height:600, width:1000}});
-                          }}
-                        }})();
-                        """
-                    ),
-                )
-                ui.button(
-                    "Download JPG",
-                    on_click=lambda: ui.run_javascript(
-                        f"""
-                        (function() {{
-                          const el = document.getElementById('{chart_id}');
-                          if (!el) return;
-                          const gd = el.querySelector('.js-plotly-plot') || el;
-                          if (window.Plotly && gd) {{
-                            Plotly.downloadImage(gd, {{format:'jpeg', filename:'analytics_chart', height:600, width:1000}});
-                          }}
-                        }})();
-                        """
-                    ),
-                )
-                ui.button(
-                    "Print / Save as PDF",
-                    on_click=lambda: ui.run_javascript(
-                        f"window.open('/api/analytics/chart.html?query_id=' + encodeURIComponent(window.__gkrp_query_id || 'q1'), '_blank');"
-                    ),
-                )
-
+    
+                with ui.row().classes("gap-2"):
+                    ui.button(
+                        "Download PNG",
+                        on_click=lambda: ui.run_javascript(
+                            f"""
+                            (function() {{
+                              const el = document.getElementById('{chart_id}');
+                              if (!el) return;
+                              const gd = el.querySelector('.js-plotly-plot') || el;
+                              if (window.Plotly && gd) {{
+                                Plotly.downloadImage(gd, {{format:'png', filename:'analytics_chart', height:600, width:1000}});
+                              }}
+                            }})();
+                            """
+                        ),
+                    )
+                    ui.button(
+                        "Download JPG",
+                        on_click=lambda: ui.run_javascript(
+                            f"""
+                            (function() {{
+                              const el = document.getElementById('{chart_id}');
+                              if (!el) return;
+                              const gd = el.querySelector('.js-plotly-plot') || el;
+                              if (window.Plotly && gd) {{
+                                Plotly.downloadImage(gd, {{format:'jpeg', filename:'analytics_chart', height:600, width:1000}});
+                              }}
+                            }})();
+                            """
+                        ),
+                    )
+                    ui.button(
+                        "Print / Save as PDF",
+                        on_click=lambda: ui.run_javascript(
+                            "window.open('/api/analytics/chart.html?query_id=' + encodeURIComponent(window.__gkrp_query_id || 'q1'), '_blank');"
+                        ),
+                    )
+    
             ui.separator()
-            ui.label("Table (scrollable)").classes("text-subtitle1")
-
-            # Bottom table container (horizontal + vertical scrolling)
-            table_wrap = ui.element("div").classes("w-full border rounded").style(
+            ui.label("Table (scrollable)").classes("text-subtitle1 font-medium")
+    
+            table_wrap = ui.element("div").classes("w-full border rounded bg-white").style(
                 "height: 340px; overflow: auto;"
             )
             with table_wrap:
                 table = ui.table(columns=[], rows=[], row_key="__rowid__", pagination=25).classes("w-full")
-
+    
         # Right panel
-        with ui.column().classes("w-[320px]"):
-            ui.label("Images").classes("text-subtitle1")
-            images_box = ui.scroll_area().classes("w-full h-[820px] border rounded p-2")
+        with ui.column().classes("w-[320px] shrink-0"):
+            ui.label("Images").classes("text-subtitle1 font-medium")
+            images_box = ui.scroll_area().classes("w-full h-[820px] border rounded p-2 bg-white")
+
 
     # ---- Helpers to build UI ----
     checkboxes: dict[str, Any] = {}  # col_name -> checkbox
