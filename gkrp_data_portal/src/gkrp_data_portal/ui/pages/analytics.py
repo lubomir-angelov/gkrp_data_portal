@@ -372,7 +372,9 @@ def page_analytics() -> None:
         state["_refreshing"] = True
         try:
             f = _read_filters()
-            res = _result_for(
+
+            # (A) TABLE result (limited)
+            res_table = _result_for(
                 f["query_id"],
                 site=f["site"],
                 sector=f["sector"],
@@ -380,23 +382,51 @@ def page_analytics() -> None:
                 date_from=f["date_from"],
                 date_to=f["date_to"],
                 q=f["q"],
-                limit=f["limit"],
+                limit=f["limit"],     # <-- user limit applies ONLY here
                 offset=f["offset"],
             )
 
+            # (B) CHART result (full, or capped)
+            total = int(res_table.total or 0)
+            chart_fetch = min(max(total, 0), CHART_MAX_FETCH)
+
+            # If total is 0, we can bail early with empty visuals
+            if total == 0:
+                _set_table([], res_table.columns[:25] if res_table.columns else [])
+                _set_chart(_plotly_bar([], [], title=f"No results ({f['query_id']})"))
+                _set_images([])
+                dbg.set_text(f"query={f['query_id']} rows=0 total=0")
+                return
+
+            # If chart needs more than the table limit, fetch more rows for chart aggregation
+            if chart_fetch <= len(res_table.items):
+                res_chart = res_table
+            else:
+                res_chart = _result_for(
+                    f["query_id"],
+                    site=f["site"],
+                    sector=f["sector"],
+                    square=f["square"],
+                    date_from=f["date_from"],
+                    date_to=f["date_to"],
+                    q=f["q"],
+                    limit=chart_fetch,   # <-- full dataset (or capped)
+                    offset=0,
+                )
+
             # (1) columns panel
-            if not checkboxes or set(res.columns) != set(checkboxes.keys()):
-                _rebuild_column_checkboxes(res.columns)
+            if not checkboxes or set(res_chart.columns) != set(checkboxes.keys()):
+                _rebuild_column_checkboxes(res_chart.columns)
 
             visible_cols = [c for c, cb in checkboxes.items() if cb.value]
             if not visible_cols:
-                visible_cols = res.columns[:25] if res.columns else []
+                visible_cols = res_chart.columns[:25] if res_chart.columns else []
 
             # (2) table
-            _set_table(res.items, visible_cols)
+            _set_table(res_table.items, visible_cols)
 
             # (3) chart - ensure x-axis options and a stable default without re-triggering refresh
-            sel_x.options = list(res.columns)
+            sel_x.options = list(res_chart.columns)
 
             preferred = [
                 "l_site",
@@ -415,8 +445,8 @@ def page_analytics() -> None:
                 "o_tertiary",
             ]
 
-            if not sel_x.value or sel_x.value not in res.columns:
-                default_x = next((c for c in preferred if c in res.columns), None) or (res.columns[0] if res.columns else None)
+            if not sel_x.value or sel_x.value not in res_chart.columns:
+                default_x = next((c for c in preferred if c in res_chart.columns), None) or (res_chart.columns[0] if res_chart.columns else None)
                 # Suppress the sel_x change handler while we set the default.
                 state["_suppress_x_change"] = True
                 sel_x.set_value(default_x)
@@ -424,22 +454,24 @@ def page_analytics() -> None:
 
             x_key = sel_x.value
 
-            xs, ys = _build_histogram(res.items, x_key, top_n=30)
+            xs, ys = _build_histogram(res_chart.items, x_key, top_n=30)
 
             # Extra debug (matches what you reported)
-            sample_x = _norm_bucket(res.items[0].get(x_key)) if (res.items and x_key) else None
+            sample_x = _norm_bucket(res_chart.items[0].get(x_key)) if (res_chart.items and x_key) else None
             top_bucket = xs[0] if xs else None
 
             fig = _plotly_bar(xs, ys, title=f"Count by {x_key} ({f['query_id']})")
             _set_chart(fig)
 
             dbg.set_text(
-                f"query={f['query_id']} rows={len(res.items)} total={res.total} "
+                f"query={f['query_id']} "
+                f"table_rows={len(res_table.items)} total={res_table.total} "
+                f"chart_rows={len(res_chart.items)} "
                 f"x={x_key} buckets={len(xs)} sample_x={sample_x!r} top_bucket={top_bucket!r}"
             )
-
+            
             # (4) images
-            urls = extract_image_urls(res.items)
+            urls = extract_image_urls(res_table.items)
             _set_images(urls)
 
         finally:
@@ -539,6 +571,22 @@ def analytics_chart_json(
     df = _parse_date(date_from)
     dt = _parse_date(date_to)
 
+    # Get total cheaply with a tiny query
+    meta = _result_for(
+        query_id,
+        site=site or None,
+        sector=sector or None,
+        square=square or None,
+        date_from=df,
+        date_to=dt,
+        q=q or None,
+        limit=1,
+        offset=0,
+    )
+    
+    total = int(meta.total or 0)
+    chart_fetch = min(max(total, 0), CHART_MAX_FETCH)
+    
     res = _result_for(
         query_id,
         site=site or None,
@@ -547,7 +595,7 @@ def analytics_chart_json(
         date_from=df,
         date_to=dt,
         q=q or None,
-        limit=min(max(int(limit), 1), 5000),
+        limit=chart_fetch,
         offset=0,
     )
 
