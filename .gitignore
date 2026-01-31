@@ -209,5 +209,5 @@ __marimo__/
 
 # local
 .nicegui/
-.env*
+.env
 setup.sh
