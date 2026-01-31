@@ -4,6 +4,19 @@ ENV_FILE := .env
 COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml
 PYTHON ?= python
 
+# ---- Defaults (can be overridden via: make run POSTGRES_PASSWORD=... etc.) ----
+POSTGRES_USER      ?= postgres
+POSTGRES_PASSWORD  ?= postgres
+PG_HOST_PORT       ?= 5433
+APP_DB             ?= app_db
+PG_CONTAINER       ?= gkrp-pg
+DUMP_IN_CONTAINER  ?= /tmp/Pottery_backup_260118.dump
+
+# Optional; if empty we can derive it from the above in configure-env
+DATABASE_URL       ?=
+STORAGE_SECRET     ?=
+BACKUP_FILE        ?=
+
 .DEFAULT_GOAL := help
 
 .PHONY: help configure-env show-env up-db down-db reset-db wait-db copy-backup restore-app-db initial-setup run
@@ -28,63 +41,13 @@ help:
 	@echo "  - BACKUP_FILE should be a local path to a pg_dump custom file (.dump/.backup)."
 	@echo "  - Host Postgres port defaults to 5433 (override via PG_HOST_PORT=xxxx)."
 
-configure-env:
-	@set -euo pipefail; \
-	BACKUP_FILE="$${BACKUP_FILE:-}"; \
-	POSTGRES_USER="$${POSTGRES_USER:-postgres}"; \
-	PG_HOST_PORT="$${PG_HOST_PORT:-5433}"; \
-	APP_DB="$${APP_DB:-app_db}"; \
-	STORAGE_SECRET="$${STORAGE_SECRET:-}"; \
-	POSTGRES_PASSWORD="$${POSTGRES_PASSWORD:-}"; \
-	DATABASE_URL="$${DATABASE_URL:-}"; \
-	\
-	if [ -z "$$STORAGE_SECRET" ]; then \
-	  STORAGE_SECRET="$$($(PYTHON) -c 'import secrets; print(secrets.token_urlsafe(48))')"; \
-	fi; \
-	if [ -z "$$POSTGRES_PASSWORD" ]; then \
-	  POSTGRES_PASSWORD="$$($(PYTHON) -c 'import secrets; print(secrets.token_urlsafe(24))')"; \
-	fi; \
-	if [ -z "$$DATABASE_URL" ]; then \
-	  DATABASE_URL="postgresql+psycopg://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@127.0.0.1:$${PG_HOST_PORT}/$${APP_DB}"; \
-	fi; \
-	\
-	# Default dump path inside container: /tmp/<basename-of-backup>
-	DUMP_IN_CONTAINER="$${DUMP_IN_CONTAINER:-}"; \
-	if [ -z "$$DUMP_IN_CONTAINER" ]; then \
-	  if [ -n "$$BACKUP_FILE" ]; then \
-	    DUMP_IN_CONTAINER="/tmp/$$(basename "$$BACKUP_FILE")"; \
-	  else \
-	    DUMP_IN_CONTAINER="/tmp/Pottery_backup_260118.dump"; \
-	  fi; \
-	fi; \
-	\
-	{ \
-	  printf '%s\n' \
-	    "STORAGE_SECRET=$$STORAGE_SECRET" \
-	    "POSTGRES_USER=$$POSTGRES_USER" \
-	    "POSTGRES_PASSWORD=$$POSTGRES_PASSWORD" \
-	    "PG_HOST_PORT=$$PG_HOST_PORT" \
-	    "APP_DB=$$APP_DB" \
-	    "DATABASE_URL=$$DATABASE_URL" \
-	    "BACKUP_FILE=$$BACKUP_FILE" \
-	    "DUMP_IN_CONTAINER=$$DUMP_IN_CONTAINER" \
-	    "PG_CONTAINER=$${PG_CONTAINER:-gkrp-pg}"; \
-	} > "$(ENV_FILE)"; \
-
-	chmod 600 "$(ENV_FILE)"; \
-	echo "Wrote $(ENV_FILE)"; \
-	echo "  DATABASE_URL=$$DATABASE_URL"; \
-	echo "  BACKUP_FILE=$$BACKUP_FILE"; \
-	echo "  DUMP_IN_CONTAINER=$$DUMP_IN_CONTAINER"; \
-	echo "  PG_HOST_PORT=$$PG_HOST_PORT"
-
 show-env:
 	@set -euo pipefail; \
-	if [ ! -f "$(ENV_FILE)" ]; then echo "$(ENV_FILE) not found. Run: make configure-env ..."; exit 1; fi; \
+	if [ ! -f "$(ENV_FILE)" ]; then echo "$(ENV_FILE) not found. Create make file from template before proceeding."; exit 1; fi; \
 	echo "---- $(ENV_FILE) (secrets redacted) ----"; \
 	sed -E 's/^(STORAGE_SECRET|POSTGRES_PASSWORD)=.*/\1=<redacted>/' "$(ENV_FILE)"
 
-up-db: configure-env
+up-db:
 	@set -euo pipefail; \
 	$(COMPOSE) up -d db
 
@@ -111,7 +74,7 @@ wait-db:
 	echo "Postgres did not become ready in time."; \
 	exit 1
 
-copy-backup: configure-env up-db wait-db
+copy-backup: up-db wait-db
 	@set -euo pipefail; \
 	set -a; source "$(ENV_FILE)"; set +a; \
 	if [ -z "$$BACKUP_FILE" ]; then \
@@ -136,9 +99,9 @@ initial-setup: restore-app-db
 	@echo "Next:"
 	@echo "  make run"
 
-run: configure-env
+run:
 	@set -euo pipefail; \
 	set -a; source "$(ENV_FILE)"; set +a; \
-	export PYTHONPATH="$$(pwd)/src:$${PYTHONPATH:-}"; \
+	export PYTHONPATH="$$(pwd)/gkrp_data_portal/src:$${PYTHONPATH:-}"; \
 	echo "Starting app with DATABASE_URL=$$DATABASE_URL"; \
-	$(PYTHON) -m gkrp_data_portal
+	$(PYTHON) -m gkrp_data_portal.main
