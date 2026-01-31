@@ -37,23 +37,15 @@ Wipe DB volume (dangerous):
 make reset-db
 ```
 
-4) “configure-env” usage patterns
-Default (auto-generate secrets/password)
-```bash
-make configure-env BACKUP_FILE=/abs/path/to/Pottery_backup_260118.dump
-```
-
+4) Configure your local env
 Provide your own secrets/password explicitly
 ```bash
-make configure-env \
-  BACKUP_FILE=/abs/path/to/Pottery_backup_260118.dump \
-  STORAGE_SECRET='your-secret' \
-  POSTGRES_PASSWORD='your-db-pass'
+# copy the template and then add your values
+cp .env.tempalte .env
 ```
 
-Override host port (if 5433 is busy)
+Spin up the database from scratch
 ```bash
-make configure-env BACKUP_FILE=/abs/path/to/backup.dump PG_HOST_PORT=5544
 make up-db
 ```
 
