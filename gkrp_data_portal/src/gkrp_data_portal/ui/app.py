@@ -11,7 +11,9 @@ from gkrp_data_portal.ui.pages.ornaments import page_ornaments  # noqa: F401
 from gkrp_data_portal.ui.pages.admin import page_admin  # noqa: F401
 from gkrp_data_portal.ui.pages.accept_invite import page_accept_invite  # noqa: F401
 from gkrp_data_portal.ui.pages.dev_login import page_dev_login  # noqa: F401
-import gkrp_data_portal.ui.pages.analytics
+from gkrp_data_portal.ui.pages.analytics_chart import page_analytics_index, page_analytics_chart  # noqa: F401
+from gkrp_data_portal.ui.pages.analytics_table import page_analytics_table  # noqa: F401
+
 
 # settings
 from gkrp_data_portal.core.settings import get_storage_secret
