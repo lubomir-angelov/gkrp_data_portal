@@ -151,6 +151,10 @@ def page_analytics() -> None:
                 label="Predefined query",
             ).classes("w-full")
 
+            with ui.row().classes("w-full gap-2 items-center"):
+                btn_run = ui.button("Run query", icon="play_arrow").classes("flex-1")
+                sw_autorun = ui.switch("Auto-run", value=True).props("dense")
+
             inp_site = ui.input("site").props("clearable").classes("w-full")
             inp_sector = ui.input("sector").props("clearable").classes("w-full")
             inp_square = ui.input("square").props("clearable").classes("w-full")
@@ -177,6 +181,8 @@ def page_analytics() -> None:
         # Center panel  ✅ min-w-0 prevents Plotly/table from forcing wrapping
         with ui.column().classes("flex-1 min-w-0"):
             ui.label("Chart").classes("text-subtitle1 font-medium")
+            status = ui.label("").classes("text-sm text-gray-600")
+            pending = ui.label("").classes("text-xs text-orange-700")
             dbg = ui.label("").classes("text-xs text-gray-500")
 
             chart = ui.plotly({"data": [], "layout": {"height": 420}}).classes(
@@ -365,6 +371,8 @@ def page_analytics() -> None:
             "limit": limit,
             "offset": 0,
         }
+    
+
     def refresh() -> None:
         # Prevent re-entrant refresh storms (sel_x.set_value triggers change events).
         if state.get("_refreshing"):
@@ -372,6 +380,7 @@ def page_analytics() -> None:
         state["_refreshing"] = True
         try:
             f = _read_filters()
+            notes: list[str] = []
 
             # (A) TABLE result (limited)
             res_table = _result_for(
@@ -414,6 +423,17 @@ def page_analytics() -> None:
                     offset=0,
                 )
 
+            if not res_chart.items:
+                # Empty result: keep columns, but show empty visuals
+                _set_table([], [c for c, cb in checkboxes.items() if cb.value] or (res_chart.columns[:25] if res_chart.columns else []))
+                _set_chart(_plotly_bar([], [], title=f"No results ({f['query_id']})"))
+                _set_images([])
+
+                dbg.set_text(f"query={f['query_id']} rows=0 total={res_chart.total} x={sel_x.value}")
+                status.set_text("⚠️ No results for current filters.")
+
+                return
+
             # (1) columns panel
             if not checkboxes or set(res_chart.columns) != set(checkboxes.keys()):
                 _rebuild_column_checkboxes(res_chart.columns)
@@ -421,6 +441,9 @@ def page_analytics() -> None:
             visible_cols = [c for c, cb in checkboxes.items() if cb.value]
             if not visible_cols:
                 visible_cols = res_chart.columns[:25] if res_chart.columns else []
+
+            if not [c for c, cb in checkboxes.items() if cb.value]:
+                notes.append("no columns selected → defaulted to first 25")
 
             # (2) table
             _set_table(res_table.items, visible_cols)
@@ -451,6 +474,8 @@ def page_analytics() -> None:
                 state["_suppress_x_change"] = True
                 sel_x.set_value(default_x)
                 state["_suppress_x_change"] = False
+                if default_x:
+                    notes.append(f"group-by defaulted to {default_x}")
 
             x_key = sel_x.value
 
@@ -474,6 +499,11 @@ def page_analytics() -> None:
             urls = extract_image_urls(res_table.items)
             _set_images(urls)
 
+            base = f"✅ Returned {len(res_chart.items)} rows (total {res_chart.total})."
+            if notes:
+                base += "  " + " • ".join(notes)
+            status.set_text(base)
+
         finally:
             state["_refreshing"] = False
     
@@ -492,17 +522,28 @@ def page_analytics() -> None:
     btn_select_all.on("click", lambda e: _select_all())
     btn_clear_all.on("click", lambda e: _deselect_all())
 
+
+    def request_refresh() -> None:
+        """Refresh immediately if Auto-run is enabled, otherwise mark pending changes."""
+        if sw_autorun.value:
+            pending.set_text("")
+            refresh()
+        else:
+            pending.set_text("Filters changed — click “Run query”")
+
+    btn_run.on("click", lambda e: (pending.set_text(""), refresh()))
+
     # ---- Wiring events ----
-    sel_query.on("change", lambda e: refresh())
+    sel_query.on("change", lambda e: request_refresh())
     for w in (inp_site, inp_sector, inp_square, inp_q, inp_limit):
-        w.on("change", lambda e: refresh())
-    inp_date_from.on("change", lambda e: refresh())
-    inp_date_to.on("change", lambda e: refresh())
+        w.on("change", lambda e: request_refresh())
+    inp_date_from.on("change", lambda e: request_refresh())
+    inp_date_to.on("change", lambda e: request_refresh())
     
     def _on_x_change(e) -> None:
         if state.get("_suppress_x_change"):
             return
-        refresh()
+        request_refresh()
 
     sel_x.on("change", _on_x_change)
 
