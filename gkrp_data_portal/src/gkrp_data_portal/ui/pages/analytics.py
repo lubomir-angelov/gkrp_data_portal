@@ -44,6 +44,43 @@ TABLE_MAX_LIMIT = 50000      # increase/remove the 5000 cap for the TABLE
 CHART_MAX_FETCH = 250000     # safety cap to avoid pulling millions of rows
 
 
+# Columns you never want to show in UI (table + chart + selectors).
+_UI_HIDDEN_COLUMNS = frozenset(
+    {
+        "l_recordenteredon",
+        "l_recordenteredby",
+        "l_recordcreatedby",
+        "l_level",
+        "l_structure",
+        "l_includes",
+        "l_color1",
+        "l_color2",
+        "l_description",
+        "l_akb_num",
+        "f_fragmentid",
+        "f_locationid",
+        "f_outline",
+        "f_speed",
+        "f_recrodenteredby",
+        "f_recrodenteredon",
+        "f_topsize",
+        "f_necksize",
+        "f_bodysize",
+        "f_bottomsize",
+        "f_dishheight",
+    }
+)
+
+
+def _is_ui_hidden_column(name: str) -> bool:
+    return (name or "").strip().lower() in _UI_HIDDEN_COLUMNS
+
+
+def _ui_columns(columns: list[str]) -> list[str]:
+    """Return columns allowed to appear in UI (preserves original casing)."""
+    return [c for c in columns if not _is_ui_hidden_column(c)]
+
+
 def _parse_date(s: Optional[str]) -> Optional[date]:
     if not s:
         return None
@@ -328,18 +365,22 @@ def page_analytics() -> None:
 
 
     def _rebuild_column_checkboxes(all_columns: list[str]) -> None:
-        # preserve selections if possible
-        current = set(state["selected_columns"]) if state["selected_columns"] else set(all_columns)
-
+        # preserve selections if possible, but only among available columns
+        if state["selected_columns"]:
+            current = set(state["selected_columns"]) & set(all_columns)
+        else:
+            current = set(all_columns)
+    
         columns_container.clear()
         checkboxes.clear()
-
+    
         with columns_container:
             for c in all_columns:
                 cb = ui.checkbox(c, value=(c in current)).classes("text-sm")
                 checkboxes[c] = cb
-
+    
         state["selected_columns"] = current
+
 
     def _read_filters() -> dict[str, Any]:
         query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
@@ -401,10 +442,17 @@ def page_analytics() -> None:
 
             # If total is 0, we can bail early with empty visuals
             if total == 0:
-                _set_table([], res_table.columns[:25] if res_table.columns else [])
+                # filter on cols which should be visible
+                ui_cols0 = _ui_columns(res_table.columns)
+
+                # render te table, chart and images sections
+                _set_table([], ui_cols0[:25] if ui_cols0 else [])
                 _set_chart(_plotly_bar([], [], title=f"No results ({f['query_id']})"))
                 _set_images([])
+
+                # show results message for chart plot
                 dbg.set_text(f"query={f['query_id']} rows=0 total=0")
+                
                 return
 
             # If chart needs more than the table limit, fetch more rows for chart aggregation
@@ -433,14 +481,19 @@ def page_analytics() -> None:
                 status.set_text("⚠️ No results for current filters.")
 
                 return
+            
+            ui_cols = _ui_columns(res_chart.columns)
+            if not ui_cols:
+                ui_cols = list(res_chart.columns)  # safety fallback
 
-            # (1) columns panel
-            if not checkboxes or set(res_chart.columns) != set(checkboxes.keys()):
-                _rebuild_column_checkboxes(res_chart.columns)
+            # (1) columns panel (checkboxes)
+            if not checkboxes or list(checkboxes.keys()) != ui_cols:
+                _rebuild_column_checkboxes(ui_cols)
 
             visible_cols = [c for c, cb in checkboxes.items() if cb.value]
             if not visible_cols:
-                visible_cols = res_chart.columns[:25] if res_chart.columns else []
+                visible_cols = ui_cols[:25] if ui_cols else []
+                notes.append("no columns selected → defaulted to first 25")
 
             if not [c for c, cb in checkboxes.items() if cb.value]:
                 notes.append("no columns selected → defaulted to first 25")
@@ -449,7 +502,7 @@ def page_analytics() -> None:
             _set_table(res_table.items, visible_cols)
 
             # (3) chart - ensure x-axis options and a stable default without re-triggering refresh
-            sel_x.options = list(res_chart.columns)
+            sel_x.options = list(ui_cols)
 
             preferred = [
                 "l_site",
@@ -468,14 +521,17 @@ def page_analytics() -> None:
                 "o_tertiary",
             ]
 
-            if not sel_x.value or sel_x.value not in res_chart.columns:
-                default_x = next((c for c in preferred if c in res_chart.columns), None) or (res_chart.columns[0] if res_chart.columns else None)
-                # Suppress the sel_x change handler while we set the default.
+            if not sel_x.value or sel_x.value not in ui_cols:
+                default_x = (
+                    next((c for c in preferred if c in ui_cols), None)
+                    or (ui_cols[0] if ui_cols else None)
+                )
                 state["_suppress_x_change"] = True
                 sel_x.set_value(default_x)
                 state["_suppress_x_change"] = False
                 if default_x:
                     notes.append(f"group-by defaulted to {default_x}")
+
 
             x_key = sel_x.value
 
@@ -585,7 +641,8 @@ def analytics_data_csv(
     logger.info("DEBUG first_row_sample:", res.items[0] if res.items else "NO_ROWS")
 
     buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=res.columns)
+    cols = _ui_columns(res.columns)
+    writer = csv.DictWriter(buf, fieldnames=cols)
     writer.writeheader()
     for row in res.items:
         writer.writerow({k: row.get(k) for k in res.columns})
@@ -640,8 +697,15 @@ def analytics_chart_json(
         offset=0,
     )
 
+    ui_cols = _ui_columns(res.columns)
+    if not ui_cols:
+        ui_cols = list(res.columns)  # safety fallback
+
+    if x and (x not in ui_cols):
+        x = None
+
     if not x:
-        x = "f_piecetype" if "f_piecetype" in res.columns else (res.columns[0] if res.columns else "")
+        x = "f_piecetype" if "f_piecetype" in ui_cols else (ui_cols[0] if ui_cols else "")
 
     xs, ys = _build_histogram(res.items, x)
     fig = _plotly_bar(xs, ys, title=f"Count by {x} ({query_id})")
