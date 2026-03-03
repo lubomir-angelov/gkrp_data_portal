@@ -2,12 +2,13 @@
 
 Layout:
 - Left: query selector, filters, column toggles
-- Center: table (scrollable)
+- Center: grid (scrollable, with per-column dropdown filters)
 - Right: images (from fragment/find image_url)
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from nicegui import app, ui
@@ -18,10 +19,21 @@ from .analytics_common import (
     DEFAULT_LIMIT,
     QUERY_OPTIONS,
     TABLE_MAX_LIMIT,
-    parse_date,
     result_for,
     ui_columns,
 )
+
+# Columns we never want to show in the table/grid UI
+HIDDEN_TABLE_COLUMNS: set[str] = {
+    "stratum",
+    "parentid",
+    "photos",
+    "drawings",
+    "handfragments",
+    "wheelfragment",
+    "layertype",
+    "layername",
+}
 
 
 @ui.page("/analytics/table")
@@ -32,6 +44,8 @@ def page_analytics_table() -> None:
         "query_id": "q1",
         "_refreshing": False,
         "selected_columns": set(),
+        "last_items": [],
+        "last_columns": [],
     }
 
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
@@ -52,11 +66,13 @@ def page_analytics_table() -> None:
             inp_site = ui.input("site").props("clearable").classes("w-full")
             inp_sector = ui.input("sector").props("clearable").classes("w-full")
             inp_square = ui.input("square").props("clearable").classes("w-full")
-            inp_q = ui.input("free text (inventory/note/piecetype or finds fields)").props("clearable").classes("w-full")
+            inp_q = (
+                ui.input("free text (inventory/note/piecetype or finds fields)")
+                .props("clearable")
+                .classes("w-full")
+            )
 
-            with ui.row().classes("w-full gap-2"):
-                inp_date_from = ui.input("from").props("type=date clearable").classes("w-1/2")
-                inp_date_to = ui.input("to").props("type=date clearable").classes("w-1/2")
+            # Date inputs removed, as requested.
 
             inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
 
@@ -67,18 +83,41 @@ def page_analytics_table() -> None:
                 btn_select_all = ui.button("Select all")
                 btn_clear_all = ui.button("Deselect all")
 
-            columns_container = ui.scroll_area().classes("w-full h-[420px] border rounded p-2 bg-white")
+            columns_container = (
+                ui.scroll_area()
+                .classes("w-full h-[420px] border rounded p-2 bg-white")
+            )
 
-        # Center panel (table only)
+        # Center panel (grid)
         with ui.column().classes("flex-1 min-w-0"):
             ui.label("Table (scrollable)").classes("text-subtitle1 font-medium")
             status = ui.label("").classes("text-sm text-gray-600")
             pending = ui.label("").classes("text-xs text-orange-700")
             dbg = ui.label("").classes("text-xs text-gray-500")
 
-            table_wrap = ui.element("div").classes("w-full border rounded bg-white").style("height: 740px; overflow: auto;")
-            with table_wrap:
-                table = ui.table(columns=[], rows=[], row_key="__rowid__", pagination=25).classes("w-full")
+            # AG Grid: horizontal scrollbar stays at the bottom of the grid viewport
+            grid = ui.aggrid(
+                {
+                    "columnDefs": [],
+                    "rowData": [],
+                    "defaultColDef": {
+                        "resizable": True,
+                        "sortable": True,
+                        "filter": True,
+                        "floatingFilter": True,  # shows filter UI below header
+                        "menuTabs": ["filterMenuTab"],  # focus the header menu on filtering
+                    },
+                    "animateRows": True,
+                    "pagination": True,
+                    "paginationPageSize": 25,
+                    "alwaysShowHorizontalScroll": True,
+                    "alwaysShowVerticalScroll": True,
+                }
+            ).classes("w-full border rounded bg-white").style("height: 740px;")
+
+            ui.label(
+                "Tip: use the filter UI in the header (set filter dropdown shows available values)."
+            ).classes("text-xs text-gray-500 mt-1")
 
         # Right panel (images)
         with ui.column().classes("w-[320px] shrink-0"):
@@ -87,17 +126,28 @@ def page_analytics_table() -> None:
 
     checkboxes: dict[str, Any] = {}
 
-    def _set_table(items: list[dict[str, Any]], visible_cols: list[str]) -> None:
-        cols = [{"name": c, "label": c, "field": c} for c in visible_cols]
-        rows: list[dict[str, Any]] = []
+    def _set_grid(items: list[dict[str, Any]], visible_cols: list[str]) -> None:
+        # Use Set Filter so the dropdown shows unique available values.
+        col_defs = [
+            {
+                "headerName": c,
+                "field": c,
+                "filter": "agSetColumnFilter",
+                "filterParams": {"buttons": ["reset", "apply"], "closeOnApply": True},
+            }
+            for c in visible_cols
+        ]
+
+        row_data: list[dict[str, Any]] = []
         for i, r in enumerate(items):
-            rr = {"__rowid__": i}
+            rr: dict[str, Any] = {"__rowid__": i}
             for c in visible_cols:
                 rr[c] = r.get(c)
-            rows.append(rr)
-        table.columns = cols
-        table.rows = rows
-        table.update()
+            row_data.append(rr)
+
+        grid.options["columnDefs"] = col_defs
+        grid.options["rowData"] = row_data
+        grid.update()
 
     def _set_images(urls: list[str]) -> None:
         images_box.clear()
@@ -108,14 +158,40 @@ def page_analytics_table() -> None:
             for u in urls[:50]:
                 ui.image(u).classes("w-full").props("fit=contain")
 
+    def _apply_view() -> None:
+        items: list[dict[str, Any]] = state.get("last_items", [])
+        ui_cols: list[str] = state.get("last_columns", [])
+
+        visible_cols = [c for c, cb in checkboxes.items() if cb.value]
+        if not visible_cols:
+            visible_cols = ui_cols[:25] if ui_cols else []
+
+        _set_grid(items, visible_cols)
+        _set_images(extract_image_urls(items))
+
+        dbg.set_text(
+            f"query={state.get('query_id')} table_rows={len(items)} cols={len(visible_cols)}"
+        )
+
     def _rebuild_column_checkboxes(all_columns: list[str]) -> None:
-        current = set(all_columns) if not state["selected_columns"] else (set(state["selected_columns"]) & set(all_columns))
+        # Remove permanently hidden columns
+        cleaned = [c for c in all_columns if c not in HIDDEN_TABLE_COLUMNS]
+
+        current = (
+            set(cleaned)
+            if not state["selected_columns"]
+            else (set(state["selected_columns"]) & set(cleaned))
+        )
+
         columns_container.clear()
         checkboxes.clear()
+
         with columns_container:
-            for c in all_columns:
+            for c in cleaned:
                 cb = ui.checkbox(c, value=(c in current)).classes("text-sm")
+                cb.on("change", lambda e: _apply_view())
                 checkboxes[c] = cb
+
         state["selected_columns"] = current
 
     def _read_filters() -> dict[str, Any]:
@@ -125,23 +201,19 @@ def page_analytics_table() -> None:
         sector = (inp_sector.value or "").strip() or None
         square = (inp_square.value or "").strip() or None
         q = (inp_q.value or "").strip() or None
-        date_from = parse_date(inp_date_from.value)
-        date_to = parse_date(inp_date_to.value)
 
         limit = int(inp_limit.value or DEFAULT_LIMIT)
         limit = max(1, min(limit, TABLE_MAX_LIMIT))
 
         state["query_id"] = query_id
         app.storage.general["analytics_last_query_id"] = query_id
-        ui.run_javascript(f"window.__gkrp_query_id = {json.dumps(query_id)};")  # optional consistency
+        ui.run_javascript(f"window.__gkrp_query_id = {json.dumps(query_id)};")
 
         return {
             "query_id": query_id,
             "site": site,
             "sector": sector,
             "square": square,
-            "date_from": date_from,
-            "date_to": date_to,
             "q": q,
             "limit": limit,
             "offset": 0,
@@ -154,13 +226,14 @@ def page_analytics_table() -> None:
         try:
             f = _read_filters()
 
+            # Date filters removed => pass None for date_from/date_to
             res = result_for(
                 f["query_id"],
                 site=f["site"],
                 sector=f["sector"],
                 square=f["square"],
-                date_from=f["date_from"],
-                date_to=f["date_to"],
+                date_from=None,
+                date_to=None,
                 q=f["q"],
                 limit=f["limit"],
                 offset=f["offset"],
@@ -168,24 +241,24 @@ def page_analytics_table() -> None:
 
             total = int(res.total or 0)
             if total == 0:
-                _set_table([], [])
+                state["last_items"] = []
+                state["last_columns"] = []
+                _set_grid([], [])
                 _set_images([])
                 dbg.set_text(f"query={f['query_id']} rows=0 total=0")
                 status.set_text("⚠️ No results for current filters.")
                 return
 
             ui_cols = ui_columns(res.columns) or list(res.columns)
+            ui_cols = [c for c in ui_cols if c not in HIDDEN_TABLE_COLUMNS]
+
             if not checkboxes or list(checkboxes.keys()) != ui_cols:
                 _rebuild_column_checkboxes(ui_cols)
 
-            visible_cols = [c for c, cb in checkboxes.items() if cb.value]
-            if not visible_cols:
-                visible_cols = ui_cols[:25] if ui_cols else []
+            state["last_items"] = res.items
+            state["last_columns"] = ui_cols
 
-            _set_table(res.items, visible_cols)
-
-            urls = extract_image_urls(res.items)
-            _set_images(urls)
+            _apply_view()
 
             dbg.set_text(f"query={f['query_id']} table_rows={len(res.items)} total={res.total}")
             status.set_text(f"✅ Returned {len(res.items)} rows (total {res.total}).")
@@ -196,12 +269,12 @@ def page_analytics_table() -> None:
     def _select_all() -> None:
         for cb in checkboxes.values():
             cb.set_value(True)
-        refresh()
+        _apply_view()
 
     def _deselect_all() -> None:
         for cb in checkboxes.values():
             cb.set_value(False)
-        refresh()
+        _apply_view()
 
     btn_select_all.on("click", lambda e: _select_all())
     btn_clear_all.on("click", lambda e: _deselect_all())
@@ -218,7 +291,5 @@ def page_analytics_table() -> None:
     sel_query.on("change", lambda e: request_refresh())
     for w in (inp_site, inp_sector, inp_square, inp_q, inp_limit):
         w.on("change", lambda e: request_refresh())
-    inp_date_from.on("change", lambda e: request_refresh())
-    inp_date_to.on("change", lambda e: request_refresh())
 
     refresh()
