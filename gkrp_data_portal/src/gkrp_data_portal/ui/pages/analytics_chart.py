@@ -233,6 +233,10 @@ def page_analytics_chart() -> None:
             "limit": limit,  # used for “table-like” fetch (images + small sample)
             "offset": 0,
         }
+    
+    def _get_type_columns(cols: list[str]) -> list[str]:
+        # case-insensitive match; keeps original order
+        return [c for c in cols if "type" in c.lower()]
 
     def refresh() -> None:
         if state.get("_refreshing"):
