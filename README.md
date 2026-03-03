@@ -72,4 +72,19 @@ Address         Port        Address         Port
 0.0.0.0         8080        172.20.27.225   8080
 
 (base) PS C:\WINDOWS\system32>
+
+
+netsh advfirewall firewall add rule name="WSL NiceGUI 8080" dir=in action=allow protocol=TCP localport=8080
+
+#And if you’re on Windows 11 / recent WSL, also inspect Hyper-V firewall because Microsoft documents that it can filter WSL traffic by default:
+
+Get-NetFirewallHyperVVMSetting -PolicyStore ActiveStore -Name '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}'
+Get-NetFirewallHyperVRule -VMCreatorId '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}'
+
+Then test in this order:
+
+1. Inside WSL:        curl http://127.0.0.1:8080
+2. From Windows host: http://localhost:8080
+3. From another LAN device: http://<windows-lan-ip>:8080
+4. From outside your home network: http://<your-public-static-ip>:8080
 ```
