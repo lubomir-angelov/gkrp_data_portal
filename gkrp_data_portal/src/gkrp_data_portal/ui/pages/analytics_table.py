@@ -23,17 +23,6 @@ from .analytics_common import (
     ui_columns,
 )
 
-# Columns we never want to show in the table/grid UI
-HIDDEN_TABLE_COLUMNS: set[str] = {
-    "stratum",
-    "parentid",
-    "photos",
-    "drawings",
-    "handfragments",
-    "wheelfragment",
-    "layertype",
-    "layername",
-}
 
 
 @ui.page("/analytics/table")
@@ -175,7 +164,7 @@ def page_analytics_table() -> None:
 
     def _rebuild_column_checkboxes(all_columns: list[str]) -> None:
         # Remove permanently hidden columns
-        cleaned = [c for c in all_columns if c not in HIDDEN_TABLE_COLUMNS]
+        cleaned = all_columns
 
         current = (
             set(cleaned)
@@ -250,7 +239,6 @@ def page_analytics_table() -> None:
                 return
 
             ui_cols = ui_columns(res.columns) or list(res.columns)
-            ui_cols = [c for c in ui_cols if c not in HIDDEN_TABLE_COLUMNS]
 
             if not checkboxes or list(checkboxes.keys()) != ui_cols:
                 _rebuild_column_checkboxes(ui_cols)
