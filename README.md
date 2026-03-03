@@ -54,3 +54,22 @@ Single-command bootstrap:
 make initial-setup BACKUP_FILE=/abs/path/to/Pottery_backup_260118.dump
 make run
 ```
+
+# Expose to external world
+```bash
+# this is done on the windows host via PS as Admin!
+(base) PS C:\WINDOWS\system32> $wslIp = (wsl hostname -I).Trim().Split(' ')[0]
+(base) PS C:\WINDOWS\system32> netsh interface portproxy delete v4tov4 listenport=8080 listenaddress=0.0.0.0
+
+(base) PS C:\WINDOWS\system32> netsh interface portproxy add v4tov4 listenport=8080 listenaddress=0.0.0.0 connectport=8080 connectaddress=$wslIp
+
+(base) PS C:\WINDOWS\system32> netsh interface portproxy show all
+
+Listen on ipv4:             Connect to ipv4:
+
+Address         Port        Address         Port
+--------------- ----------  --------------- ----------
+0.0.0.0         8080        172.20.27.225   8080
+
+(base) PS C:\WINDOWS\system32>
+```
