@@ -42,4 +42,6 @@ def run() -> None:
         title="GKR Data Portal", 
         reload=False,
         storage_secret=get_storage_secret(),
+        host='0.0.0.0',
+        port=8080,
         )
