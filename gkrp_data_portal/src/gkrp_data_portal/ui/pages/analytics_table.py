@@ -24,11 +24,23 @@ from .analytics_common import (
 )
 
 
-
 @ui.page("/analytics/table")
 def page_analytics_table() -> None:
+    """Render the Analytics Table page.
+
+    This page provides:
+    - a left panel for selecting a predefined query and applying filters,
+    - a center panel with an interactive AG Grid table (filterable/sortable),
+    - a right panel that previews images extracted from the result rows.
+
+    Notes:
+        - Date filters are intentionally removed (date_from/date_to are passed as None).
+        - Column visibility is controlled via checkboxes and AG Grid column visibility APIs.
+        - Functionality is intentionally unchanged; this is a readability/docstrings pass.
+    """
     ui.label("Analytics — Table").classes("text-h5")
 
+    # Mutable state shared across callbacks (kept in-memory for this page instance).
     state: dict[str, Any] = {
         "query_id": "q1",
         "_refreshing": False,
@@ -73,8 +85,7 @@ def page_analytics_table() -> None:
                 btn_clear_all = ui.button("Deselect all")
 
             columns_container = (
-                ui.scroll_area()
-                .classes("w-full h-[420px] border rounded p-2 bg-white")
+                ui.scroll_area().classes("w-full h-[420px] border rounded p-2 bg-white")
             )
 
         # Center panel (grid)
@@ -111,12 +122,18 @@ def page_analytics_table() -> None:
         # Right panel (images)
         with ui.column().classes("w-[320px] shrink-0"):
             ui.label("Images").classes("text-subtitle1 font-medium")
-            images_box = ui.scroll_area().classes("w-full h-[820px] border rounded p-2 bg-white")
+            images_box = ui.scroll_area().classes(
+                "w-full h-[820px] border rounded p-2 bg-white"
+            )
 
+    # Column checkbox widgets keyed by column name.
     checkboxes: dict[str, Any] = {}
 
     def _set_grid(items: list[dict[str, Any]], visible_cols: list[str]) -> None:
-        # Use Set Filter so the dropdown shows unique available values.
+        """Populate AG Grid with the given rows and visible columns.
+
+        Uses the AG Grid Set Filter for each column to provide value dropdowns.
+        """
         col_defs = [
             {
                 "headerName": c,
@@ -139,6 +156,7 @@ def page_analytics_table() -> None:
         grid.update()
 
     def _set_images(urls: list[str]) -> None:
+        """Render up to 50 images from extracted URLs in the right panel."""
         images_box.clear()
         with images_box:
             if not urls:
@@ -148,6 +166,10 @@ def page_analytics_table() -> None:
                 ui.image(u).classes("w-full").props("fit=contain")
 
     def _apply_view() -> None:
+        """Apply the current checkbox selections to the grid and image panel.
+
+        If no columns are selected, a fallback of the first 25 columns is used.
+        """
         items: list[dict[str, Any]] = state.get("last_items", [])
         ui_cols: list[str] = state.get("last_columns", [])
 
@@ -163,6 +185,10 @@ def page_analytics_table() -> None:
         )
 
     def _rebuild_column_checkboxes(all_columns: list[str]) -> None:
+        """Rebuild the checkbox list for all columns.
+
+        Keeps a stable selection set in state['selected_columns'] where possible.
+        """
         # Remove permanently hidden columns
         cleaned = all_columns
 
@@ -175,15 +201,22 @@ def page_analytics_table() -> None:
         columns_container.clear()
         checkboxes.clear()
 
+        def _set_column_visible(col: str, visible: bool) -> None:
+            """Toggle visibility of a single column in AG Grid."""
+            grid.run_grid_method("setColumnsVisible", [col], visible)
+
+
         with columns_container:
             for c in cleaned:
                 cb = ui.checkbox(c, value=(c in current)).classes("text-sm")
+                #cb.on("change", lambda e, col=c: _set_column_visible(col, e.value))
                 cb.on("change", lambda e: _apply_view())
                 checkboxes[c] = cb
 
         state["selected_columns"] = current
 
     def _read_filters() -> dict[str, Any]:
+        """Read current filter widgets and normalize the filter payload."""
         query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
 
         site = (inp_site.value or "").strip() or None
@@ -194,6 +227,7 @@ def page_analytics_table() -> None:
         limit = int(inp_limit.value or DEFAULT_LIMIT)
         limit = max(1, min(limit, TABLE_MAX_LIMIT))
 
+        # Persist and expose selected query id.
         state["query_id"] = query_id
         app.storage.general["analytics_last_query_id"] = query_id
         ui.run_javascript(f"window.__gkrp_query_id = {json.dumps(query_id)};")
@@ -209,6 +243,7 @@ def page_analytics_table() -> None:
         }
 
     def refresh() -> None:
+        """Run the backend query and refresh grid + images + status labels."""
         if state.get("_refreshing"):
             return
         state["_refreshing"] = True
@@ -248,18 +283,22 @@ def page_analytics_table() -> None:
 
             _apply_view()
 
-            dbg.set_text(f"query={f['query_id']} table_rows={len(res.items)} total={res.total}")
+            dbg.set_text(
+                f"query={f['query_id']} table_rows={len(res.items)} total={res.total}"
+            )
             status.set_text(f"✅ Returned {len(res.items)} rows (total {res.total}).")
 
         finally:
             state["_refreshing"] = False
 
     def _select_all() -> None:
+        """Select all columns and re-render the grid/images."""
         for cb in checkboxes.values():
             cb.set_value(True)
         _apply_view()
 
     def _deselect_all() -> None:
+        """Deselect all columns and re-render the grid/images."""
         for cb in checkboxes.values():
             cb.set_value(False)
         _apply_view()
@@ -268,6 +307,7 @@ def page_analytics_table() -> None:
     btn_clear_all.on("click", lambda e: _deselect_all())
 
     def request_refresh() -> None:
+        """Auto-refresh if enabled; otherwise show a 'pending' hint."""
         if sw_autorun.value:
             pending.set_text("")
             refresh()
@@ -280,4 +320,5 @@ def page_analytics_table() -> None:
     for w in (inp_site, inp_sector, inp_square, inp_q, inp_limit):
         w.on("change", lambda e: request_refresh())
 
+    # Initial load
     refresh()
