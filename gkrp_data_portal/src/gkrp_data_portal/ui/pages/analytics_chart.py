@@ -293,23 +293,45 @@ def page_analytics_chart() -> None:
                 return
 
             ui_cols = ui_columns(res_chart.columns) or list(res_chart.columns)
+               # --- ТУК МАХАМЕ ИЗЛИШНИТЕ ТИПОВЕ ОТ МЕНЮТО (Вероника) ---
+                excluded = [
+                    'l_layername', 
+                    'l_site', 
+                    'l_square', 
+                    'l_layer', 
+                    'f_fragmenttype', 
+                    'f_fract', 
+                    'f_secondarycolor',
+                    'f_count',
+                    'f_onepot',
+                    'f_handelsize',
+                    'f_includestype',
+                    'f_note',
+                    'f_inventory',
+                    'f_image_url'
+            ]
+            ui_cols = [c for c in ui_cols if c not in excluded]
+
+            # 2. АВТОМАТИЧНО ИЗЧИСТВАНЕ НА ИМЕНАТА (Вероника)
+            # Този ред маха първите две букви (f_ или l_) и заменя долната черта с интервал
+            clean_names = {
+                c: c[2:].replace('_', ' ') if c.startswith(('f_', 'l_', 'o_')) else c 
+                for c in ui_cols
+            }
+            # --------------------------------------------
             if not checkboxes or list(checkboxes.keys()) != ui_cols:
                 _rebuild_column_checkboxes(ui_cols)
 
-            sel_x.options = list(ui_cols)
+            sel_x.options = clean_names
 
-            preferred = [
-                "l_site",
-                "l_sector",
-                "l_square",
-                "l_context",
-                "l_layername",
-                "f_piecetype",
-                "f_category",
-                "f_form",
-                "f_fragmenttype",
-                "f_technology",
-            ]
+        preferred = [
+                        "l_sector",
+                        "l_context",
+                        "f_piecetype",
+                        "f_category",
+                        "f_form",
+                        "f_technology",
+                    ]
 
             if not sel_x.value or sel_x.value not in ui_cols:
                 default_x = next((c for c in preferred if c in ui_cols), None) or (ui_cols[0] if ui_cols else None)
