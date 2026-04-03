@@ -294,7 +294,7 @@ def page_analytics_chart() -> None:
 
             ui_cols = ui_columns(res_chart.columns) or list(res_chart.columns)
                # --- ТУК МАХАМЕ ИЗЛИШНИТЕ ТИПОВЕ ОТ МЕНЮТО (Вероника) ---
-                excluded = [
+            excluded = [
                     'l_layername', 
                     'l_site', 
                     'l_square', 
@@ -324,7 +324,7 @@ def page_analytics_chart() -> None:
 
             sel_x.options = clean_names
 
-        preferred = [
+            preferred = [
                         "l_sector",
                         "l_context",
                         "f_piecetype",
