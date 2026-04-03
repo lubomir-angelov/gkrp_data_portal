@@ -1,4 +1,12 @@
 """Shared helpers/constants for Analytics NiceGUI pages."""
+# Вероника
+from gkrp_data_portal.ui.repository.analytics_repo import (
+    AnalyticsResult,
+    query_finds,
+    query_q1_layers_fragments,
+    query_q2_layers_fragments_ornaments,
+    get_distinct_squares,  # <-- ДОБАВИ ТОВА ТУК
+)
 
 from __future__ import annotations
 
@@ -128,3 +136,8 @@ def plotly_bar(xs: list[str], ys: list[int], title: str) -> dict:
             "yaxis": {"automargin": True},
         },
     }
+    
+def get_all_squares() -> list[str]:
+    """Отваря сесия към базата и вика репозиторито."""
+    with session_scope() as db:
+        return get_distinct_squares(db)

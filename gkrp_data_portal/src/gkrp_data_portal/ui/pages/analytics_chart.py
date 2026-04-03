@@ -76,7 +76,13 @@ def page_analytics_chart() -> None:
 
             inp_site = ui.input("site").props("clearable").classes("w-full")
             inp_sector = ui.input("sector").props("clearable").classes("w-full")
-            inp_square = ui.input("square").props("clearable").classes("w-full")
+            # Първоначално менюто е празно, ще го напълним по-късно
+sel_square = ui.select(
+    options=['All'], 
+    value='All', 
+    label="square", 
+    with_input=True # Позволява и да пишеш в него, за да филтрираш опциите
+).classes("w-full")
             inp_q = ui.input("free text (inventory/note/piecetype or finds fields)").props("clearable").classes("w-full")
 
             with ui.row().classes("w-full gap-2"):
@@ -210,7 +216,9 @@ def page_analytics_chart() -> None:
 
         site = (inp_site.value or "").strip() or None
         sector = (inp_sector.value or "").strip() or None
-        square = (inp_square.value or "").strip() or None
+        # Намери този ред и го промени:
+        square_val = (sel_square.value or "All")
+        square = square_val if square_val != "All" else None
         q = (inp_q.value or "").strip() or None
         date_from = parse_date(inp_date_from.value)
         date_to = parse_date(inp_date_to.value)
@@ -395,7 +403,13 @@ def page_analytics_chart() -> None:
         request_refresh()
 
     sel_x.on("change", _on_x_change)
-
+# Пълним менюто автоматично с данни от базата (Вероника)
+    try:
+        from .analytics_common import get_all_squares
+        squares = get_all_squares()
+        sel_square.options = ['All'] + squares
+    except Exception as e:
+        logger.error(f"Грешка при зареждане на квадратите: {e}")
     refresh()
 
 
