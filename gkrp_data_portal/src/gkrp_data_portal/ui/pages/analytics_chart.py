@@ -59,8 +59,10 @@ def page_analytics_chart() -> None:
         "_suppress_x_change": False,
     }
 
+    # --- UI LAYOUT START ---
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
-        # Left panel
+        
+        # ЛЯВ ПАНЕЛ (Филтри)
         with ui.column().classes("w-[340px] shrink-0"):
             ui.label("Query + Filters").classes("text-subtitle1 font-medium")
 
@@ -74,17 +76,14 @@ def page_analytics_chart() -> None:
                 btn_run = ui.button("Run query", icon="play_arrow").classes("flex-1")
                 sw_autorun = ui.switch("Auto-run", value=True).props("dense")
 
-            inp_site = ui.input("site").props("clearable").classes("w-full")
-            inp_sector = ui.input("sector").props("clearable").classes("w-full")
-            # Първоначално менюто е празно, ще го напълним по-късно
-            sel_square = ui.select(
-                options=['All'], 
-                value='All', 
-                label="square", 
-                with_input=True # Позволява и да пишеш в него, за да филтрираш опциите
-            ).classes("w-full")
+            # 1. ДЕФИНИРАНЕ НА ПАДАЩИТЕ МЕНЮТА (Вероника)
+            sel_site = ui.select(options=['All'], value='All', label="site").classes("w-full")
+            sel_sector = ui.select(options=['All'], value='All', label="sector").classes("w-full")
+            sel_square = ui.select(options=['All'], value='All', label="square").classes("w-full")
+            sel_layer = ui.select(options=['All'], value='All', label="layer").classes("w-full")
+            sel_layer.set_visibility(False) 
 
-            inp_q = ui.input("free text (inventory/note/piecetype or finds fields)").props("clearable").classes("w-full")
+            inp_q = ui.input("free text (inventory/note/piecetype...)").props("clearable").classes("w-full")
 
             with ui.row().classes("w-full gap-2"):
                 inp_date_from = ui.input("from").props("type=date clearable").classes("w-1/2")
@@ -93,326 +92,132 @@ def page_analytics_chart() -> None:
             inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
 
             ui.separator()
-            ui.label("Columns").classes("text-subtitle1 font-medium")
+            columns_container = ui.scroll_area().classes("w-full h-[320px] border rounded p-2 bg-white")
 
-            with ui.row().classes("w-full justify-between"):
-                btn_select_all = ui.button("Select all")
-                btn_clear_all = ui.button("Deselect all")
-
-            columns_container = ui.scroll_area().classes("w-full h-[420px] border rounded p-2 bg-white")
-
-        # Center panel (chart only)
+        # ЦЕНТРАЛЕН ПАНЕЛ (Графика)
         with ui.column().classes("flex-1 min-w-0"):
             ui.label("Chart").classes("text-subtitle1 font-medium")
             status = ui.label("").classes("text-sm text-gray-600")
             pending = ui.label("").classes("text-xs text-orange-700")
             dbg = ui.label("").classes("text-xs text-gray-500")
 
-            chart = ui.plotly({"data": [], "layout": {"height": 520}}).classes("w-full border rounded bg-white").style(
-                "height: 520px;"
-            )
+            chart = ui.plotly({"data": [], "layout": {"height": 520}}).classes("w-full border rounded bg-white")
             chart_id = chart.id
 
             with ui.row().classes("w-full items-center justify-between gap-2"):
                 sel_x = ui.select(options=[], label="Group by (x-axis)").classes("w-[420px]")
+                ui.button("Download PNG", on_click=lambda: ui.run_javascript(f"Plotly.downloadImage(document.getElementById('{chart_id}').querySelector('.js-plotly-plot'), {{format:'png', filename:'chart'}});"))
 
-                with ui.row().classes("gap-2"):
-                    ui.button(
-                        "Download PNG",
-                        on_click=lambda: ui.run_javascript(
-                            f"""
-                            (function() {{
-                              const el = document.getElementById('{chart_id}');
-                              if (!el) return;
-                              const gd = el.querySelector('.js-plotly-plot') || el;
-                              if (window.Plotly && gd) {{
-                                Plotly.downloadImage(gd, {{format:'png', filename:'analytics_chart', height:650, width:1100}});
-                              }}
-                            }})();
-                            """
-                        ),
-                    )
-                    ui.button(
-                        "Download JPG",
-                        on_click=lambda: ui.run_javascript(
-                            f"""
-                            (function() {{
-                              const el = document.getElementById('{chart_id}');
-                              if (!el) return;
-                              const gd = el.querySelector('.js-plotly-plot') || el;
-                              if (window.Plotly && gd) {{
-                                Plotly.downloadImage(gd, {{format:'jpeg', filename:'analytics_chart', height:650, width:1100}});
-                              }}
-                            }})();
-                            """
-                        ),
-                    )
-                    ui.button(
-                        "Print / Save as PDF",
-                        on_click=lambda: ui.run_javascript(
-                            "window.open('/api/analytics/chart.html?query_id=' + encodeURIComponent(window.__gkrp_query_id || 'q1'), '_blank');"
-                        ),
-                    )
-
-        # Right panel (images)
+        # ДЕСЕН ПАНЕЛ (Снимки)
         with ui.column().classes("w-[320px] shrink-0"):
             ui.label("Images").classes("text-subtitle1 font-medium")
             images_box = ui.scroll_area().classes("w-full h-[820px] border rounded p-2 bg-white")
 
-    # --- local state ---
+    # --- ЛОГИКА ---
     checkboxes: dict[str, Any] = {}
+        def _read_filters() -> dict[str, Any]:
+        query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
+        # Четем от новите менюта
+        s_val = sel_site.value
+        sec_val = sel_sector.value
+        sq_val = sel_square.value
+        lay_val = sel_layer.value
 
-    def _set_chart(figure: dict[str, Any]) -> None:
-        if hasattr(chart, "figure"):
-            setattr(chart, "figure", figure)
-            try:
-                chart.update()
-            except TypeError:
-                chart.update()
-        else:
-            try:
-                chart.update(figure)  # type: ignore[arg-type]
-            except TypeError:
-                if hasattr(chart, "props"):
-                    chart.props(f":figure='{json.dumps(figure)}'")  # type: ignore[attr-defined]
-                    chart.update()
-                else:
-                    raise RuntimeError("Cannot update Plotly chart on this NiceGUI version.")
+        return {
+            "query_id": query_id,
+            "site": s_val if s_val != 'All' else None,
+            "sector": sec_val if sec_val != 'All' else None,
+            "square": sq_val if sq_val != 'All' else None,
+            "layer": lay_val if lay_val != 'All' else None,
+            "q": (inp_q.value or "").strip() or None,
+            "date_from": parse_date(inp_date_from.value),
+            "date_to": parse_date(inp_date_to.value),
+            "limit": int(inp_limit.value or DEFAULT_LIMIT),
+            "offset": 0,
+            }
 
-        ui.run_javascript(
-            f"""
-            setTimeout(() => {{
-              const el = document.getElementById({json.dumps(chart_id)});
-              if (!el) return;
-              const gd = el.querySelector('.js-plotly-plot') || el;
-              if (window.Plotly && gd) {{
-                Plotly.Plots.resize(gd);
-                Plotly.redraw(gd);
-              }}
-            }}, 50);
-            """
-        )
+    def refresh() -> None:
+        if state.get("_refreshing"): return
+        state["_refreshing"] = True
+        try:
+            f = _read_filters()
+            res = result_for(f["query_id"], **f)
+            total = int(res.total or 0)
+            
+            if total == 0:
+                status.set_text("⚠️ No results.")
+                return
+
+            # Чистене на имената (Вероника)
+            all_cols = ui_columns(res.columns)
+            excluded = ['l_layername', 'l_site', 'l_square', 'l_layer', 'f_note', 'f_inventory', 'f_image_url']
+            ui_cols = [c for c in all_cols if c not in excluded]
+            clean_names = {c: c[2:].replace('_', ' ') if c.startswith(('f_','l_','o_')) else c for c in ui_cols}
+            
+            sel_x.options = clean_names
+                if not sel_x.value or sel_x.value not in ui_cols:
+                sel_x.value = ui_cols[0] if ui_cols else None
+
+            xs, ys = build_histogram(res.items, sel_x.value)
+            chart.figure = plotly_bar(xs, ys, title=f"Count by {clean_names.get(sel_x.value)}")
+            chart.update()
+            
+            _set_images(extract_image_urls(res.items))
+            status.set_text(f"✅ Chart built from {len(res.items)} rows (Total {total}).")
+        finally:
+            state["_refreshing"] = False
 
     def _set_images(urls: list[str]) -> None:
         images_box.clear()
         with images_box:
-            if not urls:
-                ui.label("No image URLs in current result.")
-                return
-            for u in urls[:50]:
-                ui.image(u).classes("w-full").props("fit=contain")
+            for u in urls[:50]: ui.image(u).classes("w-full").props("fit=contain")
 
-    def _rebuild_column_checkboxes(all_columns: list[str]) -> None:
-        current = set(all_columns) if not state.get("selected_columns") else (set(state["selected_columns"]) & set(all_columns))
-        columns_container.clear()
-        checkboxes.clear()
-        with columns_container:
-            for c in all_columns:
-                cb = ui.checkbox(c, value=(c in current)).classes("text-sm")
-                checkboxes[c] = cb
-        state["selected_columns"] = current
+    # 2. ВЕРИЖНА РЕАКЦИЯ (Вероника)
+    def update_dropdowns(e):
+        from .analytics_common import get_filter_options
+        trigger = e.sender.label
+        
+        s = sel_site.value if sel_site.value != 'All' else None
+        sec = sel_sector.value if sel_sector.value != 'All' else None
+        sq = sel_square.value if sel_square.value != 'All' else None
 
-    def _read_filters() -> dict[str, Any]:
-        query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
+        if trigger == 'site':
+            sel_sector.options = ['All'] + get_filter_options('sector', site=s)
+            sel_sector.value = 'All'
+            sel_square.options = ['All']
+            sel_square.value = 'All'
+        elif trigger == 'sector':
+            sel_square.options = ['All'] + get_filter_options('square', site=s, sector=sec)
+            sel_square.value = 'All'
 
-        site = (inp_site.value or "").strip() or None
-        sector = (inp_sector.value or "").strip() or None
-        # Намери този ред и го промени:
-        square_val = (sel_square.value or "All")
-        square = square_val if square_val != "All" else None
-        q = (inp_q.value or "").strip() or None
-        date_from = parse_date(inp_date_from.value)
-        date_to = parse_date(inp_date_to.value)
+        # Логика за Layer
+        if s and sec:
+            layers = get_filter_options('layer', site=s, sector=sec, square=sq)
+            if 0 < len(layers) < 100:
+                sel_layer.options = ['All'] + layers
+                sel_layer.set_visibility(True)
+            else: sel_layer.set_visibility(False)
+        else: sel_layer.set_visibility(False)
+        
+        if sw_autorun.value: refresh()
 
-        limit = int(inp_limit.value or DEFAULT_LIMIT)
-        limit = max(1, min(limit, TABLE_MAX_LIMIT))
-
-        state["query_id"] = query_id
-        app.storage.general["analytics_last_query_id"] = query_id
-        ui.run_javascript(f"window.__gkrp_query_id = {json.dumps(query_id)};")
-
-        return {
-            "query_id": query_id,
-            "site": site,
-            "sector": sector,
-            "square": square,
-            "date_from": date_from,
-            "date_to": date_to,
-            "q": q,
-            "limit": limit,  # used for “table-like” fetch (images + small sample)
-            "offset": 0,
-        }
+    # 3. ВРЪЗВАНЕ НА СЪБИТИЯ
+    sel_site.on('change', update_dropdowns)
+    sel_sector.on('change', update_dropdowns)
+    sel_square.on('change', update_dropdowns)
+    sel_layer.on('change', lambda: refresh() if sw_autorun.value else None)
+    sel_x.on('change', refresh)
+    btn_run.on('click', refresh)
     
-    def _get_type_columns(cols: list[str]) -> list[str]:
-        # case-insensitive match; keeps original order
-        return [c for c in cols if "type" in c.lower()]
+    for w in (inp_q, inp_limit, inp_date_from, inp_date_to):
+        w.on("change", lambda: refresh() if sw_autorun.value else None)
 
-    def refresh() -> None:
-        if state.get("_refreshing"):
-            return
-        state["_refreshing"] = True
-        try:
-            f = _read_filters()
-            notes: list[str] = []
-
-            # (A) limited fetch: used for images (and cheap metadata like total)
-            res_limited = result_for(
-                f["query_id"],
-                site=f["site"],
-                sector=f["sector"],
-                square=f["square"],
-                date_from=f["date_from"],
-                date_to=f["date_to"],
-                q=f["q"],
-                limit=f["limit"],
-                offset=f["offset"],
-            )
-
-            total = int(res_limited.total or 0)
-            if total == 0:
-                _set_chart(plotly_bar([], [], title=f"No results ({f['query_id']})"))
-                _set_images([])
-                dbg.set_text(f"query={f['query_id']} rows=0 total=0")
-                status.set_text("⚠️ No results for current filters.")
-                return
-
-            # (B) chart fetch (full, capped)
-            chart_fetch = min(max(total, 0), CHART_MAX_FETCH)
-            res_chart = (
-                res_limited
-                if chart_fetch <= len(res_limited.items)
-                else result_for(
-                    f["query_id"],
-                    site=f["site"],
-                    sector=f["sector"],
-                    square=f["square"],
-                    date_from=f["date_from"],
-                    date_to=f["date_to"],
-                    q=f["q"],
-                    limit=chart_fetch,
-                    offset=0,
-                )
-            )
-
-            if not res_chart.items:
-                _set_chart(plotly_bar([], [], title=f"No results ({f['query_id']})"))
-                _set_images([])
-                dbg.set_text(f"query={f['query_id']} rows=0 total={res_chart.total}")
-                status.set_text("⚠️ No results for current filters.")
-                return
-
-            ui_cols = ui_columns(res_chart.columns) or list(res_chart.columns)
-               # --- ТУК МАХАМЕ ИЗЛИШНИТЕ ТИПОВЕ ОТ МЕНЮТО (Вероника) ---
-            excluded = [
-                    'l_layername', 
-                    'l_site', 
-                    'l_square', 
-                    'l_layer', 
-                    'f_fragmenttype', 
-                    'f_fract', 
-                    'f_secondarycolor',
-                    'f_count',
-                    'f_onepot',
-                    'f_handelsize',
-                    'f_includestype',
-                    'f_note',
-                    'f_inventory',
-                    'f_image_url'
-            ]
-            ui_cols = [c for c in ui_cols if c not in excluded]
-
-            # 2. АВТОМАТИЧНО ИЗЧИСТВАНЕ НА ИМЕНАТА (Вероника)
-            # Този ред маха първите две букви (f_ или l_) и заменя долната черта с интервал
-            clean_names = {
-                c: c[2:].replace('_', ' ') if c.startswith(('f_', 'l_', 'o_')) else c 
-                for c in ui_cols
-            }
-            # --------------------------------------------
-            if not checkboxes or list(checkboxes.keys()) != ui_cols:
-                _rebuild_column_checkboxes(ui_cols)
-
-            sel_x.options = clean_names
-
-            preferred = [
-                        "l_sector",
-                        "l_context",
-                        "f_piecetype",
-                        "f_category",
-                        "f_form",
-                        "f_technology",
-                    ]
-
-            if not sel_x.value or sel_x.value not in ui_cols:
-                default_x = next((c for c in preferred if c in ui_cols), None) or (ui_cols[0] if ui_cols else None)
-                state["_suppress_x_change"] = True
-                sel_x.set_value(default_x)
-                state["_suppress_x_change"] = False
-                if default_x:
-                    notes.append(f"group-by defaulted to {default_x}")
-
-            x_key = sel_x.value
-            xs, ys = build_histogram(res_chart.items, x_key, top_n=30)
-            _set_chart(plotly_bar(xs, ys, title=f"Count by {x_key} ({f['query_id']})"))
-
-            urls = extract_image_urls(res_limited.items)
-            _set_images(urls)
-
-            dbg.set_text(
-                f"query={f['query_id']} limited_rows={len(res_limited.items)} total={res_limited.total} "
-                f"chart_rows={len(res_chart.items)} x={x_key} buckets={len(xs)}"
-            )
-
-            base = f"✅ Chart built from {len(res_chart.items)} rows (total {res_chart.total})."
-            if notes:
-                base += "  " + " • ".join(notes)
-            status.set_text(base)
-
-        finally:
-            state["_refreshing"] = False
-
-    def _select_all() -> None:
-        for cb in checkboxes.values():
-            cb.set_value(True)
-        refresh()
-
-    def _deselect_all() -> None:
-        for cb in checkboxes.values():
-            cb.set_value(False)
-        refresh()
-
-    btn_select_all.on("click", lambda e: _select_all())
-    btn_clear_all.on("click", lambda e: _deselect_all())
-
-    def request_refresh() -> None:
-        if sw_autorun.value:
-            pending.set_text("")
-            refresh()
-        else:
-            pending.set_text("Filters changed — click “Run query”")
-
-    btn_run.on("click", lambda e: (pending.set_text(""), refresh()))
-
-    sel_query.on("change", lambda e: request_refresh())
-    
-    for w in (inp_site, inp_sector, sel_square, inp_q, inp_limit):
-        w.on("change", lambda e: request_refresh())
-    inp_date_from.on("change", lambda e: request_refresh())
-    inp_date_to.on("change", lambda e: request_refresh())
-
-    def _on_x_change(e) -> None:
-        if state.get("_suppress_x_change"):
-            return
-        request_refresh()
-
-    sel_x.on("change", _on_x_change)
-    
-    # Пълним менюто автоматично с данни от базата (Вероника)
+    # 4. СТАРТ: Първоначално пълнене на Site
     try:
-        from .analytics_common import get_all_squares
-        squares = get_all_squares()
-        sel_square.options = ['All'] + squares
-    except Exception as e:
-        logger.error(f"Грешка при зареждане на квадратите: {e}")
+        from .analytics_common import get_filter_options
+        sel_site.options = ['All'] + get_filter_options('site')
+    except: pass
+    
     refresh()
 
 

@@ -263,10 +263,28 @@ def extract_image_urls(items: list[dict[str, Any]]) -> list[str]:
 
     return urls
 
-# Вероника
-def get_distinct_squares(db: Session) -> list[str]:
-    """Извлича всички уникални квадрати директно от базата данни."""
-    # Използваме чист SQL за максимална бързина
-    sql = "SELECT DISTINCT square FROM tbllayers WHERE square IS NOT NULL AND square != '' ORDER BY square"
-    results = db.execute(text(sql)).all()
-    return [str(r[0]) for r in results]
+# Veronika
+def get_distinct_values(db: Session, column_name: str, site=None, sector=None, square=None) -> list[str]:
+    """Универсална SQL заявка за вадене на уникални стойности (Вероника)."""
+    allowed = {"site", "sector", "square", "layer"}
+    if column_name not in allowed: return []
+
+    clauses = [f"l.{column_name} IS NOT NULL", f"l.{column_name} != ''"]
+    params = {}
+
+    if site:
+        clauses.append("l.site = :site")
+        params["site"] = site
+    if sector:
+        clauses.append("l.sector = :sector")
+        params["sector"] = sector
+    if square:
+        clauses.append("l.square = :square")
+        params["square"] = square
+
+    where_sql = " AND ".join(clauses)
+    sql = f"SELECT DISTINCT l.{column_name} FROM tbllayers l WHERE {where_sql} ORDER BY l.{column_name} LIMIT 500"
+    
+    results = db.execute(text(sql), params).all()
+    return [str(r[0]) for r in results if r[0]]
+  

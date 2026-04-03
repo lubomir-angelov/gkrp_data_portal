@@ -1,14 +1,6 @@
 """Shared helpers/constants for Analytics NiceGUI pages."""
 from __future__ import annotations
 
-# Вероника
-from gkrp_data_portal.ui.repository.analytics_repo import (
-    AnalyticsResult,
-    query_finds,
-    query_q1_layers_fragments,
-    query_q2_layers_fragments_ornaments,
-    get_distinct_squares,  # <-- ДОБАВИ ТОВА ТУК
-)
 
 from collections import Counter
 from datetime import date
@@ -20,6 +12,7 @@ from gkrp_data_portal.ui.repository.analytics_repo import (
     query_finds,
     query_q1_layers_fragments,
     query_q2_layers_fragments_ornaments,
+    get_distinct_values,  # <-- ДОБАВИ ТОВА ТУК
 )
 
 QUERY_OPTIONS: dict[str, str] = {
@@ -136,8 +129,9 @@ def plotly_bar(xs: list[str], ys: list[int], title: str) -> dict:
             "yaxis": {"automargin": True},
         },
     }
-    
-def get_all_squares() -> list[str]:
-    """Отваря сесия към базата и вика репозиторито."""
+# Veronika
+def get_filter_options(column: str, **kwargs) -> list[str]:
+    """Мост към репозиторито за извличане на опции за филтри (Вероника)."""
     with session_scope() as db:
-        return get_distinct_squares(db)
+        # kwargs ни позволява да предаваме site=..., sector=... и т.н. динамично
+        return get_distinct_values(db, column, **kwargs)
