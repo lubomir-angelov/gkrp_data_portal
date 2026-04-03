@@ -393,7 +393,8 @@ def page_analytics_chart() -> None:
     btn_run.on("click", lambda e: (pending.set_text(""), refresh()))
 
     sel_query.on("change", lambda e: request_refresh())
-    for w in (inp_site, inp_sector, inp_square, inp_q, inp_limit):
+    
+    for w in (inp_site, inp_sector, sel_square, inp_q, inp_limit):
         w.on("change", lambda e: request_refresh())
     inp_date_from.on("change", lambda e: request_refresh())
     inp_date_to.on("change", lambda e: request_refresh())
