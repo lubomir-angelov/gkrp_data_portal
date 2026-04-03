@@ -263,11 +263,10 @@ def extract_image_urls(items: list[dict[str, Any]]) -> list[str]:
 
     return urls
 
-    
-    # Вероника
-    def get_distinct_squares(db: Session) -> list[str]:
-        """Извлича всички уникални квадрати директно от базата данни."""
-        # Използваме чист SQL за максимална бързина
-        sql = "SELECT DISTINCT square FROM tbllayers WHERE square IS NOT NULL AND square != '' ORDER BY square"
-        results = db.execute(text(sql)).all()
-        return [str(r[0]) for r in results]
+# Вероника
+def get_distinct_squares(db: Session) -> list[str]:
+    """Извлича всички уникални квадрати директно от базата данни."""
+    # Използваме чист SQL за максимална бързина
+    sql = "SELECT DISTINCT square FROM tbllayers WHERE square IS NOT NULL AND square != '' ORDER BY square"
+    results = db.execute(text(sql)).all()
+    return [str(r[0]) for r in results]

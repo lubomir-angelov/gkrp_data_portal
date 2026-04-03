@@ -77,12 +77,13 @@ def page_analytics_chart() -> None:
             inp_site = ui.input("site").props("clearable").classes("w-full")
             inp_sector = ui.input("sector").props("clearable").classes("w-full")
             # Първоначално менюто е празно, ще го напълним по-късно
-sel_square = ui.select(
-    options=['All'], 
-    value='All', 
-    label="square", 
-    with_input=True # Позволява и да пишеш в него, за да филтрираш опциите
-).classes("w-full")
+            sel_square = ui.select(
+                options=['All'], 
+                value='All', 
+                label="square", 
+                with_input=True # Позволява и да пишеш в него, за да филтрираш опциите
+            ).classes("w-full")
+
             inp_q = ui.input("free text (inventory/note/piecetype or finds fields)").props("clearable").classes("w-full")
 
             with ui.row().classes("w-full gap-2"):
@@ -403,7 +404,8 @@ sel_square = ui.select(
         request_refresh()
 
     sel_x.on("change", _on_x_change)
-# Пълним менюто автоматично с данни от базата (Вероника)
+    
+    # Пълним менюто автоматично с данни от базата (Вероника)
     try:
         from .analytics_common import get_all_squares
         squares = get_all_squares()

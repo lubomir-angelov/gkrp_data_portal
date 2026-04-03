@@ -1,4 +1,6 @@
 """Shared helpers/constants for Analytics NiceGUI pages."""
+from __future__ import annotations
+
 # Вероника
 from gkrp_data_portal.ui.repository.analytics_repo import (
     AnalyticsResult,
@@ -7,8 +9,6 @@ from gkrp_data_portal.ui.repository.analytics_repo import (
     query_q2_layers_fragments_ornaments,
     get_distinct_squares,  # <-- ДОБАВИ ТОВА ТУК
 )
-
-from __future__ import annotations
 
 from collections import Counter
 from datetime import date
