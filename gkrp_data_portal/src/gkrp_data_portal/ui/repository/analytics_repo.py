@@ -137,34 +137,37 @@ def extract_image_urls(items: list[dict[str, Any]]) -> list[str]:
 
 # Универсална функция с йерархия
 def get_distinct_values(db: Session, column_name: str, site=None, sector=None, square=None, **kwargs) -> list[str]:
-    """Универсална функция за филтри (Вероника - версия 5)."""
+    """Универсална функция, която съединява таблиците, за да напълни менютата (Вероника)."""
     allowed = {"site", "sector", "square", "layer"}
     if column_name not in allowed: return []
 
-    # Търсим само където колоната не е празна
-    clauses = [f"{column_name} IS NOT NULL", f"TRIM({column_name}) != ''"]
+    # ПРАВИМ JOIN (съединяване), точно както графиката!
+    # l = tbllayers, f = tblfragments
+    sql = f"SELECT DISTINCT l.{column_name} FROM tbllayers l"
+    sql += " INNER JOIN tblfragments f ON l.layerid = f.locationid"
+    
+    # Филтрираме да не са празни
+    clauses = [f"l.{column_name} IS NOT NULL", f"l.{column_name} != ''"]
     params = {}
 
-    # Използваме ILIKE вместо =, за да сме сигурни, че ще намерим имената
-    if site:
-        clauses.append("site ILIKE :site")
-        params["site"] = site.strip()
-    if sector:
-        clauses.append("sector ILIKE :sector")
-        params["sector"] = sector.strip()
-    if square:
-        clauses.append("square ILIKE :square")
-        params["square"] = square.strip()
+    if site and site != "All":
+        clauses.append("l.site = :site")
+        params["site"] = site
+    if sector and sector != "All":
+        clauses.append("l.sector = :sector")
+        params["sector"] = sector
+    if square and square != "All":
+        clauses.append("l.square = :square")
+        params["square"] = square
 
-    where_sql = " AND ".join(clauses)
-    # Използваме TRIM, за да няма дубликати от интервали
-    sql = f"SELECT DISTINCT TRIM({column_name}) FROM tbllayers WHERE {where_sql} ORDER BY 1 LIMIT 500"
-    
+    sql += " WHERE " + " AND ".join(clauses)
+    sql += f" ORDER BY l.{column_name} LIMIT 500"
+
     try:
+        print(f"DEBUG SQL: {sql}") # Ще го видиш в терминала
         results = db.execute(text(sql), params).all()
-        # Почистваме резултатите в Python за всеки случай
-        return sorted(list(set(str(r[0]).strip() for r in results if r[0])))
+        return sorted([str(r[0]) for r in results if r[0]])
     except Exception as e:
-        print(f"Грешка в базата: {e}")
+        print(f"ГРЕШКА ПРИ ПЪЛНЕНЕ НА МЕНЮ: {e}")
         return []
 
