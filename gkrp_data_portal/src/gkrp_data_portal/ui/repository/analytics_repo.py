@@ -34,6 +34,7 @@ def _build_where(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     q: Optional[str] = None,
+    **_kwargs: Any,  # <-- ДОБАВИ ТОЗИ РЕД ТУК
 ) -> tuple[str, dict[str, Any]]:
     """Build a safe WHERE clause using only whitelisted filters."""
     clauses: list[str] = []
@@ -135,7 +136,7 @@ def extract_image_urls(items: list[dict[str, Any]]) -> list[str]:
     return urls
 
 # Veronika - Универсална функция с йерархия
-def get_distinct_values(db: Session, column_name: str, site=None, sector=None, square=None) -> list[str]:
+def get_distinct_values(db: Session, column_name: str, site=None, sector=None, square=None, layer=None, **kwargs) -> list[str]:
     allowed = {"site", "sector", "square", "layer"}
     if column_name not in allowed: return []
     clauses = [f"l.{column_name} IS NOT NULL", f"l.{column_name} != ''"]
