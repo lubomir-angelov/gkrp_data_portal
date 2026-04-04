@@ -137,30 +137,34 @@ def extract_image_urls(items: list[dict[str, Any]]) -> list[str]:
 
 # Универсална функция с йерархия
 def get_distinct_values(db: Session, column_name: str, site=None, sector=None, square=None, **kwargs) -> list[str]:
-    """Извлича уникални стойности, изчистени от интервали и дубликати (Вероника)."""
+    """Универсална функция за филтри (Вероника - версия 5)."""
     allowed = {"site", "sector", "square", "layer"}
     if column_name not in allowed: return []
 
-    clauses = [f"{column_name} IS NOT NULL", f"{column_name} != ''"]
+    # Търсим само където колоната не е празна
+    clauses = [f"{column_name} IS NOT NULL", f"TRIM({column_name}) != ''"]
     params = {}
 
+    # Използваме ILIKE вместо =, за да сме сигурни, че ще намерим имената
     if site:
-        clauses.append("site = :site"); params["site"] = site
+        clauses.append("site ILIKE :site")
+        params["site"] = site.strip()
     if sector:
-        clauses.append("sector = :sector"); params["sector"] = sector
+        clauses.append("sector ILIKE :sector")
+        params["sector"] = sector.strip()
     if square:
-        clauses.append("square = :square"); params["square"] = square
+        clauses.append("square ILIKE :square")
+        params["square"] = square.strip()
 
-    where_str = " AND ".join(clauses)
-    # Използваме TRIM, за да премахнем невидими интервали, които създават дубликати
-    sql = f"SELECT DISTINCT TRIM({column_name}) FROM tbllayers WHERE {where_str} ORDER BY 1 LIMIT 500"
+    where_sql = " AND ".join(clauses)
+    # Използваме TRIM, за да няма дубликати от интервали
+    sql = f"SELECT DISTINCT TRIM({column_name}) FROM tbllayers WHERE {where_sql} ORDER BY 1 LIMIT 500"
     
     try:
         results = db.execute(text(sql), params).all()
-        # Използваме set() в Python като втора защита срещу дубликати
-        values = sorted(list(set(str(r[0]) for r in results if r[0])))
-        return values
+        # Почистваме резултатите в Python за всеки случай
+        return sorted(list(set(str(r[0]).strip() for r in results if r[0])))
     except Exception as e:
-        print(f"SQL Error: {e}")
+        print(f"Грешка в базата: {e}")
         return []
 

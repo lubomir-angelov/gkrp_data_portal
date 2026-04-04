@@ -140,36 +140,36 @@ def page_analytics_chart() -> None:
     def update_dropdowns(e: Any) -> None:
         from .analytics_common import get_filter_options
         
-        # Разпознаваме кое меню е променено чрез неговия етикет
-        trigger = str(e.sender.label).lower()
-        
-        site_val = sel_site.value if sel_site.value != "All" else None
-        sector_val = sel_sector.value if sel_sector.value != "All" else None
-        square_val = sel_square.value if sel_square.value != "All" else None
+        # Вземаме текущите стойности от менютата
+        s_val = sel_site.value if sel_site.value != "All" else None
+        sec_val = sel_sector.value if sel_sector.value != "All" else None
+        sq_val = sel_square.value if sel_square.value != "All" else None
 
-        if trigger == "site":
-            # 1. Потребителят смени Сайт -> Обновяваме Сектори
-            opts = get_filter_options("sector", site=site_val)
+        # Кое меню е променил потребителят?
+        if e.sender == sel_site:
+            # Сменен обект -> Търсим неговите сектори
+            opts = get_filter_options("sector", site=s_val)
             sel_sector.options = ["All"] + opts
             sel_sector.value = "All"
-            # Нулираме всичко надолу
+            # Ресет на долните
             sel_square.options = ["All"]; sel_square.value = "All"
             sel_layer.options = ["All"]; sel_layer.value = "All"
         
-        elif trigger == "sector":
-            # 2. Потребителят смени Сектор -> Обновяваме Квадрати
-            opts = get_filter_options("square", site=site_val, sector=sector_val)
+        elif e.sender == sel_sector:
+            # Сменен сектор -> Търсим неговите квадрати
+            opts = get_filter_options("square", site=s_val, sector=sec_val)
             sel_square.options = ["All"] + opts
             sel_square.value = "All"
-            # Нулираме пластовете
+            # Ресет на пластовете
             sel_layer.options = ["All"]; sel_layer.value = "All"
 
-        elif trigger == "square":
-            # 3. Потребителят смени Квадрат -> Обновяваме Пластове
-            opts = get_filter_options("layer", site=site_val, sector=sector_val, square=square_val)
+        elif e.sender == sel_square:
+            # Сменен квадрат -> Търсим пластовете
+            opts = get_filter_options("layer", site=s_val, sector=sec_val, square=sq_val)
             sel_layer.options = ["All"] + opts
             sel_layer.value = "All"
 
+        # Пускаме графиката
         if sw_autorun.value:
             refresh()
 
