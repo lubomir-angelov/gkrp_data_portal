@@ -137,37 +137,36 @@ def extract_image_urls(items: list[dict[str, Any]]) -> list[str]:
 
 # Универсална функция с йерархия
 def get_distinct_values(db: Session, column_name: str, site=None, sector=None, square=None, **kwargs) -> list[str]:
-    """Универсална функция, която съединява таблиците, за да напълни менютата (Вероника)."""
+    """Универсална функция за менюта (Професионална версия)."""
     allowed = {"site", "sector", "square", "layer"}
     if column_name not in allowed: return []
 
-    # ПРАВИМ JOIN (съединяване), точно както графиката!
-    # l = tbllayers, f = tblfragments
-    sql = f"SELECT DISTINCT l.{column_name} FROM tbllayers l"
+    # Правим JOIN, за да виждаме само местата, където има реални находки
+    sql = f"SELECT DISTINCT TRIM(l.{column_name}) FROM tbllayers l"
     sql += " INNER JOIN tblfragments f ON l.layerid = f.locationid"
     
-    # Филтрираме да не са празни
-    clauses = [f"l.{column_name} IS NOT NULL", f"l.{column_name} != ''"]
+    clauses = [f"l.{column_name} IS NOT NULL", f"TRIM(l.{column_name}) != ''"]
     params = {}
 
+    # Използваме същата логика като в _build_where за максимална точност
     if site and site != "All":
-        clauses.append("l.site = :site")
-        params["site"] = site
+        clauses.append("l.site ILIKE :site")
+        params["site"] = f"%{site}%"
     if sector and sector != "All":
-        clauses.append("l.sector = :sector")
-        params["sector"] = sector
+        clauses.append("l.sector ILIKE :sector")
+        params["sector"] = f"%{sector}%"
     if square and square != "All":
-        clauses.append("l.square = :square")
-        params["square"] = square
+        clauses.append("l.square ILIKE :square")
+        params["square"] = f"%{square}%"
 
     sql += " WHERE " + " AND ".join(clauses)
-    sql += f" ORDER BY l.{column_name} LIMIT 500"
+    sql += f" ORDER BY 1 LIMIT 500"
 
     try:
-        print(f"DEBUG SQL: {sql}") # Ще го видиш в терминала
         results = db.execute(text(sql), params).all()
-        return sorted([str(r[0]) for r in results if r[0]])
+        # Вземаме само уникалните стойности и ги подреждаме
+        return sorted(list(set(str(r[0]) for r in results if r[0])))
     except Exception as e:
-        print(f"ГРЕШКА ПРИ ПЪЛНЕНЕ НА МЕНЮ: {e}")
+        print(f"Грешка в get_distinct_values: {e}")
         return []
 
