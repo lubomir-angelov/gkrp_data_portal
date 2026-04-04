@@ -50,14 +50,12 @@ def page_analytics_chart() -> None:
                 btn_run = ui.button("Run query", icon="play_arrow").classes("flex-1")
                 sw_autorun = ui.switch("Auto-run", value=True).props("dense")
 
-            # Йерархични падащи менюта
+            # Йерархични падащи менюта (Вероника)
             sel_site = ui.select(options=["All"], value="All", label="site").classes("w-full")
             sel_sector = ui.select(options=["All"], value="All", label="sector").classes("w-full")
             sel_square = ui.select(options=["All"], value="All", label="square").classes("w-full")
             sel_layer = ui.select(options=["All"], value="All", label="layer").classes("w-full")
             sel_layer.set_visibility(False) # Скрит първоначално
-
-            inp_q = ui.input("free text (inventory/note/piecetype...)").props("clearable").classes("w-full")
 
             with ui.row().classes("w-full gap-2"):
                 inp_date_from = ui.input("from").props("type=date clearable").classes("w-1/2")
@@ -90,7 +88,7 @@ def page_analytics_chart() -> None:
             "sector": sel_sector.value if sel_sector.value != "All" else None,
             "square": sel_square.value if sel_square.value != "All" else None,
             "layer": sel_layer.value if sel_layer.value != "All" else None,
-            "q": (inp_q.value or "").strip() or None,
+            "q": None, # Текстовото поле е премахнато
             "date_from": parse_date(inp_date_from.value),
             "date_to": parse_date(inp_date_to.value),
             "limit": int(inp_limit.value or DEFAULT_LIMIT),
@@ -108,6 +106,7 @@ def page_analytics_chart() -> None:
         state["_refreshing"] = True
         try:
             f = _read_filters()
+            # Извикваме базата с филтрите
             res = result_for(f["query_id"], **{k: v for k, v in f.items() if k != "query_id"})
             total = int(res.total or 0)
 
@@ -130,8 +129,7 @@ def page_analytics_chart() -> None:
             chart.update()
             
             _set_images(extract_image_urls(res.items))
-            status.set_text(f"✅ Loaded {len(res.items)} rows (Total: {total}).")
-            dbg.set_text(f"x-axis: {sel_x.value}")
+            status.set_text(f"✅ Loaded {len(res.items)} rows (Total matches: {total}).")
         except Exception:
             logger.exception("Refresh failed")
             status.set_text("❌ Error loading data.")
@@ -146,22 +144,28 @@ def page_analytics_chart() -> None:
         square = sel_square.value if sel_square.value != "All" else None
 
         if trigger == "site":
+            # При смяна на сайт, обновяваме сектори и чистим всичко надолу
             sel_sector.options = ["All"] + get_filter_options("sector", site=site)
-            sel_sector.value = "All"; sel_square.value = "All"; sel_layer.value = "All"
+            sel_sector.value = "All"
+            sel_square.options = ["All"]; sel_square.value = "All"
+            sel_layer.options = ["All"]; sel_layer.value = "All"; sel_layer.set_visibility(False)
+        
         elif trigger == "sector":
+            # При смяна на сектор, обновяваме квадрати
             sel_square.options = ["All"] + get_filter_options("square", site=site, sector=sector)
-            sel_square.value = "All"; sel_layer.value = "All"
+            sel_square.value = "All"
+            sel_layer.options = ["All"]; sel_layer.value = "All"; sel_layer.set_visibility(False)
 
-        # Логика за Layer (показва се само при избран обект и сектор)
-        if site and sector:
-            layers = get_filter_options("layer", site=site, sector=sector, square=square)
-            if 0 < len(layers) < 100:
-                sel_layer.options = ["All"] + layers
-                sel_layer.set_visibility(True)
-            else:
-                sel_layer.set_visibility(False); sel_layer.value = "All"
-        else:
-            sel_layer.set_visibility(False); sel_layer.value = "All"
+        elif trigger == "square":
+            # При смяна на квадрат, зареждаме пластове (layer)
+            if site and sector:
+                layers = get_filter_options("layer", site=site, sector=sector, square=square)
+                if 0 < len(layers) < 100:
+                    sel_layer.options = ["All"] + layers
+                    sel_layer.set_visibility(True)
+                else:
+                    sel_layer.set_visibility(False)
+                sel_layer.value = "All"
 
         if sw_autorun.value: refresh()
 
@@ -173,15 +177,17 @@ def page_analytics_chart() -> None:
     sel_x.on("change", refresh)
     btn_run.on("click", refresh)
     
-    for w in (inp_q, inp_limit, inp_date_from, inp_date_to):
+    # Филтри за дата и лимит
+    for w in (inp_limit, inp_date_from, inp_date_to):
         w.on("change", lambda: refresh() if sw_autorun.value else None)
 
-    # Първоначално пълнене
+    # ВАЖНО: Първоначално пълнене на Site при зареждане
     try:
         from .analytics_common import get_filter_options
         sel_site.options = ["All"] + get_filter_options("site")
-    except: pass
+    except Exception:
+        logger.exception("Initial site load failed")
     
     refresh()
 
-# --- Останалите @app.get функции остават непроменени под този ред ---
+# --- Ендпойнтите за експорт (CSV, JSON, HTML) трябва да са под този ред ---
