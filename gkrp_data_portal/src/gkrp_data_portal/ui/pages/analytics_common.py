@@ -1,6 +1,6 @@
 """Shared helpers/constants for Analytics NiceGUI pages."""
-
 from __future__ import annotations
+
 
 from collections import Counter
 from datetime import date
@@ -12,6 +12,7 @@ from gkrp_data_portal.ui.repository.analytics_repo import (
     query_finds,
     query_q1_layers_fragments,
     query_q2_layers_fragments_ornaments,
+    get_distinct_values,  # <-- ДОБАВИ ТОВА ТУК
 )
 
 QUERY_OPTIONS: dict[str, str] = {
@@ -88,13 +89,38 @@ def parse_date(s: Optional[str]) -> Optional[date]:
         return None
 
 
-def result_for(query_id: str, **kwargs) -> AnalyticsResult:
+def result_for(
+    query_id: str,
+    *,
+    site: str | None = None,
+    sector: str | None = None,
+    square: str | None = None,
+    layer: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    q: str | None = None,
+    limit: int = 500,
+    offset: int = 0,
+) -> AnalyticsResult:
     with session_scope() as db:
+        kwargs = {
+            "site": site,
+            "sector": sector,
+            "square": square,
+            "layer": layer,
+            "date_from": date_from,
+            "date_to": date_to,
+            "q": q,
+            "limit": limit,
+            "offset": offset,
+        }
         if query_id == "q1":
             return query_q1_layers_fragments(db, **kwargs)
         if query_id == "q2":
             return query_q2_layers_fragments_ornaments(db, **kwargs)
-        return query_finds(db, **kwargs)
+        if query_id == "finds":
+            return query_finds(db, **kwargs)
+        raise ValueError(f"Unknown query_id: {query_id}")
 
 
 def norm_bucket(v: Any) -> str:
@@ -128,3 +154,9 @@ def plotly_bar(xs: list[str], ys: list[int], title: str) -> dict:
             "yaxis": {"automargin": True},
         },
     }
+# Veronika
+def get_filter_options(column: str, **kwargs) -> list[str]:
+    """Мост към репозиторито за извличане на опции за филтри (Вероника)."""
+    with session_scope() as db:
+        # kwargs ни позволява да предаваме site=..., sector=... и т.н. динамично
+        return get_distinct_values(db, column, **kwargs)
