@@ -146,7 +146,7 @@ def page_analytics_chart() -> None:
         sec_val = sel_sector.value if sel_sector.value != "All" else None
         sq_val = sel_square.value if sel_square.value != "All" else None
 
-         if e.sender == sel_site:
+            if e.sender == sel_site:
             # Сменен обект -> търсим сектори
             opts = get_filter_options("sector", site=s_val)
             sel_sector.options = ["All"] + opts
