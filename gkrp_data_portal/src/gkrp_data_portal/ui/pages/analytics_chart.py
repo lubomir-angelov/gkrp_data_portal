@@ -55,8 +55,9 @@ def page_analytics_chart() -> None:
             sel_sector = ui.select(options=["All"], value="All", label="sector").classes("w-full")
             sel_square = ui.select(options=["All"], value="All", label="square").classes("w-full")
             sel_layer = ui.select(options=["All"], value="All", label="layer").classes("w-full")
-            sel_layer.set_visibility(False) # Скрит първоначално
 
+
+            # Полета за дата
             with ui.row().classes("w-full gap-2"):
                 inp_date_from = ui.input("from").props("type=date clearable").classes("w-1/2")
                 inp_date_to = ui.input("to").props("type=date clearable").classes("w-1/2")
@@ -139,35 +140,40 @@ def page_analytics_chart() -> None:
     def update_dropdowns(e: Any) -> None:
         from .analytics_common import get_filter_options
         trigger = e.sender.label
+        
+        # Вземаме чисти стойности (без 'All')
         site = sel_site.value if sel_site.value != "All" else None
         sector = sel_sector.value if sel_sector.value != "All" else None
         square = sel_square.value if sel_square.value != "All" else None
 
         if trigger == "site":
-            # При смяна на сайт, обновяваме сектори и чистим всичко надолу
-            sel_sector.options = ["All"] + get_filter_options("sector", site=site)
+            opts = get_filter_options("sector", site=site)
+            sel_sector.options = ["All"] + opts
             sel_sector.value = "All"
             sel_square.options = ["All"]; sel_square.value = "All"
-            sel_layer.options = ["All"]; sel_layer.value = "All"; sel_layer.set_visibility(False)
+            sel_layer.set_visibility(False)
         
         elif trigger == "sector":
-            # При смяна на сектор, обновяваме квадрати
-            sel_square.options = ["All"] + get_filter_options("square", site=site, sector=sector)
+            opts = get_filter_options("square", site=site, sector=sector)
+            sel_square.options = ["All"] + opts
             sel_square.value = "All"
-            sel_layer.options = ["All"]; sel_layer.value = "All"; sel_layer.set_visibility(False)
+            sel_layer.set_visibility(False)
 
         elif trigger == "square":
-            # При смяна на квадрат, зареждаме пластове (layer)
-            if site and sector:
-                layers = get_filter_options("layer", site=site, sector=sector, square=square)
-                if 0 < len(layers) < 100:
-                    sel_layer.options = ["All"] + layers
+            # Слоевете се появяват само ако имаме сайт, сектор и квадрат
+            if site and sector and square:
+                opts = get_filter_options("layer", site=site, sector=sector, square=square)
+                if opts:
+                    sel_layer.options = ["All"] + opts
                     sel_layer.set_visibility(True)
                 else:
                     sel_layer.set_visibility(False)
-                sel_layer.value = "All"
+            else:
+                sel_layer.set_visibility(False)
+            sel_layer.value = "All"
 
-        if sw_autorun.value: refresh()
+        if sw_autorun.value:
+            refresh()
 
     # Свързване на събития
     sel_site.on("change", update_dropdowns)
@@ -177,17 +183,22 @@ def page_analytics_chart() -> None:
     sel_x.on("change", refresh)
     btn_run.on("click", refresh)
     
-    # Филтри за дата и лимит
+
     for w in (inp_limit, inp_date_from, inp_date_to):
         w.on("change", lambda: refresh() if sw_autorun.value else None)
 
-    # ВАЖНО: Първоначално пълнене на Site при зареждане
-    try:
-        from .analytics_common import get_filter_options
-        sel_site.options = ["All"] + get_filter_options("site")
-    except Exception:
-        logger.exception("Initial site load failed")
-    
+    # --- ПЪРВОНАЧАЛНО ПЪЛНЕНЕ НА SITE ---
+    def load_initial_data():
+        try:
+            from .analytics_common import get_filter_options
+            sites = get_filter_options("site")
+            if sites:
+                sel_site.options = ["All"] + sites
+                sel_site.update() # Важно за NiceGUI
+        except Exception:
+            logger.exception("Initial site load failed")
+
+    load_initial_data()
     refresh()
 
 # --- Ендпойнтите за експорт (CSV, JSON, HTML) трябва да са под този ред ---
