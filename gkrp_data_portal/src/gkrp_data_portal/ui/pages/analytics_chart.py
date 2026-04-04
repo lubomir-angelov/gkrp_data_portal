@@ -1,7 +1,7 @@
 """NiceGUI page: Analytics (CHART only).
 
 Layout:
-- Left: query selector, filters, column toggles
+- Left: query selector and filters
 - Center: chart
 - Right: images (from fragment/find image_url)
 """
@@ -34,6 +34,7 @@ from .analytics_common import (
 
 @ui.page("/analytics")
 def page_analytics_index() -> None:
+    """Render the analytics landing page."""
     ui.label("Analytics").classes("text-h5")
     with ui.row().classes("gap-2"):
         ui.button(
@@ -48,21 +49,16 @@ def page_analytics_index() -> None:
         )
 
 
-
 @ui.page("/analytics/chart")
 def page_analytics_chart() -> None:
+    """Render the chart-only analytics page."""
     ui.label("Analytics — Chart").classes("text-h5")
 
     state: dict[str, Any] = {
-        "query_id": "q1",
         "_refreshing": False,
-        "_suppress_x_change": False,
     }
 
-    # --- UI LAYOUT START ---
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
-        
-        # ЛЯВ ПАНЕЛ (Филтри)
         with ui.column().classes("w-[340px] shrink-0"):
             ui.label("Query + Filters").classes("text-subtitle1 font-medium")
 
@@ -76,154 +72,277 @@ def page_analytics_chart() -> None:
                 btn_run = ui.button("Run query", icon="play_arrow").classes("flex-1")
                 sw_autorun = ui.switch("Auto-run", value=True).props("dense")
 
-            # 1. ДЕФИНИРАНЕ НА ПАДАЩИТЕ МЕНЮТА (Вероника)
-            sel_site = ui.select(options=['All'], value='All', label="site").classes("w-full")
-            sel_sector = ui.select(options=['All'], value='All', label="sector").classes("w-full")
-            sel_square = ui.select(options=['All'], value='All', label="square").classes("w-full")
-            sel_layer = ui.select(options=['All'], value='All', label="layer").classes("w-full")
-            sel_layer.set_visibility(False) 
+            sel_site = ui.select(
+                options=["All"],
+                value="All",
+                label="site",
+            ).classes("w-full")
+            sel_sector = ui.select(
+                options=["All"],
+                value="All",
+                label="sector",
+            ).classes("w-full")
+            sel_square = ui.select(
+                options=["All"],
+                value="All",
+                label="square",
+            ).classes("w-full")
+            sel_layer = ui.select(
+                options=["All"],
+                value="All",
+                label="layer",
+            ).classes("w-full")
+            sel_layer.set_visibility(False)
 
-            inp_q = ui.input("free text (inventory/note/piecetype...)").props("clearable").classes("w-full")
+            inp_q = ui.input("free text (inventory/note/piecetype...)").props(
+                "clearable"
+            ).classes("w-full")
 
             with ui.row().classes("w-full gap-2"):
-                inp_date_from = ui.input("from").props("type=date clearable").classes("w-1/2")
-                inp_date_to = ui.input("to").props("type=date clearable").classes("w-1/2")
+                inp_date_from = ui.input("from").props("type=date clearable").classes(
+                    "w-1/2"
+                )
+                inp_date_to = ui.input("to").props("type=date clearable").classes(
+                    "w-1/2"
+                )
 
+            # Kept for consistency with the other analytics page and CSV export.
+            # The chart itself does not use this limit; it fetches up to CHART_MAX_FETCH.
             inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
 
-            ui.separator()
-            columns_container = ui.scroll_area().classes("w-full h-[320px] border rounded p-2 bg-white")
-
-        # ЦЕНТРАЛЕН ПАНЕЛ (Графика)
         with ui.column().classes("flex-1 min-w-0"):
             ui.label("Chart").classes("text-subtitle1 font-medium")
             status = ui.label("").classes("text-sm text-gray-600")
             pending = ui.label("").classes("text-xs text-orange-700")
             dbg = ui.label("").classes("text-xs text-gray-500")
 
-            chart = ui.plotly({"data": [], "layout": {"height": 520}}).classes("w-full border rounded bg-white")
+            chart = ui.plotly({"data": [], "layout": {"height": 520}}).classes(
+                "w-full border rounded bg-white"
+            )
             chart_id = chart.id
 
             with ui.row().classes("w-full items-center justify-between gap-2"):
-                sel_x = ui.select(options=[], label="Group by (x-axis)").classes("w-[420px]")
-                ui.button("Download PNG", on_click=lambda: ui.run_javascript(f"Plotly.downloadImage(document.getElementById('{chart_id}').querySelector('.js-plotly-plot'), {{format:'png', filename:'chart'}});"))
+                sel_x = ui.select(
+                    options=[],
+                    label="Group by (x-axis)",
+                ).classes("w-[420px]")
 
-        # ДЕСЕН ПАНЕЛ (Снимки)
+                ui.button(
+                    "Download PNG",
+                    on_click=lambda: ui.run_javascript(
+                        f"""
+                        Plotly.downloadImage(
+                            document.getElementById('{chart_id}')
+                                .querySelector('.js-plotly-plot'),
+                            {{format: 'png', filename: 'chart'}}
+                        );
+                        """
+                    ),
+                )
+
         with ui.column().classes("w-[320px] shrink-0"):
             ui.label("Images").classes("text-subtitle1 font-medium")
-            images_box = ui.scroll_area().classes("w-full h-[820px] border rounded p-2 bg-white")
+            images_box = ui.scroll_area().classes(
+                "w-full h-[820px] border rounded p-2 bg-white"
+            )
 
-    # --- ЛОГИКА ---
-    checkboxes: dict[str, Any] = {}
-        def _read_filters() -> dict[str, Any]:
-        query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
-        # Четем от новите менюта
-        s_val = sel_site.value
-        sec_val = sel_sector.value
-        sq_val = sel_square.value
-        lay_val = sel_layer.value
-
+    def _read_filters() -> dict[str, Any]:
+        """Read the current UI filter values."""
         return {
-            "query_id": query_id,
-            "site": s_val if s_val != 'All' else None,
-            "sector": sec_val if sec_val != 'All' else None,
-            "square": sq_val if sq_val != 'All' else None,
-            "layer": lay_val if lay_val != 'All' else None,
+            "query_id": QUERY_OPTIONS.get(sel_query.value, "q1"),
+            "site": sel_site.value if sel_site.value != "All" else None,
+            "sector": sel_sector.value if sel_sector.value != "All" else None,
+            "square": sel_square.value if sel_square.value != "All" else None,
+            "layer": sel_layer.value if sel_layer.value != "All" else None,
             "q": (inp_q.value or "").strip() or None,
             "date_from": parse_date(inp_date_from.value),
             "date_to": parse_date(inp_date_to.value),
             "limit": int(inp_limit.value or DEFAULT_LIMIT),
             "offset": 0,
-            }
+        }
+
+    def _set_images(urls: list[str]) -> None:
+        """Render the image strip."""
+        images_box.clear()
+        with images_box:
+            for url in urls[:50]:
+                ui.image(url).classes("w-full").props("fit=contain")
 
     def refresh() -> None:
-        if state.get("_refreshing"): return
+        """Refresh the chart and image results."""
+        if state.get("_refreshing"):
+            return
+
         state["_refreshing"] = True
+
         try:
-            f = _read_filters()
-            res = result_for(f["query_id"], **f)
-            total = int(res.total or 0)
-            
+            filters = _read_filters()
+            query_id = filters["query_id"]
+
+            meta_filters = dict(filters)
+            meta_filters["limit"] = 1
+            meta_filters["offset"] = 0
+
+            meta = result_for(query_id, **{k: v for k, v in meta_filters.items() if k != "query_id"})
+            total = int(meta.total or 0)
+
             if total == 0:
+                chart.figure = plotly_bar([], [], title="No results")
+                chart.update()
+                _set_images([])
                 status.set_text("⚠️ No results.")
+                pending.set_text("")
+                dbg.set_text("")
                 return
 
-            # Чистене на имената (Вероника)
+            chart_fetch = min(total, CHART_MAX_FETCH)
+
+            data_filters = dict(filters)
+            data_filters["limit"] = chart_fetch
+            data_filters["offset"] = 0
+
+            res = result_for(query_id, **{k: v for k, v in data_filters.items() if k != "query_id"})
+
             all_cols = ui_columns(res.columns)
-            excluded = ['l_layername', 'l_site', 'l_square', 'l_layer', 'f_note', 'f_inventory', 'f_image_url']
-            ui_cols = [c for c in all_cols if c not in excluded]
-            clean_names = {c: c[2:].replace('_', ' ') if c.startswith(('f_','l_','o_')) else c for c in ui_cols}
-            
+            excluded = {
+                "l_layername",
+                "l_site",
+                "l_square",
+                "l_layer",
+                "f_note",
+                "f_inventory",
+                "f_image_url",
+            }
+            x_axis_cols = [col for col in all_cols if col not in excluded]
+
+            clean_names = {
+                col: col[2:].replace("_", " ") if col.startswith(("f_", "l_", "o_")) else col
+                for col in x_axis_cols
+            }
+
             sel_x.options = clean_names
-                if not sel_x.value or sel_x.value not in ui_cols:
-                sel_x.value = ui_cols[0] if ui_cols else None
+            if not x_axis_cols:
+                chart.figure = plotly_bar([], [], title="No plottable columns")
+                chart.update()
+                _set_images(extract_image_urls(res.items))
+                status.set_text(f"⚠️ Loaded {len(res.items)} rows, but no chartable columns were found.")
+                pending.set_text("")
+                dbg.set_text("")
+                return
+
+            if not sel_x.value or sel_x.value not in x_axis_cols:
+                sel_x.value = x_axis_cols[0]
 
             xs, ys = build_histogram(res.items, sel_x.value)
-            chart.figure = plotly_bar(xs, ys, title=f"Count by {clean_names.get(sel_x.value)}")
+            chart.figure = plotly_bar(
+                xs,
+                ys,
+                title=f"Count by {clean_names.get(sel_x.value, sel_x.value)}",
+            )
             chart.update()
-            
+
             _set_images(extract_image_urls(res.items))
-            status.set_text(f"✅ Chart built from {len(res.items)} rows (Total {total}).")
+
+            status.set_text(
+                f"✅ Chart built from {len(res.items)} rows (Total matches: {total})."
+            )
+            pending.set_text(
+                f"Showing first {chart_fetch} rows for charting."
+                if total > CHART_MAX_FETCH
+                else ""
+            )
+            dbg.set_text(f"x-axis: {sel_x.value}")
+
+        except Exception:
+            logger.exception("Failed to refresh analytics chart page")
+            status.set_text("❌ Failed to build chart.")
+            pending.set_text("")
+            dbg.set_text("See server logs for details.")
         finally:
             state["_refreshing"] = False
 
-    def _set_images(urls: list[str]) -> None:
-        images_box.clear()
-        with images_box:
-            for u in urls[:50]: ui.image(u).classes("w-full").props("fit=contain")
-
-    # 2. ВЕРИЖНА РЕАКЦИЯ (Вероника)
-    def update_dropdowns(e):
+    def update_dropdowns(e: Any) -> None:
+        """Update dependent dropdowns after a filter selection changes."""
         from .analytics_common import get_filter_options
+
         trigger = e.sender.label
-        
-        s = sel_site.value if sel_site.value != 'All' else None
-        sec = sel_sector.value if sel_sector.value != 'All' else None
-        sq = sel_square.value if sel_square.value != 'All' else None
 
-        if trigger == 'site':
-            sel_sector.options = ['All'] + get_filter_options('sector', site=s)
-            sel_sector.value = 'All'
-            sel_square.options = ['All']
-            sel_square.value = 'All'
-        elif trigger == 'sector':
-            sel_square.options = ['All'] + get_filter_options('square', site=s, sector=sec)
-            sel_square.value = 'All'
+        site = sel_site.value if sel_site.value != "All" else None
+        sector = sel_sector.value if sel_sector.value != "All" else None
+        square = sel_square.value if sel_square.value != "All" else None
 
-        # Логика за Layer
-        if s and sec:
-            layers = get_filter_options('layer', site=s, sector=sec, square=sq)
+        if trigger == "site":
+            sel_sector.options = ["All"] + get_filter_options("sector", site=site)
+            sel_sector.value = "All"
+            sel_square.options = ["All"]
+            sel_square.value = "All"
+            sel_layer.options = ["All"]
+            sel_layer.value = "All"
+
+        elif trigger == "sector":
+            sel_square.options = ["All"] + get_filter_options(
+                "square",
+                site=site,
+                sector=sector,
+            )
+            sel_square.value = "All"
+            sel_layer.options = ["All"]
+            sel_layer.value = "All"
+
+        elif trigger == "square":
+            sel_layer.options = ["All"]
+            sel_layer.value = "All"
+
+        if site and sector:
+            layers = get_filter_options(
+                "layer",
+                site=site,
+                sector=sector,
+                square=square,
+            )
             if 0 < len(layers) < 100:
-                sel_layer.options = ['All'] + layers
+                sel_layer.options = ["All"] + layers
                 sel_layer.set_visibility(True)
-            else: sel_layer.set_visibility(False)
-        else: sel_layer.set_visibility(False)
-        
-        if sw_autorun.value: refresh()
+            else:
+                sel_layer.set_visibility(False)
+                sel_layer.options = ["All"]
+                sel_layer.value = "All"
+        else:
+            sel_layer.set_visibility(False)
+            sel_layer.options = ["All"]
+            sel_layer.value = "All"
 
-    # 3. ВРЪЗВАНЕ НА СЪБИТИЯ
-    sel_site.on('change', update_dropdowns)
-    sel_sector.on('change', update_dropdowns)
-    sel_square.on('change', update_dropdowns)
-    sel_layer.on('change', lambda: refresh() if sw_autorun.value else None)
-    sel_x.on('change', refresh)
-    btn_run.on('click', refresh)
-    
-    for w in (inp_q, inp_limit, inp_date_from, inp_date_to):
-        w.on("change", lambda: refresh() if sw_autorun.value else None)
+        if sw_autorun.value:
+            refresh()
 
-    # 4. СТАРТ: Първоначално пълнене на Site
-    try:
-        from .analytics_common import get_filter_options
-        sel_site.options = ['All'] + get_filter_options('site')
-    except: pass
-    
+    def _trigger_refresh(_: Any | None = None) -> None:
+        """Refresh only when auto-run is enabled."""
+        if sw_autorun.value:
+            refresh()
+
+    def _populate_site_options() -> None:
+        """Load initial site filter options."""
+        try:
+            from .analytics_common import get_filter_options
+
+            sel_site.options = ["All"] + get_filter_options("site")
+        except Exception:
+            logger.exception("Failed to load initial analytics site options")
+
+    sel_query.on("change", _trigger_refresh)
+    sel_site.on("change", update_dropdowns)
+    sel_sector.on("change", update_dropdowns)
+    sel_square.on("change", update_dropdowns)
+    sel_layer.on("change", _trigger_refresh)
+    sel_x.on("change", lambda _: refresh())
+    btn_run.on("click", lambda _: refresh())
+
+    for widget in (inp_q, inp_limit, inp_date_from, inp_date_to):
+        widget.on("change", _trigger_refresh)
+
+    _populate_site_options()
     refresh()
 
-
-# -------------------------
-# Export endpoints (kept here so they register once)
-# -------------------------
 
 @app.get("/api/analytics/data.csv")
 def analytics_data_csv(
@@ -231,11 +350,13 @@ def analytics_data_csv(
     site: str | None = None,
     sector: str | None = None,
     square: str | None = None,
+    layer: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     q: str | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> Response:
+    """Export analytics data as CSV."""
     df = parse_date(date_from)
     dt = parse_date(date_to)
 
@@ -244,6 +365,7 @@ def analytics_data_csv(
         site=site or None,
         sector=sector or None,
         square=square or None,
+        layer=layer or None,
         date_from=df,
         date_to=dt,
         q=q or None,
@@ -251,20 +373,28 @@ def analytics_data_csv(
         offset=0,
     )
 
-    logger.info("DEBUG first_row_keys: {}", sorted(res.items[0].keys()) if res.items else "NO_ROWS")
-    logger.info("DEBUG first_row_sample: {}", res.items[0] if res.items else "NO_ROWS")
+    logger.info(
+        "analytics_data_csv first_row_keys={}",
+        sorted(res.items[0].keys()) if res.items else "NO_ROWS",
+    )
+    logger.info(
+        "analytics_data_csv first_row_sample={}",
+        res.items[0] if res.items else "NO_ROWS",
+    )
 
     buf = io.StringIO()
     cols = ui_columns(res.columns)
     writer = csv.DictWriter(buf, fieldnames=cols)
     writer.writeheader()
     for row in res.items:
-        writer.writerow({k: row.get(k) for k in cols})
+        writer.writerow({key: row.get(key) for key in cols})
 
     return Response(
         content=buf.getvalue(),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="analytics_{query_id}.csv"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="analytics_{query_id}.csv"'
+        },
     )
 
 
@@ -275,10 +405,12 @@ def analytics_chart_json(
     site: str | None = None,
     sector: str | None = None,
     square: str | None = None,
+    layer: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     q: str | None = None,
 ) -> Response:
+    """Return chart JSON for the selected analytics query."""
     df = parse_date(date_from)
     dt = parse_date(date_to)
 
@@ -287,6 +419,7 @@ def analytics_chart_json(
         site=site or None,
         sector=sector or None,
         square=square or None,
+        layer=layer or None,
         date_from=df,
         date_to=dt,
         q=q or None,
@@ -302,6 +435,7 @@ def analytics_chart_json(
         site=site or None,
         sector=sector or None,
         square=square or None,
+        layer=layer or None,
         date_from=df,
         date_to=dt,
         q=q or None,
@@ -310,7 +444,7 @@ def analytics_chart_json(
     )
 
     cols = ui_columns(res.columns) or list(res.columns)
-    if x and (x not in cols):
+    if x and x not in cols:
         x = None
     if not x:
         x = "f_piecetype" if "f_piecetype" in cols else (cols[0] if cols else "")
@@ -322,6 +456,7 @@ def analytics_chart_json(
 
 @app.get("/api/analytics/chart.html")
 def analytics_chart_html(query_id: str = "q1") -> Response:
+    """Return a simple printable HTML wrapper for the analytics chart."""
     qid = query_id or (app.storage.general.get("analytics_last_query_id") or "q1")
     fig_json = analytics_chart_json(query_id=qid).body.decode("utf-8")
 
@@ -354,4 +489,5 @@ def analytics_chart_html(query_id: str = "q1") -> Response:
 
 @app.get("/api/analytics/health")
 def analytics_health() -> Response:
+    """Return a basic health response."""
     return PlainTextResponse("ok")

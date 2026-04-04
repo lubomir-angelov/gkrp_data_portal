@@ -89,13 +89,38 @@ def parse_date(s: Optional[str]) -> Optional[date]:
         return None
 
 
-def result_for(query_id: str, **kwargs) -> AnalyticsResult:
+def result_for(
+    query_id: str,
+    *,
+    site: str | None = None,
+    sector: str | None = None,
+    square: str | None = None,
+    layer: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    q: str | None = None,
+    limit: int = 500,
+    offset: int = 0,
+) -> AnalyticsResult:
     with session_scope() as db:
+        kwargs = {
+            "site": site,
+            "sector": sector,
+            "square": square,
+            "layer": layer,
+            "date_from": date_from,
+            "date_to": date_to,
+            "q": q,
+            "limit": limit,
+            "offset": offset,
+        }
         if query_id == "q1":
             return query_q1_layers_fragments(db, **kwargs)
         if query_id == "q2":
             return query_q2_layers_fragments_ornaments(db, **kwargs)
-        return query_finds(db, **kwargs)
+        if query_id == "finds":
+            return query_finds(db, **kwargs)
+        raise ValueError(f"Unknown query_id: {query_id}")
 
 
 def norm_bucket(v: Any) -> str:

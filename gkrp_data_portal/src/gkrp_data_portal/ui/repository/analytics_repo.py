@@ -43,6 +43,7 @@ def _build_where(
     site: Optional[str],
     sector: Optional[str],
     square: Optional[str],
+    layer: Optional[str],
     date_from: Optional[date],
     date_to: Optional[date],
     q: Optional[str],
@@ -61,6 +62,10 @@ def _build_where(
     if square:
         clauses.append("l.square ILIKE :square")
         params["square"] = f"%{square}%"
+
+    if layer:
+        clauses.append("l.layer = :layer")
+        params["layer"] = layer
 
     if date_from:
         clauses.append("l.recordenteredon >= :date_from")
@@ -112,6 +117,7 @@ def query_q1_layers_fragments(
     site: Optional[str] = None,
     sector: Optional[str] = None,
     square: Optional[str] = None,
+    layer: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     q: Optional[str] = None,
@@ -135,6 +141,7 @@ def query_q1_layers_fragments(
         site=site,
         sector=sector,
         square=square,
+        layer=layer,
         date_from=date_from,
         date_to=date_to,
         q=q,
@@ -157,6 +164,7 @@ def query_q2_layers_fragments_ornaments(
     site: Optional[str] = None,
     sector: Optional[str] = None,
     square: Optional[str] = None,
+    layer: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     q: Optional[str] = None,
@@ -182,6 +190,7 @@ def query_q2_layers_fragments_ornaments(
         site=site,
         sector=sector,
         square=square,
+        layer=layer,
         date_from=date_from,
         date_to=date_to,
         q=q,
@@ -204,6 +213,7 @@ def query_finds(
     site: Optional[str] = None,
     sector: Optional[str] = None,
     square: Optional[str] = None,
+    layer: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     q: Optional[str] = None,
@@ -232,6 +242,7 @@ def query_finds(
         site=site,
         sector=sector,
         square=square,
+        layer=layer,
         date_from=date_from,
         date_to=date_to,
         q=q,
