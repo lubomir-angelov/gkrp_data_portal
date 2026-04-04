@@ -137,37 +137,30 @@ def extract_image_urls(items: list[dict[str, Any]]) -> list[str]:
 
 # Универсална функция с йерархия
 def get_distinct_values(db: Session, column_name: str, site=None, sector=None, square=None, **kwargs) -> list[str]:
-    """Извлича уникални стойности за филтрите (Вероника)."""
+    """Извлича уникални стойности, изчистени от интервали и дубликати (Вероника)."""
     allowed = {"site", "sector", "square", "layer"}
-    if column_name not in allowed:
-        return []
+    if column_name not in allowed: return []
 
-    # Базови условия: колоната да не е празна
     clauses = [f"{column_name} IS NOT NULL", f"{column_name} != ''"]
     params = {}
 
-    # Добавяме филтри само ако са избрани
     if site:
-        clauses.append("site = :site")
-        params["site"] = site
+        clauses.append("site = :site"); params["site"] = site
     if sector:
-        clauses.append("sector = :sector")
-        params["sector"] = sector
+        clauses.append("sector = :sector"); params["sector"] = sector
     if square:
-        clauses.append("square = :square")
-        params["square"] = square
+        clauses.append("square = :square"); params["square"] = square
 
-    # Сглобяваме заявката
     where_str = " AND ".join(clauses)
-    sql = f"SELECT DISTINCT {column_name} FROM tbllayers WHERE {where_str} ORDER BY {column_name} LIMIT 500"
-    
-    # ТОВА Е ЗА ТЕСТ: ще видиш SQL заявката в терминала си!
-    print(f"DEBUG SQL: {sql} | PARAMS: {params}")
+    # Използваме TRIM, за да премахнем невидими интервали, които създават дубликати
+    sql = f"SELECT DISTINCT TRIM({column_name}) FROM tbllayers WHERE {where_str} ORDER BY 1 LIMIT 500"
     
     try:
         results = db.execute(text(sql), params).all()
-        return [str(r[0]) for r in results if r[0]]
+        # Използваме set() в Python като втора защита срещу дубликати
+        values = sorted(list(set(str(r[0]) for r in results if r[0])))
+        return values
     except Exception as e:
-        print(f"DATABASE ERROR: {e}")
+        print(f"SQL Error: {e}")
         return []
 

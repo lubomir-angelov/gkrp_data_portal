@@ -139,37 +139,35 @@ def page_analytics_chart() -> None:
 
     def update_dropdowns(e: Any) -> None:
         from .analytics_common import get_filter_options
-        trigger = e.sender.label
         
-        # Вземаме чисти стойности (без 'All')
-        site = sel_site.value if sel_site.value != "All" else None
-        sector = sel_sector.value if sel_sector.value != "All" else None
-        square = sel_square.value if sel_square.value != "All" else None
+        # Разпознаваме кое меню е променено чрез неговия етикет
+        trigger = str(e.sender.label).lower()
+        
+        site_val = sel_site.value if sel_site.value != "All" else None
+        sector_val = sel_sector.value if sel_sector.value != "All" else None
+        square_val = sel_square.value if sel_square.value != "All" else None
 
         if trigger == "site":
-            opts = get_filter_options("sector", site=site)
+            # 1. Потребителят смени Сайт -> Обновяваме Сектори
+            opts = get_filter_options("sector", site=site_val)
             sel_sector.options = ["All"] + opts
             sel_sector.value = "All"
+            # Нулираме всичко надолу
             sel_square.options = ["All"]; sel_square.value = "All"
-            sel_layer.set_visibility(False)
+            sel_layer.options = ["All"]; sel_layer.value = "All"
         
         elif trigger == "sector":
-            opts = get_filter_options("square", site=site, sector=sector)
+            # 2. Потребителят смени Сектор -> Обновяваме Квадрати
+            opts = get_filter_options("square", site=site_val, sector=sector_val)
             sel_square.options = ["All"] + opts
             sel_square.value = "All"
-            sel_layer.set_visibility(False)
+            # Нулираме пластовете
+            sel_layer.options = ["All"]; sel_layer.value = "All"
 
         elif trigger == "square":
-            # Слоевете се появяват само ако имаме сайт, сектор и квадрат
-            if site and sector and square:
-                opts = get_filter_options("layer", site=site, sector=sector, square=square)
-                if opts:
-                    sel_layer.options = ["All"] + opts
-                    sel_layer.set_visibility(True)
-                else:
-                    sel_layer.set_visibility(False)
-            else:
-                sel_layer.set_visibility(False)
+            # 3. Потребителят смени Квадрат -> Обновяваме Пластове
+            opts = get_filter_options("layer", site=site_val, sector=sector_val, square=square_val)
+            sel_layer.options = ["All"] + opts
             sel_layer.value = "All"
 
         if sw_autorun.value:
