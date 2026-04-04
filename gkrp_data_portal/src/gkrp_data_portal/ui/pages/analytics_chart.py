@@ -146,7 +146,7 @@ def page_analytics_chart() -> None:
         sec_val = sel_sector.value if sel_sector.value != "All" else None
         sq_val = sel_square.value if sel_square.value != "All" else None
 
-            if e.sender == sel_site:
+        if e.sender == sel_site:
             # Сменен обект -> търсим сектори
             opts = get_filter_options("sector", site=s_val)
             sel_sector.options = ["All"] + opts
@@ -159,7 +159,7 @@ def page_analytics_chart() -> None:
             # Сменен сектор -> търсим квадрати
             opts = get_filter_options("square", site=s_val, sector=sec_val)
             sel_square.options = ["All"] + opts
-             sel_square.value = "All"
+            sel_square.value = "All"
             sel_layer.options = ["All"]; sel_layer.value = "All"
 
         elif e.sender == sel_square:
@@ -169,7 +169,9 @@ def page_analytics_chart() -> None:
             sel_layer.value = "All"
 
         # Опресняваме компонентите визуално
-        sel_sector.update(); sel_square.update(); sel_layer.update()
+        sel_sector.update() 
+        sel_square.update() 
+        sel_layer.update()
 
         if sw_autorun.value:
             refresh()
