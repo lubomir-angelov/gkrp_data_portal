@@ -298,3 +298,36 @@ Investigate where analytics filter parsing is implemented. Update .agent/WORKLOG
 - preflight: passed
 - branch: feature/agent_work
 - working tree: clean
+
+## 2026-05-09 12:54:07Z - task received
+
+### Requested task
+Investigate where analytics filter parsing is implemented. Update .agent/WORKLOG.md with the relevant files and recommended change. Do not modify implementation files.
+
+### Initial status
+- preflight: passed
+- branch: feature/agent_work
+- working tree: clean
+
+## 2026-05-09 13:05:00Z - Investigation
+
+### Task
+Investigate where analytics filter parsing is implemented.
+
+### Files Inspected
+- `gkrp_data_portal/src/gkrp_data_portal/ui/repository/analytics_repo.py`
+
+### Key Decision
+Analytics filter parsing is implemented in `gkrp_data_portal/src/gkrp_data_portal/ui/repository/analytics_repo.py`.
+Specifically, the `_build_where` function constructs the SQL `WHERE` clause based on input parameters (`site`, `sector`, `square`, `date_from`, `date_to`, `q`).
+It uses `_split_multi_value` to handle multi-value inputs for site, sector, and square, generating `OR` clauses for each token.
+Free-text search (`q`) is handled differently depending on the query type (`q1`, `q2`, `finds`), using `ILIKE` on relevant columns.
+
+### Recommended Change
+Consider adding input validation or sanitization for the `q` (free-text search) parameter to ensure it doesn't contain unexpected characters that might affect performance or correctness, although parameterization handles SQL injection. Also, ensure that the multi-value splitting logic for `site`, `sector`, and `square` is robust against edge cases like excessive whitespace or special characters.
+
+### Commands Run
+- None (read-only investigation)
+
+### Result
+Investigation complete. Worklog updated.
