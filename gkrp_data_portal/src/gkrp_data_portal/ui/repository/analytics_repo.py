@@ -12,6 +12,7 @@ All result columns are prefixed to avoid collisions:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Optional
@@ -37,6 +38,16 @@ def _model_select_list(prefix: str, alias: str, model) -> list[str]:
     return cols
 
 
+def _split_multi_value(value: str) -> list[str]:
+    """Split a string by comma, semicolon, or slash. Trim whitespace and ignore empty tokens."""
+    if not value:
+        return []
+    # Split by , ; or /
+    tokens = re.split(r'[;,/]', value)
+    # Trim and filter empty
+    return [t.strip() for t in tokens if t.strip()]
+
+
 def _build_where(
     *,
     query_id: str,
@@ -51,16 +62,30 @@ def _build_where(
     clauses: list[str] = []
     params: dict[str, Any] = {}
 
+    # Helper to add multi-value OR clauses for layer filters
+    def add_multi_value_filter(column_name: str, value: Optional[str], param_prefix: str) -> None:
+        if not value:
+            return
+        
+        tokens = _split_multi_value(value)
+        if not tokens:
+            return
+            
+        if len(tokens) == 1:
+            clauses.append(f"{column_name} ILIKE :{param_prefix}")
+            params[param_prefix] = f"%{tokens[0]}%"
+        else:
+            or_clauses = []
+            for i, token in enumerate(tokens):
+                param_name = f"{param_prefix}_{i}"
+                or_clauses.append(f"{column_name} ILIKE :{param_name}")
+                params[param_name] = f"%{token}%"
+            clauses.append(f"({' OR '.join(or_clauses)})")
+
     # Layer-scoped filters (always safe; all queries include l alias)
-    if site:
-        clauses.append("l.site ILIKE :site")
-        params["site"] = f"%{site}%"
-    if sector:
-        clauses.append("l.sector ILIKE :sector")
-        params["sector"] = f"%{sector}%"
-    if square:
-        clauses.append("l.square ILIKE :square")
-        params["square"] = f"%{square}%"
+    add_multi_value_filter("l.site", site, "site")
+    add_multi_value_filter("l.sector", sector, "sector")
+    add_multi_value_filter("l.square", square, "square")
 
     if date_from:
         clauses.append("l.recordenteredon >= :date_from")

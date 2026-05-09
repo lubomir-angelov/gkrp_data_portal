@@ -183,3 +183,58 @@ Syntax check passed.
 ### Remaining risks or next steps
 - Verify that `f_f_count` is correctly populated in the subquery results.
 - Test the analytics queries in the UI to ensure totals are correct.
+
+## 2026-05-09 09:29:39Z - task received
+
+### Requested task
+On the analytics_plot page, update the site, sector, and square filter fields so they support multi-value search by splitting the user input on these separators: comma (,), semicolon (;), and slash (/). The current behavior does exact string matching only, case-insensitive. Preserve case-insensitive matching, but when multiple values are provided, treat them as OR criteria within the same field. Trim whitespace around each split token, ignore empty tokens, and do not change unrelated filters or behavior. Update .agent/WORKLOG.md, run the narrowest useful validation, and commit.
+
+### Initial status
+- preflight: passed
+- branch: main
+- working tree: clean
+
+## 2026-05-09 10:00:00Z - Plan
+
+### Plan
+1. Inspect `gkrp_data_portal/src/gkrp_data_portal/ui/repository/analytics_repo.py` to locate `_build_where`.
+2. Implement `_split_multi_value` helper to split by `,`, `;`, `/`, trim, and filter empty.
+3. Update `_build_where` to use `_split_multi_value` for `site`, `sector`, and `square`.
+4. Generate `OR` clauses for multiple values, single `ILIKE` for single value.
+5. Update `.agent/WORKLOG.md`.
+6. Validate syntax.
+7. Commit changes.
+
+### Assumptions
+- The `site`, `sector`, and `square` parameters are strings.
+- The database supports standard SQL `OR` and `ILIKE`.
+
+## 2026-05-09 10:05:00Z - Implementation
+
+### Task
+Update site, sector, and square filters to support multi-value search.
+
+### Files Changed
+- `gkrp_data_portal/src/gkrp_data_portal/ui/repository/analytics_repo.py`
+
+### Key Decision
+Added `_split_multi_value` helper function. Modified `_build_where` to handle multiple values for site, sector, and square by generating OR clauses.
+
+### Commands Run
+- `python -m py_compile gkrp_data_portal/src/gkrp_data_portal/ui/repository/analytics_repo.py`
+
+### Result
+Syntax check passed.
+
+## 2026-05-09 10:10:00Z - Summary
+
+### What changed
+- Added `_split_multi_value` helper to `analytics_repo.py`.
+- Updated `_build_where` to support multi-value search for site, sector, and square using OR criteria.
+
+### Validation run
+- Python syntax check passed.
+
+### Remaining risks or next steps
+- Test UI to ensure multi-value input works as expected.
+- Verify performance with large number of split values.
