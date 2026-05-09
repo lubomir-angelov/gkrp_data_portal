@@ -120,3 +120,13 @@ Syntax check passed. Changes committed.
 ### Remaining risks or next steps
 - Ensure `f_count` is not NULL for existing records, or handle NULLs appropriately (COALESCE handles this).
 - Verify UI displays correct totals after deployment.
+
+## 2026-05-09 09:11:47Z - task received
+
+### Requested task
+Inspect how fragment totals are calculated and change fragment counting to use f_count instead of row count. Update .agent/WORKLOG.md, run narrow validation, and commit.
+
+### Initial status
+- preflight: passed
+- branch: main
+- working tree: clean
