@@ -130,3 +130,56 @@ Inspect how fragment totals are calculated and change fragment counting to use f
 - preflight: passed
 - branch: main
 - working tree: clean
+
+## 2026-05-09 09:25:16Z - task received
+
+### Requested task
+Inspect sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedColumn) column x.fragmentid does not exist LINE 7: ) x JOIN tblfragments f ON x.fragmentid = f.fragmentid HINT:  Perhaps you meant to reference the column f.fragmentid. Apply a fix and commit all changes.
+
+### Initial status
+- preflight: passed
+- branch: main
+- working tree: clean
+
+## 2026-05-09 09:30:00Z - Plan
+
+### Plan
+1. Inspect `gkrp_data_portal/src/gkrp_data_portal/ui/repository/analytics_repo.py` to understand the SQL generation for `count_sql`.
+2. Identify why `x.fragmentid` is undefined. The subquery `x` aliases columns with prefixes (e.g., `f_fragmentid`). The outer query tries to join on `x.fragmentid` which doesn't exist.
+3. Fix `count_sql` in `query_q1_layers_fragments` and `query_q2_layers_fragments_ornaments` to use the correctly aliased column from the subquery `x` (e.g., `x.f_fragmentid`) or simply sum the already selected `f_f_count` column from `x` without re-joining `tblfragments`.
+4. Update `.agent/WORKLOG.md`.
+5. Validate syntax.
+6. Commit changes.
+
+### Assumptions
+- The subquery `x` contains `f.f_count` aliased as `f_f_count`.
+- We can sum `x.f_f_count` directly.
+
+## 2026-05-09 09:35:00Z - Implementation
+
+### Task
+Fix `UndefinedColumn` error in `analytics_repo.py`.
+
+### Files Changed
+- `gkrp_data_portal/src/gkrp_data_portal/ui/repository/analytics_repo.py`
+
+### Key Decision
+The previous implementation tried to join `tblfragments` again on `x.fragmentid`. However, `x` has columns like `f_fragmentid`. Furthermore, `x` already contains `f_f_count`. The simplest fix is to sum `x.f_f_count` directly from the subquery `x` without any additional joins.
+
+### Commands Run
+- `python -m py_compile gkrp_data_portal/src/gkrp_data_portal/ui/repository/analytics_repo.py`
+
+### Result
+Syntax check passed.
+
+## 2026-05-09 09:40:00Z - Summary
+
+### What changed
+- Fixed `count_sql` in `query_q1_layers_fragments` and `query_q2_layers_fragments_ornaments` to use `SUM(x.f_f_count)` from the subquery `x` instead of joining `tblfragments` again on a non-existent `x.fragmentid`.
+
+### Validation run
+- Python syntax check passed.
+
+### Remaining risks or next steps
+- Verify that `f_f_count` is correctly populated in the subquery results.
+- Test the analytics queries in the UI to ensure totals are correct.
