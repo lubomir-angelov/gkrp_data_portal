@@ -88,3 +88,4 @@ Then test in this order:
 3. From another LAN device: http://<windows-lan-ip>:8080
 4. From outside your home network: http://<your-public-static-ip>:8080
 ```
+Agent test: setup verified.
