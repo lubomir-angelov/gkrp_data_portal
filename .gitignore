@@ -211,3 +211,4 @@ __marimo__/
 .nicegui/
 .env
 setup.sh
+.aider*
