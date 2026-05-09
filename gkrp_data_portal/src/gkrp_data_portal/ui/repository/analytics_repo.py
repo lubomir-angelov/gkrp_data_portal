@@ -141,7 +141,8 @@ def query_q1_layers_fragments(
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC"
-    count_sql = f"SELECT COUNT(*) FROM ({base}\n{where_sql}) x"
+    # Changed from COUNT(*) to SUM(f.f_count) to use fragment count instead of row count
+    count_sql = f"SELECT COALESCE(SUM(f.f_count), 0) FROM ({base}\n{where_sql}) x JOIN tblfragments f ON x.fragmentid = f.fragmentid"
 
     rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
     total = _count_sql(db, count_sql=count_sql, params=params)
@@ -188,7 +189,8 @@ def query_q2_layers_fragments_ornaments(
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC, o.ornamentid DESC"
-    count_sql = f"SELECT COUNT(*) FROM ({base}\n{where_sql}) x"
+    # Changed from COUNT(*) to SUM(f.f_count) to use fragment count instead of row count
+    count_sql = f"SELECT COALESCE(SUM(f.f_count), 0) FROM ({base}\n{where_sql}) x JOIN tblfragments f ON x.fragmentid = f.fragmentid"
 
     rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
     total = _count_sql(db, count_sql=count_sql, params=params)
