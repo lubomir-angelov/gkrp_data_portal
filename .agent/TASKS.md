@@ -13,3 +13,7 @@ Inspect the repo and add a single line to README.md at the end: 'Agent test: set
 ## 2026-05-09 09:11:47Z
 
 Inspect how fragment totals are calculated and change fragment counting to use f_count instead of row count. Update .agent/WORKLOG.md, run narrow validation, and commit.
+
+## 2026-05-09 09:25:16Z
+
+Inspect sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedColumn) column x.fragmentid does not exist LINE 7: ) x JOIN tblfragments f ON x.fragmentid = f.fragmentid HINT:  Perhaps you meant to reference the column f.fragmentid. Apply a fix and commit all changes.
