@@ -80,8 +80,9 @@ def _apply_frag_filters(
         if not col:
             continue
         col_expr = f"{col}::text"
+        safe_label = label.replace(" ", "_")
         if isinstance(values, list) and values:
-            param_name = f"frag_{label}"
+            param_name = f"frag_{safe_label}"
             params[param_name] = values
             conditions = " OR ".join(
                 [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
@@ -90,7 +91,44 @@ def _apply_frag_filters(
             for i, v in enumerate(values):
                 params[f"{param_name}_{i}"] = f"%{v}%"
         elif isinstance(values, str) and values.strip():
-            param_name = f"frag_{label}"
+            param_name = f"frag_{safe_label}"
+            params[param_name] = f"%{values.strip()}%"
+            clauses.append(f"{col_expr} ILIKE :{param_name}")
+
+
+def _apply_layer_filters(
+    clauses: list[str],
+    params: dict[str, Any],
+    layer_filters: dict[str, Any],
+) -> None:
+    """Apply layer field filters from the UI dropdowns.
+
+    Maps UI labels to SQL column references using the 'l' alias.
+    Multi-select uses ANY/ILIKE; single text inputs use ILIKE.
+    """
+    label_to_col: dict[str, str] = {
+        "Site": "l.site",
+        "Sector": "l.sector",
+        "Square": "l.square",
+        "Layer": "l.layer",
+    }
+    for label, values in layer_filters.items():
+        col = label_to_col.get(label)
+        if not col:
+            continue
+        col_expr = f"{col}::text"
+        safe_label = label.replace(" ", "_")
+        if isinstance(values, list) and values:
+            param_name = f"layer_{safe_label}"
+            params[param_name] = values
+            conditions = " OR ".join(
+                [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
+            )
+            clauses.append(f"({conditions})")
+            for i, v in enumerate(values):
+                params[f"{param_name}_{i}"] = f"%{v}%"
+        elif isinstance(values, str) and values.strip():
+            param_name = f"layer_{safe_label}"
             params[param_name] = f"%{values.strip()}%"
             clauses.append(f"{col_expr} ILIKE :{param_name}")
 
@@ -105,19 +143,22 @@ def _build_where(
     date_to: Optional[date],
     q: Optional[str],
     frag_filters: Optional[dict[str, Any]] = None,
+    layer_filters: Optional[dict[str, Any]] = None,
 ) -> tuple[str, dict[str, Any]]:
     """Build a safe WHERE clause using only whitelisted filters."""
     clauses: list[str] = []
     params: dict[str, Any] = {}
 
     # Layer-scoped filters (always safe; all queries include l alias)
-    if site:
+    if layer_filters:
+        _apply_layer_filters(clauses, params, layer_filters)
+    elif site:
         clauses.append("l.site ILIKE :site")
         params["site"] = f"%{site}%"
-    if sector:
+    elif sector:
         clauses.append("l.sector ILIKE :sector")
         params["sector"] = f"%{sector}%"
-    if square:
+    elif square:
         clauses.append("l.square ILIKE :square")
         params["square"] = f"%{square}%"
 
@@ -181,6 +222,7 @@ def query_q1_layers_fragments(
     limit: int = 500,
     offset: int = 0,
     frag_filters: Optional[dict[str, Any]] = None,
+    layer_filters: Optional[dict[str, Any]] = None,
 ) -> AnalyticsResult:
     """Filter #1: tbllayers INNER JOIN tblfragments."""
     select_cols = _model_select_list("l_", "l", Tbllayer) + _model_select_list(
@@ -202,6 +244,7 @@ def query_q1_layers_fragments(
         date_to=date_to,
         q=q,
         frag_filters=frag_filters,
+        layer_filters=layer_filters,
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC"
@@ -229,6 +272,7 @@ def query_q2_layers_fragments_ornaments(
     limit: int = 500,
     offset: int = 0,
     frag_filters: Optional[dict[str, Any]] = None,
+    layer_filters: Optional[dict[str, Any]] = None,
 ) -> AnalyticsResult:
     """Filter #2: tbllayers INNER JOIN tblfragments INNER JOIN tblornaments."""
     select_cols = (
@@ -253,6 +297,7 @@ def query_q2_layers_fragments_ornaments(
         date_to=date_to,
         q=q,
         frag_filters=frag_filters,
+        layer_filters=layer_filters,
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC, o.ornamentid DESC"
@@ -280,6 +325,7 @@ def query_finds(
     limit: int = 500,
     offset: int = 0,
     frag_filters: Optional[dict[str, Any]] = None,
+    layer_filters: Optional[dict[str, Any]] = None,
 ) -> AnalyticsResult:
     """Finds selector: tblfinds tied to layers/fragments/ornaments (left joins)."""
     select_cols = (
@@ -307,6 +353,7 @@ def query_finds(
         date_to=date_to,
         q=q,
         frag_filters=frag_filters,
+        layer_filters=layer_filters,
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY fi.findid DESC"
@@ -340,6 +387,10 @@ def extract_image_urls(items: list[dict[str, Any]]) -> list[str]:
 
 # Column definitions for DISTINCT queries: (label, sql_col_expr, query_ids)
 _DISTINCT_COL_DEFS: list[tuple[str, str, tuple[str, ...]]] = [
+    ("Site", "l.site", ("q1", "q2", "finds")),
+    ("Sector", "l.sector", ("q1", "q2", "finds")),
+    ("Square", "l.square", ("q1", "q2", "finds")),
+    ("Layer", "l.layer", ("q1", "q2", "finds")),
     ("Piecetype", "f.piecetype", ("q1", "q2")),
     ("Technology", "f.technology", ("q1", "q2")),
     ("Baking", "f.baking", ("q1", "q2")),
@@ -377,6 +428,7 @@ def get_distinct_values(
     date_to: Optional[date] = None,
     q: Optional[str] = None,
     frag_filters: Optional[dict[str, Any]] = None,
+    layer_filters: Optional[dict[str, Any]] = None,
     columns: Optional[set[str]] = None,
 ) -> dict[str, list[str]]:
     """Return DISTINCT values for filter dropdown columns via SQL.
@@ -412,15 +464,22 @@ def get_distinct_values(
         date_to=date_to,
         q=q,
         frag_filters=frag_filters,
+        layer_filters=layer_filters,
     )
 
     # Build list of (label, col_expr) pairs
     if columns:
-        active = [(lbl, expr, qids) for lbl, expr, qids in _DISTINCT_COL_DEFS
-                  if lbl in columns and query_id in qids]
+        active = [
+            (lbl, expr, qids)
+            for lbl, expr, qids in _DISTINCT_COL_DEFS
+            if lbl in columns and query_id in qids
+        ]
     else:
-        active = [(lbl, expr, qids) for lbl, expr, qids in _DISTINCT_COL_DEFS
-                  if query_id in qids]
+        active = [
+            (lbl, expr, qids)
+            for lbl, expr, qids in _DISTINCT_COL_DEFS
+            if query_id in qids
+        ]
 
     result: dict[str, list[str]] = {}
     for label, col_expr, _ in active:

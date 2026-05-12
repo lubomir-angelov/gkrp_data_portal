@@ -97,6 +97,23 @@ def result_for(query_id: str, **kwargs) -> AnalyticsResult:
         return query_finds(db, **kwargs)
 
 
+def _extract_layer_filters(kwargs: dict) -> dict[str, Any] | None:
+    """Extract layer_filters from kwargs, falling back to legacy site/sector/square."""
+    lf = kwargs.get("layer_filters")
+    if lf:
+        return lf
+    site = kwargs.get("site")
+    sector = kwargs.get("sector")
+    square = kwargs.get("square")
+    if site or sector or square:
+        return {
+            "Site": [site] if site else [],
+            "Sector": [sector] if sector else [],
+            "Square": [square] if square else [],
+        }
+    return None
+
+
 def norm_bucket(v: Any) -> str:
     """Normalize values into a histogram bucket label (never empty)."""
     if v is None:

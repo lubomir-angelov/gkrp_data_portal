@@ -64,16 +64,65 @@ def page_analytics_table() -> None:
                 btn_run = ui.button("Run query", icon="play_arrow").classes("flex-1")
                 sw_autorun = ui.switch("Auto-run", value=True).props("dense")
 
-            inp_site = ui.input("site").props("clearable").classes("w-full")
-            inp_sector = ui.input("sector").props("clearable").classes("w-full")
-            inp_square = ui.input("square").props("clearable").classes("w-full")
+            with ui.scroll_area().classes(
+                "w-full h-[200px] border rounded p-2 bg-white"
+            ):
+                layer_filters_table: list[tuple[str, Any]] = [
+                    (
+                        "Site",
+                        ui.select(
+                            options=[],
+                            label="Site",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Sector",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Sector",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Square",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Square",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Layer",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Layer",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                ]
+
             inp_q = (
                 ui.input("free text (inventory/note/piecetype or finds fields)")
                 .props("clearable")
                 .classes("w-full")
             )
-
-            # Date inputs removed, as requested.
 
             inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
 
@@ -84,8 +133,8 @@ def page_analytics_table() -> None:
                 btn_select_all = ui.button("Select all")
                 btn_clear_all = ui.button("Deselect all")
 
-            columns_container = (
-                ui.scroll_area().classes("w-full h-[420px] border rounded p-2 bg-white")
+            columns_container = ui.scroll_area().classes(
+                "w-full h-[420px] border rounded p-2 bg-white"
             )
 
         # Center panel (grid)
@@ -96,24 +145,30 @@ def page_analytics_table() -> None:
             dbg = ui.label("").classes("text-xs text-gray-500")
 
             # AG Grid: horizontal scrollbar stays at the bottom of the grid viewport
-            grid = ui.aggrid(
-                {
-                    "columnDefs": [],
-                    "rowData": [],
-                    "defaultColDef": {
-                        "resizable": True,
-                        "sortable": True,
-                        "filter": True,
-                        "floatingFilter": True,  # shows filter UI below header
-                        "menuTabs": ["filterMenuTab"],  # focus the header menu on filtering
-                    },
-                    "animateRows": True,
-                    "pagination": True,
-                    "paginationPageSize": 25,
-                    "alwaysShowHorizontalScroll": True,
-                    "alwaysShowVerticalScroll": True,
-                }
-            ).classes("w-full border rounded bg-white").style("height: 740px;")
+            grid = (
+                ui.aggrid(
+                    {
+                        "columnDefs": [],
+                        "rowData": [],
+                        "defaultColDef": {
+                            "resizable": True,
+                            "sortable": True,
+                            "filter": True,
+                            "floatingFilter": True,  # shows filter UI below header
+                            "menuTabs": [
+                                "filterMenuTab"
+                            ],  # focus the header menu on filtering
+                        },
+                        "animateRows": True,
+                        "pagination": True,
+                        "paginationPageSize": 25,
+                        "alwaysShowHorizontalScroll": True,
+                        "alwaysShowVerticalScroll": True,
+                    }
+                )
+                .classes("w-full border rounded bg-white")
+                .style("height: 740px;")
+            )
 
             ui.label(
                 "Tip: use the filter UI in the header (set filter dropdown shows available values)."
@@ -205,11 +260,10 @@ def page_analytics_table() -> None:
             """Toggle visibility of a single column in AG Grid."""
             grid.run_grid_method("setColumnsVisible", [col], visible)
 
-
         with columns_container:
             for c in cleaned:
                 cb = ui.checkbox(c, value=(c in current)).classes("text-sm")
-                #cb.on("change", lambda e, col=c: _set_column_visible(col, e.value))
+                # cb.on("change", lambda e, col=c: _set_column_visible(col, e.value))
                 cb.on("change", lambda e: _apply_view())
                 checkboxes[c] = cb
 
@@ -219,9 +273,19 @@ def page_analytics_table() -> None:
         """Read current filter widgets and normalize the filter payload."""
         query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
 
-        site = (inp_site.value or "").strip() or None
-        sector = (inp_sector.value or "").strip() or None
-        square = (inp_square.value or "").strip() or None
+        layer_filters_map: dict[str, list[str] | None] = {}
+        for label, widget in layer_filters_table:
+            if isinstance(widget, ui.select):
+                vals = widget.value
+                if isinstance(vals, list) and vals:
+                    layer_filters_map[label] = [
+                        str(v).strip() for v in vals if str(v).strip()
+                    ]
+                elif isinstance(vals, str) and vals.strip():
+                    layer_filters_map[label] = [vals.strip()]
+                else:
+                    layer_filters_map[label] = None
+
         q = (inp_q.value or "").strip() or None
 
         limit = int(inp_limit.value or DEFAULT_LIMIT)
@@ -234,9 +298,7 @@ def page_analytics_table() -> None:
 
         return {
             "query_id": query_id,
-            "site": site,
-            "sector": sector,
-            "square": square,
+            "layer_filters": layer_filters_map,
             "q": q,
             "limit": limit,
             "offset": 0,
@@ -250,14 +312,9 @@ def page_analytics_table() -> None:
         try:
             f = _read_filters()
 
-            # Date filters removed => pass None for date_from/date_to
             res = result_for(
                 f["query_id"],
-                site=f["site"],
-                sector=f["sector"],
-                square=f["square"],
-                date_from=None,
-                date_to=None,
+                layer_filters=f.get("layer_filters"),
                 q=f["q"],
                 limit=f["limit"],
                 offset=f["offset"],
@@ -317,8 +374,10 @@ def page_analytics_table() -> None:
     btn_run.on("click", lambda e: (pending.set_text(""), refresh()))
 
     sel_query.on("change", lambda e: request_refresh())
-    for w in (inp_site, inp_sector, inp_square, inp_q, inp_limit):
-        w.on("change", lambda e: request_refresh())
+    for label, widget in layer_filters_table:
+        widget.on("change", lambda e: request_refresh())
+    inp_q.on("change", lambda e: request_refresh())
+    inp_limit.on("change", lambda e: request_refresh())
 
     # Initial load
     refresh()

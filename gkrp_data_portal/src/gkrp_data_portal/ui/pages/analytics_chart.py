@@ -74,22 +74,65 @@ def page_analytics_chart() -> None:
                 btn_run = ui.button("Run query", icon="play_arrow").classes("flex-1")
                 sw_autorun = ui.switch("Auto-run", value=True).props("dense")
 
-            inp_site = ui.input("site").props("clearable").classes("w-full")
-            inp_sector = ui.input("sector").props("clearable").classes("w-full")
-            inp_square = ui.input("square").props("clearable").classes("w-full")
+            with ui.scroll_area().classes(
+                "w-full h-[320px] border rounded p-2 bg-white"
+            ):
+                layer_filters: list[tuple[str, Any]] = [
+                    (
+                        "Site",
+                        ui.select(
+                            options=[],
+                            label="Site",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Sector",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Sector",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Square",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Square",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Layer",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Layer",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                ]
+
             inp_q = (
                 ui.input("free text (inventory/note/piecetype or finds fields)")
                 .props("clearable")
                 .classes("w-full")
             )
-
-            with ui.row().classes("w-full gap-2"):
-                inp_date_from = (
-                    ui.input("from").props("type=date clearable").classes("w-1/2")
-                )
-                inp_date_to = (
-                    ui.input("to").props("type=date clearable").classes("w-1/2")
-                )
 
             inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
 
@@ -469,12 +512,20 @@ def page_analytics_chart() -> None:
     def _read_filters() -> dict[str, Any]:
         query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
 
-        site = (inp_site.value or "").strip() or None
-        sector = (inp_sector.value or "").strip() or None
-        square = (inp_square.value or "").strip() or None
+        layer_filters_map: dict[str, list[str] | None] = {}
+        for label, widget in layer_filters:
+            if isinstance(widget, ui.select):
+                vals = widget.value
+                if isinstance(vals, list) and vals:
+                    layer_filters_map[label] = [
+                        str(v).strip() for v in vals if str(v).strip()
+                    ]
+                elif isinstance(vals, str) and vals.strip():
+                    layer_filters_map[label] = [vals.strip()]
+                else:
+                    layer_filters_map[label] = None
+
         q = (inp_q.value or "").strip() or None
-        date_from = parse_date(inp_date_from.value)
-        date_to = parse_date(inp_date_to.value)
 
         limit = int(inp_limit.value or DEFAULT_LIMIT)
         limit = max(1, min(limit, TABLE_MAX_LIMIT))
@@ -513,11 +564,7 @@ def page_analytics_chart() -> None:
 
         return {
             "query_id": query_id,
-            "site": site,
-            "sector": sector,
-            "square": square,
-            "date_from": date_from,
-            "date_to": date_to,
+            "layer_filters": layer_filters_map,
             "q": q,
             "limit": limit,
             "offset": 0,
@@ -531,6 +578,9 @@ def page_analytics_chart() -> None:
     def _populate_frag_filter_options(items: list[dict[str, Any]]) -> None:
         # Determine which columns are needed by looking at active widgets
         needed: set[str] = set()
+        for label, widget in layer_filters:
+            if isinstance(widget, ui.select):
+                needed.add(label)
         for label, widget in frag_filters:
             if isinstance(widget, ui.select):
                 needed.add(label)
@@ -546,11 +596,7 @@ def page_analytics_chart() -> None:
             distinct = get_distinct_values(
                 db,
                 query_id=f["query_id"],
-                site=f["site"],
-                sector=f["sector"],
-                square=f["square"],
-                date_from=f["date_from"],
-                date_to=f["date_to"],
+                layer_filters=f.get("layer_filters"),
                 q=f["q"],
                 frag_filters=f.get("frag_filters"),
                 columns=needed,
@@ -580,11 +626,7 @@ def page_analytics_chart() -> None:
 
             res = result_for(
                 f["query_id"],
-                site=f["site"],
-                sector=f["sector"],
-                square=f["square"],
-                date_from=f["date_from"],
-                date_to=f["date_to"],
+                layer_filters=f.get("layer_filters"),
                 q=f["q"],
                 limit=chart_fetch,
                 offset=f["offset"],
@@ -670,10 +712,10 @@ def page_analytics_chart() -> None:
         request_refresh()
 
     sel_query.on("change", _on_query_change)
-    for w in (inp_site, inp_sector, inp_square, inp_q, inp_limit):
-        w.on("change", lambda e: request_refresh())
-    inp_date_from.on("change", lambda e: request_refresh())
-    inp_date_to.on("change", lambda e: request_refresh())
+    for label, widget in layer_filters:
+        widget.on("change", lambda e: request_refresh())
+    inp_q.on("change", lambda e: request_refresh())
+    inp_limit.on("change", lambda e: request_refresh())
 
     def _on_x_change(e) -> None:
         if state.get("_suppress_x_change"):
