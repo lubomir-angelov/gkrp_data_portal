@@ -88,3 +88,28 @@ Then test in this order:
 3. From another LAN device: http://<windows-lan-ip>:8080
 4. From outside your home network: http://<your-public-static-ip>:8080
 ```
+
+
+## Testing opencode setup
+```bash
+ubuntu@ggbg-pc-rig:~/experiment/gkrp_data_portal$ git status -sb
+## feature/opencode_work...origin/feature/opencode_work
+ubuntu@ggbg-pc-rig:~/experiment/gkrp_data_portal$ ls -la opencode.json AGENTS.md
+-rw-r--r-- 1 ubuntu ubuntu 1917 May 12 07:27 AGENTS.md
+-rw-r--r-- 1 ubuntu ubuntu 7480 May 12 08:09 opencode.json
+ubuntu@ggbg-pc-rig:~/experiment/gkrp_data_portal$ opencode models llamacpp
+llamacpp/Qwen3.6-27B-UD-Q5_K_XL
+llamacpp/Qwen3.6-35B-A3B-UD-Q4_K_XL
+ubuntu@ggbg-pc-rig:~/experiment/gkrp_data_portal$ opencode run \
+  --model llamacpp/Qwen3.6-27B-UD-Q5_K_XL \
+  --agent plan \
+  "Reply with exactly: opencode-ok"
+
+> plan · Qwen3.6-27B-UD-Q5_K_XL
+
+opencode-ok
+
+ubuntu@ggbg-pc-rig:~/experiment/gkrp_data_portal$ opencode run \
+  --agent plan \
+  "Inspect this repository. Identify the main Python package, the web UI framework, the database layer, and the likely commands for linting and tests. Do not edit files."
+```
