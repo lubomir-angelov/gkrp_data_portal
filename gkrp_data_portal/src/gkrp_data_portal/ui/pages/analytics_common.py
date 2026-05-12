@@ -22,7 +22,7 @@ QUERY_OPTIONS: dict[str, str] = {
 DEFAULT_LIMIT = 500
 
 TABLE_MAX_LIMIT = 50000  # table UI cap
-CHART_MAX_FETCH = 250000  # chart safety cap
+CHART_MAX_FETCH = 25000  # chart safety cap (top-N buckets don't benefit from >25k rows)
 
 
 _UI_HIDDEN_COLUMNS = frozenset(

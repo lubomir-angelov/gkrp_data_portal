@@ -336,3 +336,96 @@ def extract_image_urls(items: list[dict[str, Any]]) -> list[str]:
                     urls.append(v)
 
     return urls
+
+
+# Column definitions for DISTINCT queries: (label, sql_col_expr, query_ids)
+_DISTINCT_COL_DEFS: list[tuple[str, str, tuple[str, ...]]] = [
+    ("Piecetype", "f.piecetype", ("q1", "q2")),
+    ("Technology", "f.technology", ("q1", "q2")),
+    ("Baking", "f.baking", ("q1", "q2")),
+    ("Color / Primary color", "f.primarycolor", ("q1", "q2")),
+    ("Covering", "f.covering", ("q1", "q2")),
+    ("Surface", "f.surface", ("q1", "q2")),
+    ("Wall thickness", "f.wallthickness", ("q1", "q2")),
+    ("Handle type", "f.handletype", ("q1", "q2")),
+    ("Handle size", "f.handlesize", ("q1", "q2")),
+    ("Bottom type", "f.bottomtype", ("q1", "q2")),
+    ("Category", "f.category", ("q1", "q2")),
+    ("Form", "f.form", ("q1", "q2")),
+    ("Type", "f.type", ("q1", "q2")),
+    ("Subtype", "f.subtype", ("q1", "q2")),
+    ("Variant", "f.variant", ("q1", "q2")),
+    ("Note", "f.note", ("q1", "q2")),
+    ("Inventory", "f.inventory", ("q1", "q2")),
+    ("Primary", "o.primary_", ("q2",)),
+    ("Secondary", "o.secondary", ("q2",)),
+    ("Tertiary", "o.tertiary", ("q2",)),
+    ("Quarternary", "o.quarternary", ("q2",)),
+    ("Color / color1", "o.color1", ("q2",)),
+    ("Encrust color", "o.encrustcolor1", ("q2",)),
+]
+
+
+def get_distinct_values(
+    db: Session,
+    *,
+    query_id: str,
+    site: Optional[str] = None,
+    sector: Optional[str] = None,
+    square: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    q: Optional[str] = None,
+    frag_filters: Optional[dict[str, Any]] = None,
+    columns: Optional[set[str]] = None,
+) -> dict[str, list[str]]:
+    """Return DISTINCT values for filter dropdown columns via SQL.
+
+    *columns* limits which columns are fetched; if None all applicable columns
+    are returned.  The result is keyed by the UI label (e.g. ``"Piecetype"``).
+    """
+    # Determine which table aliases apply
+    if query_id == "q1":
+        base = "FROM tbllayers l INNER JOIN tblfragments f ON l.layerid = f.locationid"
+    elif query_id == "q2":
+        base = (
+            "FROM tbllayers l "
+            "INNER JOIN tblfragments f ON l.layerid = f.locationid "
+            "INNER JOIN tblornaments o ON f.fragmentid = o.fragmentid"
+        )
+    elif query_id == "finds":
+        base = (
+            "FROM tblfinds fi "
+            "INNER JOIN tbllayers l ON l.layerid = fi.layerid "
+            "LEFT JOIN tblfragments f ON f.fragmentid = fi.fragmentid "
+            "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
+        )
+    else:
+        return {}
+
+    where_sql, params = _build_where(
+        query_id=query_id,
+        site=site,
+        sector=sector,
+        square=square,
+        date_from=date_from,
+        date_to=date_to,
+        q=q,
+        frag_filters=frag_filters,
+    )
+
+    # Build list of (label, col_expr) pairs
+    if columns:
+        active = [(lbl, expr, qids) for lbl, expr, qids in _DISTINCT_COL_DEFS
+                  if lbl in columns and query_id in qids]
+    else:
+        active = [(lbl, expr, qids) for lbl, expr, qids in _DISTINCT_COL_DEFS
+                  if query_id in qids]
+
+    result: dict[str, list[str]] = {}
+    for label, col_expr, _ in active:
+        sql = f"SELECT DISTINCT {col_expr}::text AS v FROM {base}{where_sql} WHERE {col_expr} IS NOT NULL ORDER BY v"
+        rows = db.execute(text(sql), params).mappings().all()
+        result[label] = [r["v"] for r in rows if r["v"]]
+
+    return result

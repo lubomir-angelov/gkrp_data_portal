@@ -28,6 +28,8 @@ from .analytics_common import (
     result_for,
     ui_columns,
 )
+from gkrp_data_portal.db.session import session_scope
+from gkrp_data_portal.ui.repository.analytics_repo import get_distinct_values
 
 
 @ui.page("/analytics")
@@ -54,6 +56,7 @@ def page_analytics_chart() -> None:
         "query_id": "q1",
         "_refreshing": False,
         "_suppress_x_change": False,
+        "_debounce_timer": None,
     }
 
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
@@ -527,59 +530,43 @@ def page_analytics_chart() -> None:
         return [c for c in cols if "type" in c.lower()]
 
     def _populate_frag_filter_options(items: list[dict[str, Any]]) -> None:
-        col_map: dict[str, str] = {
-            "Piecetype": "f_piecetype",
-            "Technology": "f_technology",
-            "Baking": "f_baking",
-            "Color / Primary color": "f_primarycolor",
-            "Covering": "f_covering",
-            "Surface": "f_surface",
-            "Wall thickness": "f_wallthickness",
-            "Handle type": "f_handletype",
-            "Handle size": "f_handlesize",
-            "Bottom type": "f_bottomtype",
-            "Category": "f_category",
-            "Form": "f_form",
-            "Type": "f_type",
-            "Subtype": "f_subtype",
-            "Variant": "f_variant",
-            "Primary": "o_primary_",
-            "Secondary": "o_secondary",
-            "Tertiary": "o_tertiary",
-            "Quarternary": "o_quarternary",
-            "Color / color1": "o_color1",
-            "Encrust color": "o_encrustcolor1",
-        }
+        # Determine which columns are needed by looking at active widgets
+        needed: set[str] = set()
+        for label, widget in frag_filters:
+            if isinstance(widget, ui.select):
+                needed.add(label)
+        for label, widget in orn_filters:
+            if isinstance(widget, ui.select):
+                needed.add(label)
+
+        if not needed:
+            return
+
+        f = _read_filters()
+        with session_scope() as db:
+            distinct = get_distinct_values(
+                db,
+                query_id=f["query_id"],
+                site=f["site"],
+                sector=f["sector"],
+                square=f["square"],
+                date_from=f["date_from"],
+                date_to=f["date_to"],
+                q=f["q"],
+                frag_filters=f.get("frag_filters"),
+                columns=needed,
+            )
+
         for label, widget in frag_filters:
             if not isinstance(widget, ui.select):
                 continue
-            col = col_map.get(label)
-            if not col:
-                continue
-            values: set[str] = set()
-            for row in items:
-                v = row.get(col)
-                if isinstance(v, str) and v.strip():
-                    values.add(v.strip())
-                elif v is not None:
-                    values.add(str(v))
-            widget.options = sorted(values)
+            widget.options = distinct.get(label, [])
             widget.update()
 
         for label, widget in orn_filters:
             if not isinstance(widget, ui.select):
                 continue
-            col = col_map.get(label)
-            if not col:
-                continue
-            values: set[str] = set()
-            for row in items:
-                v = row.get(col)
-                if isinstance(v, str) and v.strip():
-                    values.add(v.strip())
-                elif v is not None:
-                    values.add(str(v))
-            widget.options = sorted(values)
+            widget.options = distinct.get(label, [])
             widget.update()
 
     def refresh() -> None:
@@ -590,6 +577,8 @@ def page_analytics_chart() -> None:
             f = _read_filters()
             notes: list[str] = []
 
+            chart_fetch = min(max(f["limit"], 0), CHART_MAX_FETCH)
+
             res = result_for(
                 f["query_id"],
                 site=f["site"],
@@ -598,7 +587,7 @@ def page_analytics_chart() -> None:
                 date_from=f["date_from"],
                 date_to=f["date_to"],
                 q=f["q"],
-                limit=f["limit"],
+                limit=chart_fetch,
                 offset=f["offset"],
                 frag_filters=f.get("frag_filters"),
             )
@@ -609,21 +598,6 @@ def page_analytics_chart() -> None:
                 dbg.set_text(f"query={f['query_id']} rows=0 total=0")
                 status.set_text("No results for current filters.")
                 return
-
-            chart_fetch = min(max(total, 0), CHART_MAX_FETCH)
-            if chart_fetch > len(res.items):
-                res = result_for(
-                    f["query_id"],
-                    site=f["site"],
-                    sector=f["sector"],
-                    square=f["square"],
-                    date_from=f["date_from"],
-                    date_to=f["date_to"],
-                    q=f["q"],
-                    limit=chart_fetch,
-                    offset=0,
-                    frag_filters=f.get("frag_filters"),
-                )
 
             if not res.items:
                 _set_chart(plotly_bar([], [], title=f"No results ({f['query_id']})"))
@@ -677,12 +651,19 @@ def page_analytics_chart() -> None:
         finally:
             state["_refreshing"] = False
 
-    def request_refresh() -> None:
+    def _trigger_refresh() -> None:
+        """Execute the actual refresh (called after debounce)."""
         if sw_autorun.value:
             pending.set_text("")
             refresh()
         else:
             pending.set_text("Filters changed \u2014 click \u201cRun query\u201d")
+
+    def request_refresh() -> None:
+        """Schedule a debounced refresh (300 ms)."""
+        if state.get("_debounce_timer"):
+            state["_debounce_timer"].cancel()
+        state["_debounce_timer"] = ui.timer(0.3, once=True, callback=_trigger_refresh)
 
     btn_run.on("click", lambda e: (pending.set_text(""), refresh()))
 
