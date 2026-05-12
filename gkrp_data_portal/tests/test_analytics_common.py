@@ -118,31 +118,32 @@ class TestBuildHistogram:
     def test_returns_empty_for_no_key(self):
         xs, ys = build_histogram([{"other": "v"}], "col")
         # When key is missing, r.get("col") returns None, which norm_bucket converts to "(null)"
+        # f_count is absent so the sum defaults to 0
         assert xs == ["(null)"]
-        assert ys == [1]
+        assert ys == [0]
 
     def test_builds_top_n(self):
         rows = [
-            {"color": "бял"},
-            {"color": "бял"},
-            {"color": "бял"},
-            {"color": "червен"},
-            {"color": "червен"},
-            {"color": "жълт"},
+            {"color": "бял", "f_count": 3},
+            {"color": "бял", "f_count": 5},
+            {"color": "бял", "f_count": 2},
+            {"color": "червен", "f_count": 2},
+            {"color": "червен", "f_count": 4},
+            {"color": "жълт", "f_count": 1},
         ]
         xs, ys = build_histogram(rows, "color", top_n=3)
         assert xs == ["бял", "червен", "жълт"]
-        assert ys == [3, 2, 1]
+        assert ys == [10, 6, 1]
 
     def test_nulls_counted(self):
         rows = [
-            {"color": None},
-            {"color": None},
-            {"color": "бял"},
+            {"color": None, "f_count": 3},
+            {"color": None, "f_count": 5},
+            {"color": "бял", "f_count": 2},
         ]
         xs, ys = build_histogram(rows, "color")
         assert "(null)" in xs
-        assert ys[xs.index("(null)")] == 2
+        assert ys[xs.index("(null)")] == 8
 
     def test_fragment_cols_sum_f_count(self):
         rows = [
@@ -164,16 +165,16 @@ class TestBuildHistogram:
         assert xs == ["A", "B"]
         assert ys == [16, 4]
 
-    def test_non_fragment_cols_count_rows(self):
+    def test_non_fragment_cols_sum_f_count(self):
         rows = [
             {"f_piecetype": "бял", "f_count": 3},
             {"f_piecetype": "бял", "f_count": 5},
             {"f_piecetype": "червен", "f_count": 2},
         ]
-        # f_piecetype is a fragment col → sums f_count
+        # all columns sum f_count now
         xs, ys = build_histogram(rows, "f_piecetype")
         assert ys == [8, 2]
-        # l_site is NOT a fragment col → counts rows
+        # l_site also sums f_count (not row count)
         rows2 = [
             {"l_site": "S1", "f_piecetype": "бял", "f_count": 3},
             {"l_site": "S1", "f_piecetype": "бял", "f_count": 5},
@@ -181,7 +182,7 @@ class TestBuildHistogram:
         ]
         xs2, ys2 = build_histogram(rows2, "l_site")
         assert xs2 == ["S1", "S2"]
-        assert ys2 == [2, 1]
+        assert ys2 == [8, 2]
 
     def test_fragment_cols_without_f_count_count_rows(self):
         rows = [
@@ -189,10 +190,10 @@ class TestBuildHistogram:
             {"f_piecetype": "бял", "other": 5},
             {"f_piecetype": "червен", "other": 2},
         ]
-        # No f_count column present → falls back to row count
+        # No f_count column present → defaults to 0 for each bucket
         xs, ys = build_histogram(rows, "f_piecetype")
         assert xs == ["бял", "червен"]
-        assert ys == [2, 1]
+        assert ys == [0, 0]
 
 
 class TestPlotlyBar:
