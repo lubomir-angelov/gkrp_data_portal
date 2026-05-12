@@ -349,9 +349,10 @@ def page_analytics_chart() -> None:
                     ),
                 ]
 
-            # ---- Ornaments section ----
-            ui.label("Ornaments").classes("text-subtitle1 font-medium mt-4")
-            with ui.column().classes("w-full gap-1"):
+            # ---- Ornaments section (only visible for q2) ----
+            orn_section = ui.column().classes("w-full gap-1 mt-4").hide()
+            with orn_section:
+                ui.label("Ornaments").classes("text-subtitle1 font-medium")
                 orn_filters: list[tuple[str, Any]] = [
                     (
                         "Primary",
@@ -684,7 +685,15 @@ def page_analytics_chart() -> None:
 
     btn_run.on("click", lambda e: (pending.set_text(""), refresh()))
 
-    sel_query.on("change", lambda e: request_refresh())
+    def _on_query_change(e) -> None:
+        query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
+        if query_id == "q2":
+            orn_section.show()
+        else:
+            orn_section.hide()
+        request_refresh()
+
+    sel_query.on("change", _on_query_change)
     for w in (inp_site, inp_sector, inp_square, inp_q, inp_limit):
         w.on("change", lambda e: request_refresh())
     inp_date_from.on("change", lambda e: request_refresh())
