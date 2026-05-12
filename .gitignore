@@ -211,3 +211,6 @@ __marimo__/
 .nicegui/
 .env
 setup.sh
+.aider/
+.aider*
+cache.db*
