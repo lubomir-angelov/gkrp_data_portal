@@ -1,9 +1,9 @@
 """NiceGUI page: Analytics (CHART only).
 
 Layout:
-- Left: query selector, filters, column toggles
+- Left: query selector, filters
 - Center: chart
-- Right: images (from fragment/find image_url)
+- Right: Fragments filter panel (multi-select dropdowns)
 """
 
 from __future__ import annotations
@@ -16,8 +16,6 @@ from typing import Any
 from loguru import logger
 from nicegui import app, ui
 from starlette.responses import HTMLResponse, PlainTextResponse, Response
-
-from gkrp_data_portal.ui.repository.analytics_repo import extract_image_urls
 
 from .analytics_common import (
     CHART_MAX_FETCH,
@@ -48,7 +46,6 @@ def page_analytics_index() -> None:
         )
 
 
-
 @ui.page("/analytics/chart")
 def page_analytics_chart() -> None:
     ui.label("Analytics — Chart").classes("text-h5")
@@ -77,22 +74,21 @@ def page_analytics_chart() -> None:
             inp_site = ui.input("site").props("clearable").classes("w-full")
             inp_sector = ui.input("sector").props("clearable").classes("w-full")
             inp_square = ui.input("square").props("clearable").classes("w-full")
-            inp_q = ui.input("free text (inventory/note/piecetype or finds fields)").props("clearable").classes("w-full")
+            inp_q = (
+                ui.input("free text (inventory/note/piecetype or finds fields)")
+                .props("clearable")
+                .classes("w-full")
+            )
 
             with ui.row().classes("w-full gap-2"):
-                inp_date_from = ui.input("from").props("type=date clearable").classes("w-1/2")
-                inp_date_to = ui.input("to").props("type=date clearable").classes("w-1/2")
+                inp_date_from = (
+                    ui.input("from").props("type=date clearable").classes("w-1/2")
+                )
+                inp_date_to = (
+                    ui.input("to").props("type=date clearable").classes("w-1/2")
+                )
 
             inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
-
-            ui.separator()
-            ui.label("Columns").classes("text-subtitle1 font-medium")
-
-            with ui.row().classes("w-full justify-between"):
-                btn_select_all = ui.button("Select all")
-                btn_clear_all = ui.button("Deselect all")
-
-            columns_container = ui.scroll_area().classes("w-full h-[420px] border rounded p-2 bg-white")
 
         # Center panel (chart only)
         with ui.column().classes("flex-1 min-w-0"):
@@ -101,13 +97,17 @@ def page_analytics_chart() -> None:
             pending = ui.label("").classes("text-xs text-orange-700")
             dbg = ui.label("").classes("text-xs text-gray-500")
 
-            chart = ui.plotly({"data": [], "layout": {"height": 520}}).classes("w-full border rounded bg-white").style(
-                "height: 520px;"
+            chart = (
+                ui.plotly({"data": [], "layout": {"height": 520}})
+                .classes("w-full border rounded bg-white")
+                .style("height: 520px;")
             )
             chart_id = chart.id
 
             with ui.row().classes("w-full items-center justify-between gap-2"):
-                sel_x = ui.select(options=[], label="Group by (x-axis)").classes("w-[420px]")
+                sel_x = ui.select(options=[], label="Group by (x-axis)").classes(
+                    "w-[420px]"
+                )
 
                 with ui.row().classes("gap-2"):
                     ui.button(
@@ -147,13 +147,289 @@ def page_analytics_chart() -> None:
                         ),
                     )
 
-        # Right panel (images)
+        # Right panel (fragments filters)
         with ui.column().classes("w-[320px] shrink-0"):
-            ui.label("Images").classes("text-subtitle1 font-medium")
-            images_box = ui.scroll_area().classes("w-full h-[820px] border rounded p-2 bg-white")
+            ui.label("Fragments").classes("text-subtitle1 font-medium")
+            with ui.scroll_area().classes(
+                "w-full h-[820px] border rounded p-2 bg-white"
+            ):
+                frag_filters: list[tuple[str, Any]] = [
+                    (
+                        "Piecetype",
+                        ui.select(
+                            options=[],
+                            label="Piecetype",
+                            value=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Technology",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Technology",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Baking",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Baking",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Color / Primary color",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Color / Primary color",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Covering",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Covering",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Surface",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Surface",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Wall thickness",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Wall thickness",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Handle type",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Handle type",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Handle size",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Handle size",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Bottom type",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Bottom type",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Category",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Category",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Form",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Form",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Type",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Type",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Subtype",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Subtype",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Variant",
+                        ui.select(
+                            options=[],
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                            label="Variant",
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Note",
+                        ui.input(label="Note")
+                        .props("clearable dense")
+                        .classes("w-full"),
+                    ),
+                    (
+                        "Inventory",
+                        ui.input(label="Inventory")
+                        .props("clearable dense")
+                        .classes("w-full"),
+                    ),
+                ]
+
+            # ---- Ornaments section (only visible for q2) ----
+            orn_section = ui.column().classes("w-full gap-1 mt-4")
+            orn_section.set_visibility(False)
+            with orn_section:
+                ui.label("Ornaments").classes("text-subtitle1 font-medium")
+                orn_filters: list[tuple[str, Any]] = [
+                    (
+                        "Primary",
+                        ui.select(
+                            options=[],
+                            label="Primary",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Secondary",
+                        ui.select(
+                            options=[],
+                            label="Secondary",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Tertiary",
+                        ui.select(
+                            options=[],
+                            label="Tertiary",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Quarternary",
+                        ui.select(
+                            options=[],
+                            label="Quarternary",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Color / color1",
+                        ui.select(
+                            options=[],
+                            label="Color / color1",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Encrust color",
+                        ui.select(
+                            options=[],
+                            label="Encrust color",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                ]
 
     # --- local state ---
-    checkboxes: dict[str, Any] = {}
 
     def _set_chart(figure: dict[str, Any]) -> None:
         if hasattr(chart, "figure"):
@@ -170,7 +446,9 @@ def page_analytics_chart() -> None:
                     chart.props(f":figure='{json.dumps(figure)}'")  # type: ignore[attr-defined]
                     chart.update()
                 else:
-                    raise RuntimeError("Cannot update Plotly chart on this NiceGUI version.")
+                    raise RuntimeError(
+                        "Cannot update Plotly chart on this NiceGUI version."
+                    )
 
         ui.run_javascript(
             f"""
@@ -186,25 +464,6 @@ def page_analytics_chart() -> None:
             """
         )
 
-    def _set_images(urls: list[str]) -> None:
-        images_box.clear()
-        with images_box:
-            if not urls:
-                ui.label("No image URLs in current result.")
-                return
-            for u in urls[:50]:
-                ui.image(u).classes("w-full").props("fit=contain")
-
-    def _rebuild_column_checkboxes(all_columns: list[str]) -> None:
-        current = set(all_columns) if not state.get("selected_columns") else (set(state["selected_columns"]) & set(all_columns))
-        columns_container.clear()
-        checkboxes.clear()
-        with columns_container:
-            for c in all_columns:
-                cb = ui.checkbox(c, value=(c in current)).classes("text-sm")
-                checkboxes[c] = cb
-        state["selected_columns"] = current
-
     def _read_filters() -> dict[str, Any]:
         query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
 
@@ -218,6 +477,34 @@ def page_analytics_chart() -> None:
         limit = int(inp_limit.value or DEFAULT_LIMIT)
         limit = max(1, min(limit, TABLE_MAX_LIMIT))
 
+        frag_filters_map: dict[str, list[str] | None] = {}
+        for label, widget in frag_filters:
+            if isinstance(widget, ui.select):
+                vals = widget.value
+                if isinstance(vals, list) and vals:
+                    frag_filters_map[label] = [
+                        str(v).strip() for v in vals if str(v).strip()
+                    ]
+                elif isinstance(vals, str) and vals.strip():
+                    frag_filters_map[label] = [vals.strip()]
+                else:
+                    frag_filters_map[label] = None
+            elif isinstance(widget, ui.input):
+                val = (widget.value or "").strip() or None
+                frag_filters_map[label] = val
+
+        for label, widget in orn_filters:
+            if isinstance(widget, ui.select):
+                vals = widget.value
+                if isinstance(vals, list) and vals:
+                    frag_filters_map[label] = [
+                        str(v).strip() for v in vals if str(v).strip()
+                    ]
+                elif isinstance(vals, str) and vals.strip():
+                    frag_filters_map[label] = [vals.strip()]
+                else:
+                    frag_filters_map[label] = None
+
         state["query_id"] = query_id
         app.storage.general["analytics_last_query_id"] = query_id
         ui.run_javascript(f"window.__gkrp_query_id = {json.dumps(query_id)};")
@@ -230,13 +517,70 @@ def page_analytics_chart() -> None:
             "date_from": date_from,
             "date_to": date_to,
             "q": q,
-            "limit": limit,  # used for “table-like” fetch (images + small sample)
+            "limit": limit,
             "offset": 0,
+            "frag_filters": frag_filters_map,
         }
-    
+
     def _get_type_columns(cols: list[str]) -> list[str]:
         # case-insensitive match; keeps original order
         return [c for c in cols if "type" in c.lower()]
+
+    def _populate_frag_filter_options(items: list[dict[str, Any]]) -> None:
+        col_map: dict[str, str] = {
+            "Piecetype": "f_piecetype",
+            "Technology": "f_technology",
+            "Baking": "f_baking",
+            "Color / Primary color": "f_primarycolor",
+            "Covering": "f_covering",
+            "Surface": "f_surface",
+            "Wall thickness": "f_wallthickness",
+            "Handle type": "f_handletype",
+            "Handle size": "f_handlesize",
+            "Bottom type": "f_bottomtype",
+            "Category": "f_category",
+            "Form": "f_form",
+            "Type": "f_type",
+            "Subtype": "f_subtype",
+            "Variant": "f_variant",
+            "Primary": "o_primary_",
+            "Secondary": "o_secondary",
+            "Tertiary": "o_tertiary",
+            "Quarternary": "o_quarternary",
+            "Color / color1": "o_color1",
+            "Encrust color": "o_encrustcolor1",
+        }
+        for label, widget in frag_filters:
+            if not isinstance(widget, ui.select):
+                continue
+            col = col_map.get(label)
+            if not col:
+                continue
+            values: set[str] = set()
+            for row in items:
+                v = row.get(col)
+                if isinstance(v, str) and v.strip():
+                    values.add(v.strip())
+                elif v is not None:
+                    values.add(str(v))
+            widget.options = sorted(values)
+            widget.update()
+
+        for label, widget in orn_filters:
+            if not isinstance(widget, ui.select):
+                continue
+            col = col_map.get(label)
+            if not col:
+                continue
+            values: set[str] = set()
+            for row in items:
+                v = row.get(col)
+                if isinstance(v, str) and v.strip():
+                    values.add(v.strip())
+                elif v is not None:
+                    values.add(str(v))
+            widget.options = sorted(values)
+            widget.update()
 
     def refresh() -> None:
         if state.get("_refreshing"):
@@ -246,8 +590,7 @@ def page_analytics_chart() -> None:
             f = _read_filters()
             notes: list[str] = []
 
-            # (A) limited fetch: used for images (and cheap metadata like total)
-            res_limited = result_for(
+            res = result_for(
                 f["query_id"],
                 site=f["site"],
                 sector=f["sector"],
@@ -257,22 +600,19 @@ def page_analytics_chart() -> None:
                 q=f["q"],
                 limit=f["limit"],
                 offset=f["offset"],
+                frag_filters=f.get("frag_filters"),
             )
 
-            total = int(res_limited.total or 0)
+            total = int(res.total or 0)
             if total == 0:
                 _set_chart(plotly_bar([], [], title=f"No results ({f['query_id']})"))
-                _set_images([])
                 dbg.set_text(f"query={f['query_id']} rows=0 total=0")
-                status.set_text("⚠️ No results for current filters.")
+                status.set_text("No results for current filters.")
                 return
 
-            # (B) chart fetch (full, capped)
             chart_fetch = min(max(total, 0), CHART_MAX_FETCH)
-            res_chart = (
-                res_limited
-                if chart_fetch <= len(res_limited.items)
-                else result_for(
+            if chart_fetch > len(res.items):
+                res = result_for(
                     f["query_id"],
                     site=f["site"],
                     sector=f["sector"],
@@ -282,19 +622,16 @@ def page_analytics_chart() -> None:
                     q=f["q"],
                     limit=chart_fetch,
                     offset=0,
+                    frag_filters=f.get("frag_filters"),
                 )
-            )
 
-            if not res_chart.items:
+            if not res.items:
                 _set_chart(plotly_bar([], [], title=f"No results ({f['query_id']})"))
-                _set_images([])
-                dbg.set_text(f"query={f['query_id']} rows=0 total={res_chart.total}")
-                status.set_text("⚠️ No results for current filters.")
+                dbg.set_text(f"query={f['query_id']} rows=0 total={res.total}")
+                status.set_text("No results for current filters.")
                 return
 
-            ui_cols = ui_columns(res_chart.columns) or list(res_chart.columns)
-            if not checkboxes or list(checkboxes.keys()) != ui_cols:
-                _rebuild_column_checkboxes(ui_cols)
+            ui_cols = ui_columns(res.columns) or list(res.columns)
 
             sel_x.options = list(ui_cols)
 
@@ -312,7 +649,9 @@ def page_analytics_chart() -> None:
             ]
 
             if not sel_x.value or sel_x.value not in ui_cols:
-                default_x = next((c for c in preferred if c in ui_cols), None) or (ui_cols[0] if ui_cols else None)
+                default_x = next((c for c in preferred if c in ui_cols), None) or (
+                    ui_cols[0] if ui_cols else None
+                )
                 state["_suppress_x_change"] = True
                 sel_x.set_value(default_x)
                 state["_suppress_x_change"] = False
@@ -320,48 +659,42 @@ def page_analytics_chart() -> None:
                     notes.append(f"group-by defaulted to {default_x}")
 
             x_key = sel_x.value
-            xs, ys = build_histogram(res_chart.items, x_key, top_n=30)
+            xs, ys = build_histogram(res.items, x_key, top_n=30)
             _set_chart(plotly_bar(xs, ys, title=f"Count by {x_key} ({f['query_id']})"))
 
-            urls = extract_image_urls(res_limited.items)
-            _set_images(urls)
+            _populate_frag_filter_options(res.items)
 
             dbg.set_text(
-                f"query={f['query_id']} limited_rows={len(res_limited.items)} total={res_limited.total} "
-                f"chart_rows={len(res_chart.items)} x={x_key} buckets={len(xs)}"
+                f"query={f['query_id']} rows={len(res.items)} total={res.total} "
+                f"x={x_key} buckets={len(xs)}"
             )
 
-            base = f"✅ Chart built from {len(res_chart.items)} rows (total {res_chart.total})."
+            base = f"Chart built from {len(res.items)} rows (total {res.total})."
             if notes:
-                base += "  " + " • ".join(notes)
+                base += "  " + " \u2022 ".join(notes)
             status.set_text(base)
 
         finally:
             state["_refreshing"] = False
-
-    def _select_all() -> None:
-        for cb in checkboxes.values():
-            cb.set_value(True)
-        refresh()
-
-    def _deselect_all() -> None:
-        for cb in checkboxes.values():
-            cb.set_value(False)
-        refresh()
-
-    btn_select_all.on("click", lambda e: _select_all())
-    btn_clear_all.on("click", lambda e: _deselect_all())
 
     def request_refresh() -> None:
         if sw_autorun.value:
             pending.set_text("")
             refresh()
         else:
-            pending.set_text("Filters changed — click “Run query”")
+            pending.set_text("Filters changed \u2014 click \u201cRun query\u201d")
 
     btn_run.on("click", lambda e: (pending.set_text(""), refresh()))
 
-    sel_query.on("change", lambda e: request_refresh())
+    def _on_query_change(e) -> None:
+        query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
+        if query_id == "q2":
+            orn_section.set_visibility(True)
+        else:
+            orn_section.set_visibility(False)
+        request_refresh()
+
+    sel_query.on("change", _on_query_change)
     for w in (inp_site, inp_sector, inp_square, inp_q, inp_limit):
         w.on("change", lambda e: request_refresh())
     inp_date_from.on("change", lambda e: request_refresh())
@@ -380,6 +713,7 @@ def page_analytics_chart() -> None:
 # -------------------------
 # Export endpoints (kept here so they register once)
 # -------------------------
+
 
 @app.get("/api/analytics/data.csv")
 def analytics_data_csv(
@@ -407,7 +741,10 @@ def analytics_data_csv(
         offset=0,
     )
 
-    logger.info("DEBUG first_row_keys: {}", sorted(res.items[0].keys()) if res.items else "NO_ROWS")
+    logger.info(
+        "DEBUG first_row_keys: {}",
+        sorted(res.items[0].keys()) if res.items else "NO_ROWS",
+    )
     logger.info("DEBUG first_row_sample: {}", res.items[0] if res.items else "NO_ROWS")
 
     buf = io.StringIO()
@@ -420,7 +757,9 @@ def analytics_data_csv(
     return Response(
         content=buf.getvalue(),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="analytics_{query_id}.csv"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="analytics_{query_id}.csv"'
+        },
     )
 
 

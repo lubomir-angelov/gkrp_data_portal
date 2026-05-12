@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from datetime import date
 from typing import Any, Optional
 
@@ -22,8 +21,8 @@ QUERY_OPTIONS: dict[str, str] = {
 
 DEFAULT_LIMIT = 500
 
-TABLE_MAX_LIMIT = 50000      # table UI cap
-CHART_MAX_FETCH = 250000     # chart safety cap
+TABLE_MAX_LIMIT = 50000  # table UI cap
+CHART_MAX_FETCH = 250000  # chart safety cap
 
 
 _UI_HIDDEN_COLUMNS = frozenset(
@@ -66,6 +65,7 @@ _UI_HIDDEN_COLUMNS = frozenset(
         "f_recordenteredby",
         "f_recordenteredon",
         "f_image",
+        "f_count",
     }
 )
 
@@ -107,12 +107,26 @@ def norm_bucket(v: Any) -> str:
     return str(v)
 
 
-def build_histogram(rows: list[dict], x_key: str, top_n: int = 30) -> tuple[list[str], list[int]]:
-    """Build a top-N histogram for a column from dict rows."""
+def build_histogram(
+    rows: list[dict], x_key: str, top_n: int = 30
+) -> tuple[list[str], list[int]]:
+    """Build a top-N histogram for a column from dict rows.
+
+    The y-values always sum ``f_count`` instead of counting rows, because each
+    row represents *count* physical fragments.
+    """
     if not rows or not x_key:
         return [], []
-    c = Counter(norm_bucket(r.get(x_key)) for r in rows)
-    items = c.most_common(top_n)
+
+    bucket_sum: dict[str, int] = {}
+    for r in rows:
+        bucket = norm_bucket(r.get(x_key))
+        val = r.get("f_count")
+        bucket_sum[bucket] = bucket_sum.get(bucket, 0) + (
+            val if isinstance(val, (int, float)) else 0
+        )
+
+    items = sorted(bucket_sum.items(), key=lambda x: x[1], reverse=True)[:top_n]
     xs = [k for k, _ in items]
     ys = [v for _, v in items]
     return xs, ys

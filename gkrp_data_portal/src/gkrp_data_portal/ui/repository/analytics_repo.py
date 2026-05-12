@@ -20,7 +20,12 @@ from sqlalchemy import text
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
-from gkrp_data_portal.models.archaeology import Tbllayer, Tblfragment, Tblornament, Tblfind
+from gkrp_data_portal.models.archaeology import (
+    Tbllayer,
+    Tblfragment,
+    Tblornament,
+    Tblfind,
+)
 
 
 @dataclass(frozen=True)
@@ -37,6 +42,59 @@ def _model_select_list(prefix: str, alias: str, model) -> list[str]:
     return cols
 
 
+def _apply_frag_filters(
+    clauses: list[str],
+    params: dict[str, Any],
+    frag_filters: dict[str, Any],
+) -> None:
+    """Apply fragment field filters from the UI dropdowns.
+
+    Maps UI labels to SQL column references using the 'f' alias.
+    Multi-select uses ANY/ILIKE; single text inputs use ILIKE.
+    """
+    label_to_col: dict[str, str] = {
+        "Piecetype": "f.piecetype",
+        "Technology": "f.technology",
+        "Baking": "f.baking",
+        "Color / Primary color": "f.primarycolor",
+        "Covering": "f.covering",
+        "Surface": "f.surface",
+        "Wall thickness": "f.wallthickness",
+        "Handle type": "f.handletype",
+        "Handle size": "f.handlesize",
+        "Bottom type": "f.bottomtype",
+        "Category": "f.category",
+        "Form": "f.form",
+        "Type": "f.type",
+        "Subtype": "f.subtype",
+        "Variant": "f.variant",
+        "Primary": "o.primary_",
+        "Secondary": "o.secondary",
+        "Tertiary": "o.tertiary",
+        "Quarternary": "o.quarternary",
+        "Color / color1": "o.color1",
+        "Encrust color": "o.encrustcolor1",
+    }
+    for label, values in frag_filters.items():
+        col = label_to_col.get(label)
+        if not col:
+            continue
+        col_expr = f"{col}::text"
+        if isinstance(values, list) and values:
+            param_name = f"frag_{label}"
+            params[param_name] = values
+            conditions = " OR ".join(
+                [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
+            )
+            clauses.append(f"({conditions})")
+            for i, v in enumerate(values):
+                params[f"{param_name}_{i}"] = f"%{v}%"
+        elif isinstance(values, str) and values.strip():
+            param_name = f"frag_{label}"
+            params[param_name] = f"%{values.strip()}%"
+            clauses.append(f"{col_expr} ILIKE :{param_name}")
+
+
 def _build_where(
     *,
     query_id: str,
@@ -46,6 +104,7 @@ def _build_where(
     date_from: Optional[date],
     date_to: Optional[date],
     q: Optional[str],
+    frag_filters: Optional[dict[str, Any]] = None,
 ) -> tuple[str, dict[str, Any]]:
     """Build a safe WHERE clause using only whitelisted filters."""
     clauses: list[str] = []
@@ -74,12 +133,16 @@ def _build_where(
         params["q"] = f"%{q}%"
         if query_id in ("q1", "q2"):
             clauses.append(
-                "(COALESCE(f.inventory,'') ILIKE :q OR COALESCE(f.note,'') ILIKE :q OR COALESCE(f.piecetype,'') ILIKE :q)"
+                "(COALESCE(f.inventory,'') ILIKE :q OR COALESCE(f.note,'') ILIKE :q OR COALESCE(f.piecetype::text,'') ILIKE :q)"
             )
         elif query_id == "finds":
             clauses.append(
                 "(COALESCE(fi.description,'') ILIKE :q OR COALESCE(fi.findtype,'') ILIKE :q OR COALESCE(fi.inventory,'') ILIKE :q)"
             )
+
+    # Fragment field filters (only applied for q1/q2 which have f alias)
+    if frag_filters and query_id in ("q1", "q2"):
+        _apply_frag_filters(clauses, params, frag_filters)
 
     if not clauses:
         return "", params
@@ -117,11 +180,11 @@ def query_q1_layers_fragments(
     q: Optional[str] = None,
     limit: int = 500,
     offset: int = 0,
+    frag_filters: Optional[dict[str, Any]] = None,
 ) -> AnalyticsResult:
     """Filter #1: tbllayers INNER JOIN tblfragments."""
-    select_cols = (
-        _model_select_list("l_", "l", Tbllayer)
-        + _model_select_list("f_", "f", Tblfragment)
+    select_cols = _model_select_list("l_", "l", Tbllayer) + _model_select_list(
+        "f_", "f", Tblfragment
     )
     base = f"""
     SELECT
@@ -138,16 +201,19 @@ def query_q1_layers_fragments(
         date_from=date_from,
         date_to=date_to,
         q=q,
+        frag_filters=frag_filters,
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC"
-    count_sql = f"SELECT COUNT(*) FROM ({base}\n{where_sql}) x"
+    count_sql = f"SELECT COALESCE(SUM(f_count), 0) FROM ({base}\n{where_sql}) x"
 
     rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
     total = _count_sql(db, count_sql=count_sql, params=params)
 
     items = [dict(r) for r in rows]
-    columns = list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
+    columns = (
+        list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
+    )
     return AnalyticsResult(items=items, total=total, columns=columns)
 
 
@@ -162,6 +228,7 @@ def query_q2_layers_fragments_ornaments(
     q: Optional[str] = None,
     limit: int = 500,
     offset: int = 0,
+    frag_filters: Optional[dict[str, Any]] = None,
 ) -> AnalyticsResult:
     """Filter #2: tbllayers INNER JOIN tblfragments INNER JOIN tblornaments."""
     select_cols = (
@@ -185,16 +252,19 @@ def query_q2_layers_fragments_ornaments(
         date_from=date_from,
         date_to=date_to,
         q=q,
+        frag_filters=frag_filters,
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC, o.ornamentid DESC"
-    count_sql = f"SELECT COUNT(*) FROM ({base}\n{where_sql}) x"
+    count_sql = f"SELECT COALESCE(SUM(f_count), 0) FROM ({base}\n{where_sql}) x"
 
     rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
     total = _count_sql(db, count_sql=count_sql, params=params)
 
     items = [dict(r) for r in rows]
-    columns = list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
+    columns = (
+        list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
+    )
     return AnalyticsResult(items=items, total=total, columns=columns)
 
 
@@ -209,6 +279,7 @@ def query_finds(
     q: Optional[str] = None,
     limit: int = 500,
     offset: int = 0,
+    frag_filters: Optional[dict[str, Any]] = None,
 ) -> AnalyticsResult:
     """Finds selector: tblfinds tied to layers/fragments/ornaments (left joins)."""
     select_cols = (
@@ -235,16 +306,19 @@ def query_finds(
         date_from=date_from,
         date_to=date_to,
         q=q,
+        frag_filters=frag_filters,
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY fi.findid DESC"
-    count_sql = f"SELECT COUNT(*) FROM ({base}\n{where_sql}) x"
+    count_sql = f"SELECT COALESCE(SUM(f_count), 0) FROM ({base}\n{where_sql}) x"
 
     rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
     total = _count_sql(db, count_sql=count_sql, params=params)
 
     items = [dict(r) for r in rows]
-    columns = list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
+    columns = (
+        list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
+    )
     return AnalyticsResult(items=items, total=total, columns=columns)
 
 
