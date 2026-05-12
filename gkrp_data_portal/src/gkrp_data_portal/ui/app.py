@@ -43,5 +43,5 @@ def run() -> None:
         reload=False,
         storage_secret=get_storage_secret(),
         host='0.0.0.0',
-        port=5000,
+        port=8080,
         )
