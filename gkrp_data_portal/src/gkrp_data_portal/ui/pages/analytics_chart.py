@@ -1,7 +1,7 @@
 """NiceGUI page: Analytics (CHART only).
 
 Layout:
-- Left: query selector, filters, column toggles
+- Left: query selector, filters
 - Center: chart
 - Right: images (from fragment/find image_url)
 """
@@ -85,15 +85,6 @@ def page_analytics_chart() -> None:
 
             inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
 
-            ui.separator()
-            ui.label("Columns").classes("text-subtitle1 font-medium")
-
-            with ui.row().classes("w-full justify-between"):
-                btn_select_all = ui.button("Select all")
-                btn_clear_all = ui.button("Deselect all")
-
-            columns_container = ui.scroll_area().classes("w-full h-[420px] border rounded p-2 bg-white")
-
         # Center panel (chart only)
         with ui.column().classes("flex-1 min-w-0"):
             ui.label("Chart").classes("text-subtitle1 font-medium")
@@ -153,7 +144,6 @@ def page_analytics_chart() -> None:
             images_box = ui.scroll_area().classes("w-full h-[820px] border rounded p-2 bg-white")
 
     # --- local state ---
-    checkboxes: dict[str, Any] = {}
 
     def _set_chart(figure: dict[str, Any]) -> None:
         if hasattr(chart, "figure"):
@@ -194,16 +184,6 @@ def page_analytics_chart() -> None:
                 return
             for u in urls[:50]:
                 ui.image(u).classes("w-full").props("fit=contain")
-
-    def _rebuild_column_checkboxes(all_columns: list[str]) -> None:
-        current = set(all_columns) if not state.get("selected_columns") else (set(state["selected_columns"]) & set(all_columns))
-        columns_container.clear()
-        checkboxes.clear()
-        with columns_container:
-            for c in all_columns:
-                cb = ui.checkbox(c, value=(c in current)).classes("text-sm")
-                checkboxes[c] = cb
-        state["selected_columns"] = current
 
     def _read_filters() -> dict[str, Any]:
         query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
@@ -293,8 +273,6 @@ def page_analytics_chart() -> None:
                 return
 
             ui_cols = ui_columns(res_chart.columns) or list(res_chart.columns)
-            if not checkboxes or list(checkboxes.keys()) != ui_cols:
-                _rebuild_column_checkboxes(ui_cols)
 
             sel_x.options = list(ui_cols)
 
@@ -338,19 +316,6 @@ def page_analytics_chart() -> None:
 
         finally:
             state["_refreshing"] = False
-
-    def _select_all() -> None:
-        for cb in checkboxes.values():
-            cb.set_value(True)
-        refresh()
-
-    def _deselect_all() -> None:
-        for cb in checkboxes.values():
-            cb.set_value(False)
-        refresh()
-
-    btn_select_all.on("click", lambda e: _select_all())
-    btn_clear_all.on("click", lambda e: _deselect_all())
 
     def request_refresh() -> None:
         if sw_autorun.value:
