@@ -236,6 +236,20 @@ class TestQueryQ1LayersFragments:
         all_sql = " ".join(str(c) for c in calls)
         assert "Sofia" in all_sql
 
+    def test_count_uses_sum_f_count(self):
+        mock_db = MagicMock()
+        mock_row = MagicMock()
+        mock_row.mappings.return_value.all.return_value = []
+        mock_db.execute.return_value = mock_row
+        mock_row.scalar_one.return_value = 0
+
+        query_q1_layers_fragments(mock_db)
+
+        calls = mock_db.execute.call_args_list
+        count_sql = str(calls[1][0][0])
+        assert "SUM(f_count)" in count_sql
+        assert "COUNT(*)" not in count_sql
+
 
 class TestQueryQ2LayersFragmentsOrnaments:
     def test_returns_analytics_result(self):
@@ -247,6 +261,20 @@ class TestQueryQ2LayersFragmentsOrnaments:
 
         result = query_q2_layers_fragments_ornaments(mock_db)
         assert isinstance(result, AnalyticsResult)
+
+    def test_count_uses_sum_f_count(self):
+        mock_db = MagicMock()
+        mock_row = MagicMock()
+        mock_row.mappings.return_value.all.return_value = []
+        mock_db.execute.return_value = mock_row
+        mock_row.scalar_one.return_value = 0
+
+        query_q2_layers_fragments_ornaments(mock_db)
+
+        calls = mock_db.execute.call_args_list
+        count_sql = str(calls[1][0][0])
+        assert "SUM(f_count)" in count_sql
+        assert "COUNT(*)" not in count_sql
 
 
 class TestQueryFinds:
@@ -270,3 +298,17 @@ class TestQueryFinds:
         query_finds(mock_db)
         call_str = str(mock_db.execute.call_args_list[0][0][0])
         assert "tblfinds" in call_str.lower()
+
+    def test_count_uses_sum_f_count(self):
+        mock_db = MagicMock()
+        mock_row = MagicMock()
+        mock_row.mappings.return_value.all.return_value = []
+        mock_db.execute.return_value = mock_row
+        mock_row.scalar_one.return_value = 0
+
+        query_finds(mock_db)
+
+        calls = mock_db.execute.call_args_list
+        count_sql = str(calls[1][0][0])
+        assert "SUM(f_count)" in count_sql
+        assert "COUNT(*)" not in count_sql

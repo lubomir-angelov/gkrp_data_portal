@@ -66,6 +66,7 @@ _UI_HIDDEN_COLUMNS = frozenset(
         "f_recordenteredby",
         "f_recordenteredon",
         "f_image",
+        "f_count",
     }
 )
 
@@ -108,11 +109,29 @@ def norm_bucket(v: Any) -> str:
 
 
 def build_histogram(rows: list[dict], x_key: str, top_n: int = 30) -> tuple[list[str], list[int]]:
-    """Build a top-N histogram for a column from dict rows."""
+    """Build a top-N histogram for a column from dict rows.
+
+    When the x_key is a fragment column (f_piecetype, f_category, f_form,
+    f_fragmenttype, f_technology), the y-values sum ``f_count`` instead of
+    counting rows, because each row represents *count* physical fragments.
+    """
     if not rows or not x_key:
         return [], []
-    c = Counter(norm_bucket(r.get(x_key)) for r in rows)
-    items = c.most_common(top_n)
+
+    # Check if we're grouping by a fragment column – if so, sum f_count.
+    fragment_cols = {"f_piecetype", "f_category", "f_form", "f_fragmenttype", "f_technology"}
+    use_f_count = x_key in fragment_cols and any("f_count" in r for r in rows)
+
+    bucket_sum: dict[str, int] = {}
+    for r in rows:
+        bucket = norm_bucket(r.get(x_key))
+        if use_f_count:
+            val = r.get("f_count")
+            bucket_sum[bucket] = bucket_sum.get(bucket, 0) + (val if isinstance(val, (int, float)) else 0)
+        else:
+            bucket_sum[bucket] = bucket_sum.get(bucket, 0) + 1
+
+    items = sorted(bucket_sum.items(), key=lambda x: x[1], reverse=True)[:top_n]
     xs = [k for k, _ in items]
     ys = [v for _, v in items]
     return xs, ys

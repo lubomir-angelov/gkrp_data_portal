@@ -50,6 +50,9 @@ class TestIsUiHiddenColumn:
     def test_handles_whitespace(self):
         assert is_ui_hidden_column("  ") is False
 
+    def test_hides_f_count(self):
+        assert is_ui_hidden_column("f_count") is True
+
 
 class TestUiColumns:
     def test_filters_hidden_columns(self):
@@ -140,6 +143,56 @@ class TestBuildHistogram:
         xs, ys = build_histogram(rows, "color")
         assert "(null)" in xs
         assert ys[xs.index("(null)")] == 2
+
+    def test_fragment_cols_sum_f_count(self):
+        rows = [
+            {"f_piecetype": "бял", "f_count": 3},
+            {"f_piecetype": "бял", "f_count": 5},
+            {"f_piecetype": "червен", "f_count": 2},
+        ]
+        xs, ys = build_histogram(rows, "f_piecetype")
+        assert xs == ["бял", "червен"]
+        assert ys == [8, 2]
+
+    def test_fragment_cols_sum_f_count_category(self):
+        rows = [
+            {"f_category": "A", "f_count": 10},
+            {"f_category": "B", "f_count": 4},
+            {"f_category": "A", "f_count": 6},
+        ]
+        xs, ys = build_histogram(rows, "f_category")
+        assert xs == ["A", "B"]
+        assert ys == [16, 4]
+
+    def test_non_fragment_cols_count_rows(self):
+        rows = [
+            {"f_piecetype": "бял", "f_count": 3},
+            {"f_piecetype": "бял", "f_count": 5},
+            {"f_piecetype": "червен", "f_count": 2},
+        ]
+        # f_piecetype is a fragment col → sums f_count
+        xs, ys = build_histogram(rows, "f_piecetype")
+        assert ys == [8, 2]
+        # l_site is NOT a fragment col → counts rows
+        rows2 = [
+            {"l_site": "S1", "f_piecetype": "бял", "f_count": 3},
+            {"l_site": "S1", "f_piecetype": "бял", "f_count": 5},
+            {"l_site": "S2", "f_piecetype": "червен", "f_count": 2},
+        ]
+        xs2, ys2 = build_histogram(rows2, "l_site")
+        assert xs2 == ["S1", "S2"]
+        assert ys2 == [2, 1]
+
+    def test_fragment_cols_without_f_count_count_rows(self):
+        rows = [
+            {"f_piecetype": "бял", "other": 3},
+            {"f_piecetype": "бял", "other": 5},
+            {"f_piecetype": "червен", "other": 2},
+        ]
+        # No f_count column present → falls back to row count
+        xs, ys = build_histogram(rows, "f_piecetype")
+        assert xs == ["бял", "червен"]
+        assert ys == [2, 1]
 
 
 class TestPlotlyBar:
