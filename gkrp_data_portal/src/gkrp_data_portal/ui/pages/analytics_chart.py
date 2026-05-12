@@ -352,9 +352,8 @@ def page_analytics_chart() -> None:
                     ),
                 ]
 
-            # ---- Ornaments section (only visible for q2) ----
+            # ---- Ornaments section (always visible) ----
             orn_section = ui.column().classes("w-full gap-1 mt-4")
-            orn_section.set_visibility(False)
             with orn_section:
                 ui.label("Ornaments").classes("text-subtitle1 font-medium")
                 orn_filters: list[tuple[str, Any]] = [
@@ -668,11 +667,6 @@ def page_analytics_chart() -> None:
     btn_run.on("click", lambda e: (pending.set_text(""), refresh()))
 
     def _on_query_change(e) -> None:
-        query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
-        if query_id == "q2":
-            orn_section.set_visibility(True)
-        else:
-            orn_section.set_visibility(False)
         request_refresh()
 
     sel_query.on("change", _on_query_change)

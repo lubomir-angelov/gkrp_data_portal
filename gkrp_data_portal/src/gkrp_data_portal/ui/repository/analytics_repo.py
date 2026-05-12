@@ -424,7 +424,12 @@ def get_distinct_values(
 
     result: dict[str, list[str]] = {}
     for label, col_expr, _ in active:
-        sql = f"SELECT DISTINCT {col_expr}::text AS v FROM {base}{where_sql} WHERE {col_expr} IS NOT NULL ORDER BY v"
+        # where_sql is either "" or "WHERE ..."; merge with the IS NOT NULL guard
+        if where_sql:
+            where_clause = f"{where_sql} AND {col_expr} IS NOT NULL"
+        else:
+            where_clause = f"WHERE {col_expr} IS NOT NULL"
+        sql = f"SELECT DISTINCT {col_expr}::text AS v {base} {where_clause} ORDER BY v"
         rows = db.execute(text(sql), params).mappings().all()
         result[label] = [r["v"] for r in rows if r["v"]]
 
