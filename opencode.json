@@ -93,6 +93,7 @@
           "make lint*": "allow",
           "make ruff*": "allow",
           "make format-check*": "allow",
+          "make run*": "ask",
           "make up-db*": "ask",
           "make down*": "ask",
           "make reset-db*": "ask",
