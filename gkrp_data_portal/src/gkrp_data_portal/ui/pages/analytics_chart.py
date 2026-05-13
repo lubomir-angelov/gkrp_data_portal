@@ -378,18 +378,6 @@ def page_analytics_chart() -> None:
                         .classes("w-full")
                         .props("dense"),
                     ),
-                    (
-                        "Note",
-                        ui.input(label="Note")
-                        .props("clearable dense")
-                        .classes("w-full"),
-                    ),
-                    (
-                        "Inventory",
-                        ui.input(label="Inventory")
-                        .props("clearable dense")
-                        .classes("w-full"),
-                    ),
                 ]
 
             # ---- Ornaments section (always visible) ----
@@ -745,24 +733,47 @@ def page_analytics_chart() -> None:
 
             ui_cols = ui_columns(res.columns) or list(res.columns)
 
-            sel_x.options = list(ui_cols)
+            _GROUPBY_EXCLUDE = frozenset({
+                "l_layername",
+                "l_context",
+                "f_fragmenttype",
+                "f_fract",
+                "f_secondarycolor",
+                "f_includesconc",
+                "f_includessize",
+                "f_onepot",
+                "f_includestype",
+                "f_han",
+                "f_note",
+                "f_inventory",
+                "f_imageurl",
+                "p_ornamentid",
+                "o_fragmentid",
+                "o_relationship",
+                "o_ornament",
+                "o_color1",
+                "o_color2",
+                "encrustcolor",
+            "o_encrustcolor1",
+            "o_encrustcolor2",
+            "o_recordenteredon",
+            })
+            groupby_cols = [c for c in ui_cols if c.lower() not in _GROUPBY_EXCLUDE]
+            sel_x.options = groupby_cols
 
             preferred = [
                 "l_site",
                 "l_sector",
                 "l_square",
-                "l_context",
-                "l_layername",
                 "f_piecetype",
                 "f_category",
                 "f_form",
-                "f_fragmenttype",
                 "f_technology",
             ]
 
-            if not sel_x.value or sel_x.value not in ui_cols:
-                default_x = next((c for c in preferred if c in ui_cols), None) or (
-                    ui_cols[0] if ui_cols else None
+            if not sel_x.value or sel_x.value not in groupby_cols:
+                default_x = next((c for c in preferred if c in groupby_cols), None) or (
+                    groupby_cols[0] if groupby_cols else None
                 )
                 state["_suppress_x_change"] = True
                 sel_x.set_value(default_x)
