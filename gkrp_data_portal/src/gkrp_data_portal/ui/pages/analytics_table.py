@@ -305,7 +305,7 @@ def page_analytics_table() -> None:
 
         all_sites = state["_all_sites"]
 
-        sel_site_t.set_options(all_sites, label="Site")
+        sel_site_t.set_options(all_sites)
         sel_site_t.update()
 
         # Apply cascade based on current selections
@@ -324,7 +324,7 @@ def page_analytics_table() -> None:
                 site_hier = hierarchy.get(site, {})
                 filtered_sectors.update(site_hier.keys())
             filtered_sectors = sorted(filtered_sectors)
-            sel_sector_t.set_options(filtered_sectors, label="Sector")
+            sel_sector_t.set_options(filtered_sectors)
             sel_sector_t.update()
 
             # If current sector selection is no longer valid, clear it
@@ -354,7 +354,7 @@ def page_analytics_table() -> None:
                     sector_hier = site_hier.get(sector, {})
                     filtered_squares.update(sector_hier.keys())
             filtered_squares = sorted(filtered_squares)
-            sel_square_t.set_options(filtered_squares, label="Square")
+            sel_square_t.set_options(filtered_squares)
             sel_square_t.update()
 
             current_square = _select_to_list(sel_square_t)
@@ -385,7 +385,7 @@ def page_analytics_table() -> None:
                         square_layers = sector_hier.get(square, [])
                         filtered_layers.update(square_layers)
             filtered_layers = sorted(filtered_layers)
-            sel_layer_t.set_options(filtered_layers, label="Layer")
+            sel_layer_t.set_options(filtered_layers)
             sel_layer_t.update()
 
             current_layer = _select_to_list(sel_layer_t)
