@@ -78,7 +78,7 @@ def page_analytics_table() -> None:
 
             sel_query = ui.select(
                 options=list(QUERY_OPTIONS.keys()),
-                value="Filter #1 (Layers + Fragments)",
+                value="Filter #2 (Layers + Fragments + Ornaments)",
                 label="Predefined query",
             ).classes("w-full")
 
