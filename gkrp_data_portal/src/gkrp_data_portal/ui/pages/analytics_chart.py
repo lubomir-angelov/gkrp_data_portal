@@ -59,7 +59,6 @@ def page_analytics_chart() -> None:
         "query_id": "q2",
         "_refreshing": False,
         "_suppress_x_change": False,
-        "_debounce_timer": None,
         "_hierarchy": {},
         "_all_sites": [],
         "_all_sectors": [],
@@ -80,7 +79,6 @@ def page_analytics_chart() -> None:
 
             with ui.row().classes("w-full gap-2 items-center"):
                 btn_run = ui.button("Run query", icon="play_arrow").classes("flex-1")
-                sw_autorun = ui.switch("Auto-run", value=True).props("dense")
 
             with ui.scroll_area().classes(
                 "w-full h-[320px] border rounded p-2 bg-white"
@@ -130,13 +128,16 @@ def page_analytics_chart() -> None:
                     .props("dense")
                 )
 
-            inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
+            sel_limit = ui.select(
+                options=[100, 200, 500, 1000, 2500, 5000, "max"],
+                value=DEFAULT_LIMIT,
+                label="limit",
+            ).classes("w-full")
 
         # Center panel (chart only)
         with ui.column().classes("flex-1 min-w-0"):
             ui.label("Chart").classes("text-subtitle1 font-medium")
             status = ui.label("").classes("text-sm text-gray-600")
-            pending = ui.label("").classes("text-xs text-orange-700")
             dbg = ui.label("").classes("text-xs text-gray-500")
 
             chart = (
@@ -523,8 +524,12 @@ def page_analytics_chart() -> None:
             "Layer": _select_to_list(sel_layer),
         }
 
-        limit = int(inp_limit.value or DEFAULT_LIMIT)
-        limit = max(1, min(limit, TABLE_MAX_LIMIT))
+        limit_raw = sel_limit.value
+        if limit_raw == "max":
+            limit = TABLE_MAX_LIMIT
+        else:
+            limit = int(limit_raw or DEFAULT_LIMIT)
+            limit = max(1, min(limit, TABLE_MAX_LIMIT))
 
         frag_filters_map: dict[str, list[str] | None] = {}
         for label, widget in frag_filters:
@@ -639,8 +644,11 @@ def page_analytics_chart() -> None:
         else:
             selected_squares = []
 
-        if (len(selected_sites) == 1 and len(selected_sectors) == 1
-                and len(selected_squares) == 1):
+        if (
+            len(selected_sites) == 1
+            and len(selected_sectors) == 1
+            and len(selected_squares) == 1
+        ):
             sq_h = hierarchy.get(selected_sites[0], {}).get(selected_sectors[0], {})
             layer_vals = sorted(sq_h.get(selected_squares[0], []))
         elif len(selected_sites) == 1 and len(selected_sectors) == 1:
@@ -709,7 +717,10 @@ def page_analytics_chart() -> None:
             f = _read_filters()
             notes: list[str] = []
 
-            chart_fetch = min(max(f["limit"], 0), CHART_MAX_FETCH)
+            if f["limit"] >= TABLE_MAX_LIMIT:
+                chart_fetch = f["limit"]
+            else:
+                chart_fetch = min(max(f["limit"], 0), CHART_MAX_FETCH)
 
             res = result_for(
                 f["query_id"],
@@ -778,47 +789,28 @@ def page_analytics_chart() -> None:
         finally:
             state["_refreshing"] = False
 
-    def _trigger_refresh() -> None:
-        """Execute the actual refresh (called after debounce)."""
-        if sw_autorun.value:
-            pending.set_text("")
-            refresh()
-        else:
-            pending.set_text("Filters changed \u2014 click \u201cRun query\u201d")
-
-    def request_refresh() -> None:
-        """Schedule a debounced refresh (300 ms)."""
-        if state.get("_debounce_timer"):
-            state["_debounce_timer"].cancel()
-        state["_debounce_timer"] = ui.timer(0.3, once=True, callback=_trigger_refresh)
-
     def _on_layer_change() -> None:
         _populate_layer_options_hierarchical()
-        request_refresh()
 
-    btn_run.on("click", lambda e: (pending.set_text(""), refresh()))
+    btn_run.on("click", lambda e: refresh())
 
     def _on_query_change(e) -> None:
-        request_refresh()
+        refresh()
 
     sel_query.on("change", _on_query_change)
     sel_site.on("change", lambda e: _on_layer_change())
     sel_sector.on("change", lambda e: _on_layer_change())
     sel_square.on("change", lambda e: _on_layer_change())
     sel_layer.on("change", lambda e: _on_layer_change())
-    inp_limit.on("change", lambda e: request_refresh())
+    sel_limit.on("change", lambda e: refresh())
 
     def _on_x_change(e) -> None:
         if state.get("_suppress_x_change"):
             return
-        request_refresh()
+        refresh()
 
     sel_x.on("change", _on_x_change)
 
-    # Fetch hierarchy cache immediately so cascading dropdowns work
-    # on first selection without waiting for a full refresh.
-    _fetch_layer_cache()
-    _populate_layer_options_hierarchical()
     refresh()
 
 
