@@ -13,7 +13,11 @@ from typing import Any
 
 from nicegui import app, ui
 
-from gkrp_data_portal.ui.repository.analytics_repo import extract_image_urls
+from gkrp_data_portal.db.session import session_scope
+from gkrp_data_portal.ui.repository.analytics_repo import (
+    extract_image_urls,
+    get_layer_hierarchy,
+)
 
 from .analytics_common import (
     DEFAULT_LIMIT,
@@ -22,6 +26,19 @@ from .analytics_common import (
     result_for,
     ui_columns,
 )
+
+
+def _select_to_list(widget: ui.select) -> list[str] | None:
+    """Convert a NiceGUI select widget value to a filtered list of strings.
+
+    Returns None when the widget has no selection.
+    """
+    vals = widget.value
+    if isinstance(vals, list) and vals:
+        return [str(v).strip() for v in vals if str(v).strip()]
+    if isinstance(vals, str) and vals.strip():
+        return [vals.strip()]
+    return None
 
 
 @ui.page("/analytics/table")
@@ -36,17 +53,22 @@ def page_analytics_table() -> None:
     Notes:
         - Date filters are intentionally removed (date_from/date_to are passed as None).
         - Column visibility is controlled via checkboxes and AG Grid column visibility APIs.
-        - Functionality is intentionally unchanged; this is a readability/docstrings pass.
+        - Layer filters follow a Site->Sector->Square->Layer hierarchy.
     """
     ui.label("Analytics — Table").classes("text-h5")
 
     # Mutable state shared across callbacks (kept in-memory for this page instance).
     state: dict[str, Any] = {
-        "query_id": "q1",
+        "query_id": "q2",
         "_refreshing": False,
         "selected_columns": set(),
         "last_items": [],
         "last_columns": [],
+        "_hierarchy": {},
+        "_all_sites": [],
+        "_all_sectors": [],
+        "_all_squares": [],
+        "_all_layers": [],
     }
 
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
@@ -67,62 +89,37 @@ def page_analytics_table() -> None:
             with ui.scroll_area().classes(
                 "w-full h-[200px] border rounded p-2 bg-white"
             ):
-                layer_filters_table: list[tuple[str, Any]] = [
-                    (
-                        "Site",
-                        ui.select(
-                            options=[],
-                            label="Site",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Sector",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Sector",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Square",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Square",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Layer",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Layer",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                ]
+                sel_site_t = ui.select(
+                    options=[],
+                    label="Site",
+                    multiple=True,
+                    clearable=True,
+                    with_input=True,
+                ).classes("w-full").props("dense")
 
-            inp_q = (
-                ui.input("free text (inventory/note/piecetype or finds fields)")
-                .props("clearable")
-                .classes("w-full")
-            )
+                sel_sector_t = ui.select(
+                    options=[],
+                    multiple=True,
+                    clearable=True,
+                    with_input=True,
+                    label="Sector",
+                ).classes("w-full").props("dense")
+
+                sel_square_t = ui.select(
+                    options=[],
+                    multiple=True,
+                    clearable=True,
+                    with_input=True,
+                    label="Square",
+                ).classes("w-full").props("dense")
+
+                sel_layer_t = ui.select(
+                    options=[],
+                    multiple=True,
+                    clearable=True,
+                    with_input=True,
+                    label="Layer",
+                ).classes("w-full").props("dense")
 
             inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
 
@@ -154,10 +151,10 @@ def page_analytics_table() -> None:
                             "resizable": True,
                             "sortable": True,
                             "filter": True,
-                            "floatingFilter": True,  # shows filter UI below header
+                            "floatingFilter": True,
                             "menuTabs": [
                                 "filterMenuTab"
-                            ],  # focus the header menu on filtering
+                            ],
                         },
                         "animateRows": True,
                         "pagination": True,
@@ -244,7 +241,6 @@ def page_analytics_table() -> None:
 
         Keeps a stable selection set in state['selected_columns'] where possible.
         """
-        # Remove permanently hidden columns
         cleaned = all_columns
 
         current = (
@@ -263,30 +259,152 @@ def page_analytics_table() -> None:
         with columns_container:
             for c in cleaned:
                 cb = ui.checkbox(c, value=(c in current)).classes("text-sm")
-                # cb.on("change", lambda e, col=c: _set_column_visible(col, e.value))
                 cb.on("change", lambda e: _apply_view())
                 checkboxes[c] = cb
 
         state["selected_columns"] = current
 
+    def _fetch_layer_cache() -> None:
+        """Fetch the layer hierarchy from the database and cache it in state."""
+        with session_scope() as db:
+            hierarchy_data = get_layer_hierarchy(db, query_id="q2")
+        state["_hierarchy"] = hierarchy_data.get("hierarchy", {})
+        state["_all_sites"] = hierarchy_data.get("all_sites", [])
+        state["_all_sectors"] = hierarchy_data.get("all_sectors", [])
+        state["_all_squares"] = hierarchy_data.get("all_squares", [])
+        state["_all_layers"] = hierarchy_data.get("all_layers", [])
+
+    def _populate_layer_options_hierarchical() -> None:
+        """Populate layer dropdown options based on the cached hierarchy.
+
+        Enforces the Site -> Sector -> Square -> Layer cascade:
+        - Selecting a site filters sectors, squares, and layers to that site.
+        - Selecting a sector filters squares and layers to that sector.
+        - Selecting a square filters layers to that square.
+        """
+        hierarchy = state["_hierarchy"]
+
+        sel_site_t.clear()
+        sel_sector_t.clear()
+        sel_square_t.clear()
+        sel_layer_t.clear()
+
+        all_sites = state["_all_sites"]
+        all_sectors = state["_all_sectors"]
+        all_squares = state["_all_squares"]
+        all_layers = state["_all_layers"]
+
+        sel_site_t.set_options(all_sites, label="Site")
+        sel_sector_t.set_options(all_sectors, label="Sector")
+        sel_square_t.set_options(all_squares, label="Square")
+        sel_layer_t.set_options(all_layers, label="Layer")
+
+        sel_site_t.update()
+        sel_sector_t.update()
+        sel_square_t.update()
+        sel_layer_t.update()
+
+        # Apply cascade based on current selections
+        site_val = _select_to_list(sel_site_t)
+        sector_val = _select_to_list(sel_sector_t)
+        square_val = _select_to_list(sel_square_t)
+
+        # Determine effective site(s) for filtering
+        if site_val:
+            sites_to_use = site_val
+        else:
+            sites_to_use = all_sites
+
+        # Filter sectors based on selected sites
+        if sites_to_use:
+            filtered_sectors = set()
+            for site in sites_to_use:
+                site_hier = hierarchy.get(site, {})
+                filtered_sectors.update(site_hier.keys())
+            filtered_sectors = sorted(filtered_sectors)
+            sel_sector_t.set_options(filtered_sectors, label="Sector")
+            sel_sector_t.update()
+
+            # If current sector selection is no longer valid, clear it
+            current_sector = _select_to_list(sel_sector_t)
+            if current_sector:
+                valid_sectors = set(filtered_sectors)
+                for s in current_sector:
+                    if s not in valid_sectors:
+                        sel_sector_t.set_value(None)
+                        break
+        else:
+            sel_sector_t.set_value(None)
+
+        # Determine effective sectors
+        sector_sel = _select_to_list(sel_sector_t)
+        if sector_sel:
+            sectors_to_use = sector_sel
+        else:
+            sectors_to_use = (sel_sector_t.options or [])[:]
+
+        # Filter squares based on selected sites and sectors
+        if sites_to_use and sectors_to_use:
+            filtered_squares = set()
+            for site in sites_to_use:
+                site_hier = hierarchy.get(site, {})
+                for sector in sectors_to_use:
+                    sector_hier = site_hier.get(sector, {})
+                    filtered_squares.update(sector_hier.keys())
+            filtered_squares = sorted(filtered_squares)
+            sel_square_t.set_options(filtered_squares, label="Square")
+            sel_square_t.update()
+
+            current_square = _select_to_list(sel_square_t)
+            if current_square:
+                valid_squares = set(filtered_squares)
+                for sq in current_square:
+                    if sq not in valid_squares:
+                        sel_square_t.set_value(None)
+                        break
+        else:
+            sel_square_t.set_value(None)
+
+        # Determine effective squares
+        square_sel = _select_to_list(sel_square_t)
+        if square_sel:
+            squares_to_use = square_sel
+        else:
+            squares_to_use = (sel_square_t.options or [])[:]
+
+        # Filter layers based on selected sites, sectors, and squares
+        if sites_to_use and sectors_to_use and squares_to_use:
+            filtered_layers = set()
+            for site in sites_to_use:
+                site_hier = hierarchy.get(site, {})
+                for sector in sectors_to_use:
+                    sector_hier = site_hier.get(sector, {})
+                    for square in squares_to_use:
+                        square_layers = sector_hier.get(square, [])
+                        filtered_layers.update(square_layers)
+            filtered_layers = sorted(filtered_layers)
+            sel_layer_t.set_options(filtered_layers, label="Layer")
+            sel_layer_t.update()
+
+            current_layer = _select_to_list(sel_layer_t)
+            if current_layer:
+                valid_layers = set(filtered_layers)
+                for item in current_layer:
+                    if l not in valid_layers:
+                        sel_layer_t.set_value(None)
+                        break
+        else:
+            sel_layer_t.set_value(None)
+
     def _read_filters() -> dict[str, Any]:
         """Read current filter widgets and normalize the filter payload."""
-        query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
+        query_id = QUERY_OPTIONS.get(sel_query.value, "q2")
 
         layer_filters_map: dict[str, list[str] | None] = {}
-        for label, widget in layer_filters_table:
-            if isinstance(widget, ui.select):
-                vals = widget.value
-                if isinstance(vals, list) and vals:
-                    layer_filters_map[label] = [
-                        str(v).strip() for v in vals if str(v).strip()
-                    ]
-                elif isinstance(vals, str) and vals.strip():
-                    layer_filters_map[label] = [vals.strip()]
-                else:
-                    layer_filters_map[label] = None
-
-        q = (inp_q.value or "").strip() or None
+        layer_filters_map["Site"] = _select_to_list(sel_site_t)
+        layer_filters_map["Sector"] = _select_to_list(sel_sector_t)
+        layer_filters_map["Square"] = _select_to_list(sel_square_t)
+        layer_filters_map["Layer"] = _select_to_list(sel_layer_t)
 
         limit = int(inp_limit.value or DEFAULT_LIMIT)
         limit = max(1, min(limit, TABLE_MAX_LIMIT))
@@ -299,7 +417,6 @@ def page_analytics_table() -> None:
         return {
             "query_id": query_id,
             "layer_filters": layer_filters_map,
-            "q": q,
             "limit": limit,
             "offset": 0,
         }
@@ -310,12 +427,14 @@ def page_analytics_table() -> None:
             return
         state["_refreshing"] = True
         try:
+            _fetch_layer_cache()
+            _populate_layer_options_hierarchical()
+
             f = _read_filters()
 
             res = result_for(
                 f["query_id"],
                 layer_filters=f.get("layer_filters"),
-                q=f["q"],
                 limit=f["limit"],
                 offset=f["offset"],
             )
@@ -369,15 +488,36 @@ def page_analytics_table() -> None:
             pending.set_text("")
             refresh()
         else:
-            pending.set_text("Filters changed — click “Run query”")
+            pending.set_text("Filters changed - click Run query")
 
     btn_run.on("click", lambda e: (pending.set_text(""), refresh()))
 
     sel_query.on("change", lambda e: request_refresh())
-    for label, widget in layer_filters_table:
-        widget.on("change", lambda e: request_refresh())
-    inp_q.on("change", lambda e: request_refresh())
+
+    def _on_site_change(e) -> None:
+        _populate_layer_options_hierarchical()
+        request_refresh()
+
+    def _on_sector_change(e) -> None:
+        _populate_layer_options_hierarchical()
+        request_refresh()
+
+    def _on_square_change(e) -> None:
+        _populate_layer_options_hierarchical()
+        request_refresh()
+
+    def _on_layer_change(e) -> None:
+        _populate_layer_options_hierarchical()
+        request_refresh()
+
+    sel_site_t.on("change", _on_site_change)
+    sel_sector_t.on("change", _on_sector_change)
+    sel_square_t.on("change", _on_square_change)
+    sel_layer_t.on("change", _on_layer_change)
+
     inp_limit.on("change", lambda e: request_refresh())
 
     # Initial load
+    _fetch_layer_cache()
+    _populate_layer_options_hierarchical()
     refresh()

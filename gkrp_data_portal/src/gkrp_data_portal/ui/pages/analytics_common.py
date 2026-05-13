@@ -9,12 +9,10 @@ from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
     AnalyticsResult,
     query_finds,
-    query_q1_layers_fragments,
     query_q2_layers_fragments_ornaments,
 )
 
 QUERY_OPTIONS: dict[str, str] = {
-    "Filter #1 (Layers + Fragments)": "q1",
     "Filter #2 (Layers + Fragments + Ornaments)": "q2",
     "Finds (tblfinds)": "finds",
 }
@@ -90,8 +88,6 @@ def parse_date(s: Optional[str]) -> Optional[date]:
 
 def result_for(query_id: str, **kwargs) -> AnalyticsResult:
     with session_scope() as db:
-        if query_id == "q1":
-            return query_q1_layers_fragments(db, **kwargs)
         if query_id == "q2":
             return query_q2_layers_fragments_ornaments(db, **kwargs)
         return query_finds(db, **kwargs)

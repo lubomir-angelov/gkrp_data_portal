@@ -172,7 +172,7 @@ def _build_where(
     # Free-text: differs slightly by query (which aliases exist)
     if q:
         params["q"] = f"%{q}%"
-        if query_id in ("q1", "q2"):
+        if query_id in ("q2",):
             clauses.append(
                 "(COALESCE(f.inventory,'') ILIKE :q OR COALESCE(f.note,'') ILIKE :q OR COALESCE(f.piecetype::text,'') ILIKE :q)"
             )
@@ -181,8 +181,8 @@ def _build_where(
                 "(COALESCE(fi.description,'') ILIKE :q OR COALESCE(fi.findtype,'') ILIKE :q OR COALESCE(fi.inventory,'') ILIKE :q)"
             )
 
-    # Fragment field filters (only applied for q1/q2 which have f alias)
-    if frag_filters and query_id in ("q1", "q2"):
+    # Fragment field filters (only applied for q2 which has f alias)
+    if frag_filters and query_id in ("q2",):
         _apply_frag_filters(clauses, params, frag_filters)
 
     if not clauses:
@@ -208,56 +208,6 @@ def _run_sql(
 def _count_sql(db: Session, *, count_sql: str, params: dict[str, Any]) -> int:
     row = db.execute(text(count_sql), params).scalar_one()
     return int(row)
-
-
-def query_q1_layers_fragments(
-    db: Session,
-    *,
-    site: Optional[str] = None,
-    sector: Optional[str] = None,
-    square: Optional[str] = None,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
-    q: Optional[str] = None,
-    limit: int = 500,
-    offset: int = 0,
-    frag_filters: Optional[dict[str, Any]] = None,
-    layer_filters: Optional[dict[str, Any]] = None,
-) -> AnalyticsResult:
-    """Filter #1: tbllayers INNER JOIN tblfragments."""
-    select_cols = _model_select_list("l_", "l", Tbllayer) + _model_select_list(
-        "f_", "f", Tblfragment
-    )
-    base = f"""
-    SELECT
-      {", ".join(select_cols)}
-    FROM tbllayers l
-    INNER JOIN tblfragments f ON l.layerid = f.locationid
-    """
-
-    where_sql, params = _build_where(
-        query_id="q1",
-        site=site,
-        sector=sector,
-        square=square,
-        date_from=date_from,
-        date_to=date_to,
-        q=q,
-        frag_filters=frag_filters,
-        layer_filters=layer_filters,
-    )
-
-    sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC"
-    count_sql = f"SELECT COALESCE(SUM(f_count), 0) FROM ({base}\n{where_sql}) x"
-
-    rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
-    total = _count_sql(db, count_sql=count_sql, params=params)
-
-    items = [dict(r) for r in rows]
-    columns = (
-        list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
-    )
-    return AnalyticsResult(items=items, total=total, columns=columns)
 
 
 def query_q2_layers_fragments_ornaments(
@@ -387,27 +337,27 @@ def extract_image_urls(items: list[dict[str, Any]]) -> list[str]:
 
 # Column definitions for DISTINCT queries: (label, sql_col_expr, query_ids)
 _DISTINCT_COL_DEFS: list[tuple[str, str, tuple[str, ...]]] = [
-    ("Site", "l.site", ("q1", "q2", "finds")),
-    ("Sector", "l.sector", ("q1", "q2", "finds")),
-    ("Square", "l.square", ("q1", "q2", "finds")),
-    ("Layer", "l.layer", ("q1", "q2", "finds")),
-    ("Piecetype", "f.piecetype", ("q1", "q2")),
-    ("Technology", "f.technology", ("q1", "q2")),
-    ("Baking", "f.baking", ("q1", "q2")),
-    ("Color / Primary color", "f.primarycolor", ("q1", "q2")),
-    ("Covering", "f.covering", ("q1", "q2")),
-    ("Surface", "f.surface", ("q1", "q2")),
-    ("Wall thickness", "f.wallthickness", ("q1", "q2")),
-    ("Handle type", "f.handletype", ("q1", "q2")),
-    ("Handle size", "f.handlesize", ("q1", "q2")),
-    ("Bottom type", "f.bottomtype", ("q1", "q2")),
-    ("Category", "f.category", ("q1", "q2")),
-    ("Form", "f.form", ("q1", "q2")),
-    ("Type", "f.type", ("q1", "q2")),
-    ("Subtype", "f.subtype", ("q1", "q2")),
-    ("Variant", "f.variant", ("q1", "q2")),
-    ("Note", "f.note", ("q1", "q2")),
-    ("Inventory", "f.inventory", ("q1", "q2")),
+    ("Site", "l.site", ("q2", "finds")),
+    ("Sector", "l.sector", ("q2", "finds")),
+    ("Square", "l.square", ("q2", "finds")),
+    ("Layer", "l.layer", ("q2", "finds")),
+    ("Piecetype", "f.piecetype", ("q2",)),
+    ("Technology", "f.technology", ("q2",)),
+    ("Baking", "f.baking", ("q2",)),
+    ("Color / Primary color", "f.primarycolor", ("q2",)),
+    ("Covering", "f.covering", ("q2",)),
+    ("Surface", "f.surface", ("q2",)),
+    ("Wall thickness", "f.wallthickness", ("q2",)),
+    ("Handle type", "f.handletype", ("q2",)),
+    ("Handle size", "f.handlesize", ("q2",)),
+    ("Bottom type", "f.bottomtype", ("q2",)),
+    ("Category", "f.category", ("q2",)),
+    ("Form", "f.form", ("q2",)),
+    ("Type", "f.type", ("q2",)),
+    ("Subtype", "f.subtype", ("q2",)),
+    ("Variant", "f.variant", ("q2",)),
+    ("Note", "f.note", ("q2",)),
+    ("Inventory", "f.inventory", ("q2",)),
     ("Primary", "o.primary_", ("q2",)),
     ("Secondary", "o.secondary", ("q2",)),
     ("Tertiary", "o.tertiary", ("q2",)),
@@ -437,9 +387,7 @@ def get_distinct_values(
     are returned.  The result is keyed by the UI label (e.g. ``"Piecetype"``).
     """
     # Determine which table aliases apply
-    if query_id == "q1":
-        base = "FROM tbllayers l INNER JOIN tblfragments f ON l.layerid = f.locationid"
-    elif query_id == "q2":
+    if query_id == "q2":
         base = (
             "FROM tbllayers l "
             "INNER JOIN tblfragments f ON l.layerid = f.locationid "
@@ -493,3 +441,145 @@ def get_distinct_values(
         result[label] = [r["v"] for r in rows if r["v"]]
 
     return result
+
+
+def get_distinct_values_for_field(
+    db: Session,
+    *,
+    query_id: str,
+    field: str,
+    site: Optional[str] = None,
+    sector: Optional[str] = None,
+    square: Optional[str] = None,
+) -> list[str]:
+    """Return DISTINCT values for a single layer field, filtered by parent selections.
+
+    Hierarchy: Site -> Sector -> Square -> Layer
+    Each level is filtered by the values selected above it.
+    """
+    if query_id == "q2":
+        base = (
+            "FROM tbllayers l "
+            "INNER JOIN tblfragments f ON l.layerid = f.locationid "
+            "INNER JOIN tblornaments o ON f.fragmentid = o.fragmentid"
+        )
+    elif query_id == "finds":
+        base = (
+            "FROM tblfinds fi "
+            "INNER JOIN tbllayers l ON l.layerid = fi.layerid "
+            "LEFT JOIN tblfragments f ON f.fragmentid = fi.fragmentid "
+            "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
+        )
+    else:
+        return []
+
+    clauses: list[str] = []
+    params: dict[str, Any] = {}
+
+    if site:
+        clauses.append("l.site ILIKE :site")
+        params["site"] = f"%{site}%"
+    if sector:
+        clauses.append("l.sector ILIKE :sector")
+        params["sector"] = f"%{sector}%"
+    if square:
+        clauses.append("l.square ILIKE :square")
+        params["square"] = f"%{square}%"
+
+    col_map = {
+        "Site": "l.site",
+        "Sector": "l.sector",
+        "Square": "l.square",
+        "Layer": "l.layer",
+    }
+    col_expr = col_map.get(field)
+    if not col_expr:
+        return []
+
+    where = "WHERE " + " AND ".join(clauses) if clauses else "WHERE 1=1"
+    sql = f"SELECT DISTINCT {col_expr}::text AS v {base} {where} AND {col_expr} IS NOT NULL ORDER BY v"
+    rows = db.execute(text(sql), params).mappings().all()
+    return [r["v"] for r in rows if r["v"]]
+
+
+def get_layer_hierarchy(
+    db: Session,
+    *,
+    query_id: str,
+) -> dict[str, list[str]]:
+    """Return the full site->sector->square->layer hierarchy as nested dicts.
+
+    Returns:
+        {
+            "Site": {"A": {"Sector": ["S1", "S2"], ...}, ...},
+            "Sector": {"S1": {"Square": ["Q1", "Q2"], ...}, ...},
+            "Square": {"Q1": {"Layer": ["L1", "L2"], ...}, ...},
+            "Layer": ["L1", "L2", ...],
+            "all_sites": ["A", "B"],
+            "all_sectors": ["S1", "S2"],
+            "all_squares": ["Q1", "Q2"],
+            "all_layers": ["L1", "L2"],
+        }
+    """
+    if query_id == "q2":
+        base = (
+            "FROM tbllayers l "
+            "INNER JOIN tblfragments f ON l.layerid = f.locationid "
+            "INNER JOIN tblornaments o ON f.fragmentid = o.fragmentid"
+        )
+    elif query_id == "finds":
+        base = (
+            "FROM tblfinds fi "
+            "INNER JOIN tbllayers l ON l.layerid = fi.layerid "
+            "LEFT JOIN tblfragments f ON f.fragmentid = fi.fragmentid "
+            "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
+        )
+    else:
+        return {}
+
+    # Fetch all combinations in one query
+    sql = f"""
+        SELECT DISTINCT l.site, l.sector, l.square, l.layer
+        {base}
+        WHERE l.site IS NOT NULL AND l.sector IS NOT NULL
+          AND l.square IS NOT NULL AND l.layer IS NOT NULL
+        ORDER BY l.site, l.sector, l.square, l.layer
+    """
+    rows = db.execute(text(sql)).mappings().all()
+
+    hierarchy: dict[str, Any] = {}
+    all_sites: set[str] = set()
+    all_sectors: set[str] = set()
+    all_squares: set[str] = set()
+    all_layers: set[str] = set()
+
+    for r in rows:
+        site, sector, square, layer = r["site"], r["sector"], r["square"], r["layer"]
+        all_sites.add(site)
+        all_sectors.add(sector)
+        all_squares.add(square)
+        all_layers.add(layer)
+
+        if site not in hierarchy:
+            hierarchy[site] = {}
+        if sector not in hierarchy[site]:
+            hierarchy[site][sector] = {}
+        if square not in hierarchy[site][sector]:
+            hierarchy[site][sector][square] = set()
+        hierarchy[site][sector][square].add(layer)
+
+    # Convert sets to sorted lists
+    for site in hierarchy:
+        for sector in hierarchy[site]:
+            hierarchy[site][sector] = dict(
+                (sq, sorted(layers))
+                for sq, layers in hierarchy[site][sector].items()
+            )
+
+    return {
+        "hierarchy": hierarchy,
+        "all_sites": sorted(all_sites),
+        "all_sectors": sorted(all_sectors),
+        "all_squares": sorted(all_squares),
+        "all_layers": sorted(all_layers),
+    }
