@@ -1,9 +1,8 @@
 """NiceGUI page: Analytics (TABLE only).
 
 Layout:
-- Left: query selector, filters, column toggles
+- Left: query selector, filters
 - Center: grid (scrollable, with per-column dropdown filters)
-- Right: images (from fragment/find image_url)
 """
 
 from __future__ import annotations
@@ -15,7 +14,6 @@ from nicegui import app, ui
 
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
-    extract_image_urls,
     get_layer_hierarchy,
 )
 
@@ -47,12 +45,11 @@ def page_analytics_table() -> None:
 
     This page provides:
     - a left panel for selecting a predefined query and applying filters,
-    - a center panel with an interactive AG Grid table (filterable/sortable),
-    - a right panel that previews images extracted from the result rows.
+    - a center panel with an interactive AG Grid table (filterable/sortable).
 
     Notes:
         - Date filters are intentionally removed (date_from/date_to are passed as None).
-        - Column visibility is controlled via checkboxes and AG Grid column visibility APIs.
+        - All columns are shown (no column toggles).
         - Layer filters follow a Site->Sector->Square->Layer hierarchy.
     """
     ui.label("Analytics — Table").classes("text-h5")
@@ -61,7 +58,6 @@ def page_analytics_table() -> None:
     state: dict[str, Any] = {
         "query_id": "q2",
         "_refreshing": False,
-        "selected_columns": set(),
         "last_items": [],
         "last_columns": [],
         "_hierarchy": {},
@@ -84,10 +80,9 @@ def page_analytics_table() -> None:
 
             with ui.row().classes("w-full gap-2 items-center"):
                 btn_run = ui.button("Run query", icon="play_arrow").classes("flex-1")
-                sw_autorun = ui.switch("Auto-run", value=True).props("dense")
 
             with ui.scroll_area().classes(
-                "w-full h-[200px] border rounded p-2 bg-white"
+                "w-full h-[420px] border rounded p-2 bg-white"
             ):
                 sel_site_t = (
                     ui.select(
@@ -139,22 +134,10 @@ def page_analytics_table() -> None:
 
             inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
 
-            ui.separator()
-            ui.label("Columns").classes("text-subtitle1 font-medium")
-
-            with ui.row().classes("w-full justify-between"):
-                btn_select_all = ui.button("Select all")
-                btn_clear_all = ui.button("Deselect all")
-
-            columns_container = ui.scroll_area().classes(
-                "w-full h-[420px] border rounded p-2 bg-white"
-            )
-
         # Center panel (grid)
         with ui.column().classes("flex-1 min-w-0"):
             ui.label("Table (scrollable)").classes("text-subtitle1 font-medium")
             status = ui.label("").classes("text-sm text-gray-600")
-            pending = ui.label("").classes("text-xs text-orange-700")
             dbg = ui.label("").classes("text-xs text-gray-500")
 
             # AG Grid: horizontal scrollbar stays at the bottom of the grid viewport
@@ -185,16 +168,6 @@ def page_analytics_table() -> None:
                 "Tip: use the filter UI in the header (set filter dropdown shows available values)."
             ).classes("text-xs text-gray-500 mt-1")
 
-        # Right panel (images)
-        with ui.column().classes("w-[320px] shrink-0"):
-            ui.label("Images").classes("text-subtitle1 font-medium")
-            images_box = ui.scroll_area().classes(
-                "w-full h-[820px] border rounded p-2 bg-white"
-            )
-
-    # Column checkbox widgets keyed by column name.
-    checkboxes: dict[str, Any] = {}
-
     def _set_grid(items: list[dict[str, Any]], visible_cols: list[str]) -> None:
         """Populate AG Grid with the given rows and visible columns.
 
@@ -221,62 +194,16 @@ def page_analytics_table() -> None:
         grid.options["rowData"] = row_data
         grid.update()
 
-    def _set_images(urls: list[str]) -> None:
-        """Render up to 50 images from extracted URLs in the right panel."""
-        images_box.clear()
-        with images_box:
-            if not urls:
-                ui.label("No image URLs in current result.")
-                return
-            for u in urls[:50]:
-                ui.image(u).classes("w-full").props("fit=contain")
-
     def _apply_view() -> None:
-        """Apply the current checkbox selections to the grid and image panel.
-
-        If no columns are selected, a fallback of the first 25 columns is used.
-        """
+        """Apply all columns to the grid."""
         items: list[dict[str, Any]] = state.get("last_items", [])
         ui_cols: list[str] = state.get("last_columns", [])
 
-        visible_cols = [c for c, cb in checkboxes.items() if cb.value]
-        if not visible_cols:
-            visible_cols = ui_cols[:25] if ui_cols else []
-
-        _set_grid(items, visible_cols)
-        _set_images(extract_image_urls(items))
+        _set_grid(items, ui_cols)
 
         dbg.set_text(
-            f"query={state.get('query_id')} table_rows={len(items)} cols={len(visible_cols)}"
+            f"query={state.get('query_id')} table_rows={len(items)} cols={len(ui_cols)}"
         )
-
-    def _rebuild_column_checkboxes(all_columns: list[str]) -> None:
-        """Rebuild the checkbox list for all columns.
-
-        Keeps a stable selection set in state['selected_columns'] where possible.
-        """
-        cleaned = all_columns
-
-        current = (
-            set(cleaned)
-            if not state["selected_columns"]
-            else (set(state["selected_columns"]) & set(cleaned))
-        )
-
-        columns_container.clear()
-        checkboxes.clear()
-
-        def _set_column_visible(col: str, visible: bool) -> None:
-            """Toggle visibility of a single column in AG Grid."""
-            grid.run_grid_method("setColumnsVisible", [col], visible)
-
-        with columns_container:
-            for c in cleaned:
-                cb = ui.checkbox(c, value=(c in current)).classes("text-sm")
-                cb.on("change", lambda e: _apply_view())
-                checkboxes[c] = cb
-
-        state["selected_columns"] = current
 
     def _fetch_layer_cache() -> None:
         """Fetch the layer hierarchy from the database and cache it in state."""
@@ -424,7 +351,7 @@ def page_analytics_table() -> None:
         }
 
     def refresh() -> None:
-        """Run the backend query and refresh grid + images + status labels."""
+        """Run the backend query and refresh grid + status labels."""
         if state.get("_refreshing"):
             return
         state["_refreshing"] = True
@@ -446,15 +373,11 @@ def page_analytics_table() -> None:
                 state["last_items"] = []
                 state["last_columns"] = []
                 _set_grid([], [])
-                _set_images([])
                 dbg.set_text(f"query={f['query_id']} rows=0 total=0")
-                status.set_text("⚠️ No results for current filters.")
+                status.set_text("No results for current filters.")
                 return
 
             ui_cols = ui_columns(res.columns) or list(res.columns)
-
-            if not checkboxes or list(checkboxes.keys()) != ui_cols:
-                _rebuild_column_checkboxes(ui_cols)
 
             state["last_items"] = res.items
             state["last_columns"] = ui_cols
@@ -464,62 +387,33 @@ def page_analytics_table() -> None:
             dbg.set_text(
                 f"query={f['query_id']} table_rows={len(res.items)} total={res.total}"
             )
-            status.set_text(f"✅ Returned {len(res.items)} rows (total {res.total}).")
+            status.set_text(f"Returned {len(res.items)} rows (total {res.total}).")
 
         finally:
             state["_refreshing"] = False
 
-    def _select_all() -> None:
-        """Select all columns and re-render the grid/images."""
-        for cb in checkboxes.values():
-            cb.set_value(True)
-        _apply_view()
+    btn_run.on("click", lambda e: refresh())
 
-    def _deselect_all() -> None:
-        """Deselect all columns and re-render the grid/images."""
-        for cb in checkboxes.values():
-            cb.set_value(False)
-        _apply_view()
-
-    btn_select_all.on("click", lambda e: _select_all())
-    btn_clear_all.on("click", lambda e: _deselect_all())
-
-    def request_refresh() -> None:
-        """Auto-refresh if enabled; otherwise show a 'pending' hint."""
-        if sw_autorun.value:
-            pending.set_text("")
-            refresh()
-        else:
-            pending.set_text("Filters changed - click Run query")
-
-    btn_run.on("click", lambda e: (pending.set_text(""), refresh()))
-
-    sel_query.on("change", lambda e: request_refresh())
+    sel_query.on("change", lambda e: refresh())
 
     def _on_site_change(e) -> None:
         _populate_layer_options_hierarchical()
-        request_refresh()
 
     def _on_sector_change(e) -> None:
         _populate_layer_options_hierarchical()
-        request_refresh()
 
     def _on_square_change(e) -> None:
         _populate_layer_options_hierarchical()
-        request_refresh()
 
     def _on_layer_change(e) -> None:
         _populate_layer_options_hierarchical()
-        request_refresh()
 
     sel_site_t.on("change", _on_site_change)
     sel_sector_t.on("change", _on_sector_change)
     sel_square_t.on("change", _on_square_change)
     sel_layer_t.on("change", _on_layer_change)
 
-    inp_limit.on("change", lambda e: request_refresh())
+    inp_limit.on("change", lambda e: refresh())
 
     # Initial load
-    _fetch_layer_cache()
-    _populate_layer_options_hierarchical()
     refresh()
