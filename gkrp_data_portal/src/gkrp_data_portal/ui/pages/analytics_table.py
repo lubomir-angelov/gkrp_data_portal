@@ -89,37 +89,53 @@ def page_analytics_table() -> None:
             with ui.scroll_area().classes(
                 "w-full h-[200px] border rounded p-2 bg-white"
             ):
-                sel_site_t = ui.select(
-                    options=[],
-                    label="Site",
-                    multiple=True,
-                    clearable=True,
-                    with_input=True,
-                ).classes("w-full").props("dense")
+                sel_site_t = (
+                    ui.select(
+                        options=[],
+                        label="Site",
+                        multiple=True,
+                        clearable=True,
+                        with_input=True,
+                    )
+                    .classes("w-full")
+                    .props("dense")
+                )
 
-                sel_sector_t = ui.select(
-                    options=[],
-                    multiple=True,
-                    clearable=True,
-                    with_input=True,
-                    label="Sector",
-                ).classes("w-full").props("dense")
+                sel_sector_t = (
+                    ui.select(
+                        options=[],
+                        multiple=True,
+                        clearable=True,
+                        with_input=True,
+                        label="Sector",
+                    )
+                    .classes("w-full")
+                    .props("dense")
+                )
 
-                sel_square_t = ui.select(
-                    options=[],
-                    multiple=True,
-                    clearable=True,
-                    with_input=True,
-                    label="Square",
-                ).classes("w-full").props("dense")
+                sel_square_t = (
+                    ui.select(
+                        options=[],
+                        multiple=True,
+                        clearable=True,
+                        with_input=True,
+                        label="Square",
+                    )
+                    .classes("w-full")
+                    .props("dense")
+                )
 
-                sel_layer_t = ui.select(
-                    options=[],
-                    multiple=True,
-                    clearable=True,
-                    with_input=True,
-                    label="Layer",
-                ).classes("w-full").props("dense")
+                sel_layer_t = (
+                    ui.select(
+                        options=[],
+                        multiple=True,
+                        clearable=True,
+                        with_input=True,
+                        label="Layer",
+                    )
+                    .classes("w-full")
+                    .props("dense")
+                )
 
             inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
 
@@ -152,9 +168,7 @@ def page_analytics_table() -> None:
                             "sortable": True,
                             "filter": True,
                             "floatingFilter": True,
-                            "menuTabs": [
-                                "filterMenuTab"
-                            ],
+                            "menuTabs": ["filterMenuTab"],
                         },
                         "animateRows": True,
                         "pagination": True,
@@ -290,24 +304,12 @@ def page_analytics_table() -> None:
         sel_layer_t.clear()
 
         all_sites = state["_all_sites"]
-        all_sectors = state["_all_sectors"]
-        all_squares = state["_all_squares"]
-        all_layers = state["_all_layers"]
 
         sel_site_t.set_options(all_sites, label="Site")
-        sel_sector_t.set_options(all_sectors, label="Sector")
-        sel_square_t.set_options(all_squares, label="Square")
-        sel_layer_t.set_options(all_layers, label="Layer")
-
         sel_site_t.update()
-        sel_sector_t.update()
-        sel_square_t.update()
-        sel_layer_t.update()
 
         # Apply cascade based on current selections
         site_val = _select_to_list(sel_site_t)
-        sector_val = _select_to_list(sel_sector_t)
-        square_val = _select_to_list(sel_square_t)
 
         # Determine effective site(s) for filtering
         if site_val:
@@ -390,7 +392,7 @@ def page_analytics_table() -> None:
             if current_layer:
                 valid_layers = set(filtered_layers)
                 for item in current_layer:
-                    if l not in valid_layers:
+                    if item not in valid_layers:
                         sel_layer_t.set_value(None)
                         break
         else:
