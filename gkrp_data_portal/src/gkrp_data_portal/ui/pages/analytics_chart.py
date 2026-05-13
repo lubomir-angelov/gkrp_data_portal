@@ -815,6 +815,10 @@ def page_analytics_chart() -> None:
 
     sel_x.on("change", _on_x_change)
 
+    # Fetch hierarchy cache immediately so cascading dropdowns work
+    # on first selection without waiting for a full refresh.
+    _fetch_layer_cache()
+    _populate_layer_options_hierarchical()
     refresh()
 
 
