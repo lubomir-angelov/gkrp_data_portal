@@ -41,7 +41,7 @@ from gkrp_data_portal.ui.repository.analytics_repo import (
     get_layer_hierarchy,
 )
 
-_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[4]
+_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
 _CHART_GUIDE_PATH = _PROJECT_ROOT / "CHART.md"
 
 
@@ -157,7 +157,12 @@ def page_analytics_chart() -> None:
 
         # Center panel (chart only)
         with ui.column().classes("flex-1 min-w-0"):
-            ui.label("Chart").classes("text-subtitle1 font-medium")
+            with ui.row().classes("w-full items-center justify-between"):
+                ui.label("Chart").classes("text-subtitle1 font-medium")
+                help_btn = ui.button(
+                    icon="help",
+                ).classes("p-1").style("font-size: 1.2rem;")
+                help_btn.on("click", lambda: help_dialog.open())
             status = ui.label("").classes("text-sm text-gray-600")
             dbg = ui.label("").classes("text-xs text-gray-500")
             chart_type_debug = ui.label("").classes("text-xs text-blue-600")
@@ -246,16 +251,6 @@ def page_analytics_chart() -> None:
                         value=False,
                     ).classes("text-sm")
                     ui.label("Enable all rows for small subset")
-                    ui.button(
-                        "📖",
-                        on_click=lambda: help_dialog.open(),
-                        icon="help",
-                    ).classes("p-1").style("font-size: 1.2rem;")
-
-    # --- Help dialog ---
-    with ui.dialog() as help_dialog, ui.card().classes("w-[600px] max-h-[80vh]"):
-        ui.markdown(_load_chart_guide())
-        ui.button("Затвори", on_click=help_dialog.close).classes("w-full mt-2")
 
         # Right panel (fragments filters)
         with ui.column().classes("w-[320px] shrink-0"):
@@ -932,6 +927,11 @@ def page_analytics_chart() -> None:
     use_all_rows.on("change", lambda e: refresh())
 
     refresh()
+
+    # --- Help dialog (outside the 3-column row) ---
+    with ui.dialog() as help_dialog, ui.card().classes("w-[600px] max-h-[80vh]"):
+        ui.markdown(_load_chart_guide())
+        ui.button("Затвори", on_click=help_dialog.close).classes("w-full mt-2")
 
 
 # -------------------------
