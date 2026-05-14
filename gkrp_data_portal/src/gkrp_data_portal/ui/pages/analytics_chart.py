@@ -25,8 +25,15 @@ from .analytics_common import (
     build_histogram,
     parse_date,
     plotly_bar,
+    plotly_donut,
+    plotly_pie,
     result_for,
     ui_columns,
+)
+from gkrp_data_portal.db.session import session_scope
+from gkrp_data_portal.ui.repository.analytics_repo import (
+    get_distinct_values,
+    get_layer_hierarchy,
 )
 
 
@@ -51,9 +58,14 @@ def page_analytics_chart() -> None:
     ui.label("Analytics — Chart").classes("text-h5")
 
     state: dict[str, Any] = {
-        "query_id": "q1",
+        "query_id": "q2",
         "_refreshing": False,
         "_suppress_x_change": False,
+        "_hierarchy": {},
+        "_all_sites": [],
+        "_all_sectors": [],
+        "_all_squares": [],
+        "_all_layers": [],
     }
 
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
@@ -63,39 +75,73 @@ def page_analytics_chart() -> None:
 
             sel_query = ui.select(
                 options=list(QUERY_OPTIONS.keys()),
-                value="Filter #1 (Layers + Fragments)",
+                value="Filter #2 (Layers + Fragments + Ornaments)",
                 label="Predefined query",
             ).classes("w-full")
 
             with ui.row().classes("w-full gap-2 items-center"):
                 btn_run = ui.button("Run query", icon="play_arrow").classes("flex-1")
-                sw_autorun = ui.switch("Auto-run", value=True).props("dense")
 
-            inp_site = ui.input("site").props("clearable").classes("w-full")
-            inp_sector = ui.input("sector").props("clearable").classes("w-full")
-            inp_square = ui.input("square").props("clearable").classes("w-full")
-            inp_q = (
-                ui.input("free text (inventory/note/piecetype or finds fields)")
-                .props("clearable")
-                .classes("w-full")
-            )
-
-            with ui.row().classes("w-full gap-2"):
-                inp_date_from = (
-                    ui.input("from").props("type=date clearable").classes("w-1/2")
+            with ui.scroll_area().classes(
+                "w-full h-[320px] border rounded p-2 bg-white"
+            ):
+                sel_site = (
+                    ui.select(
+                        options=[],
+                        label="Site",
+                        multiple=True,
+                        clearable=True,
+                        with_input=True,
+                    )
+                    .classes("w-full")
+                    .props("dense")
                 )
-                inp_date_to = (
-                    ui.input("to").props("type=date clearable").classes("w-1/2")
+                sel_sector = (
+                    ui.select(
+                        options=[],
+                        multiple=True,
+                        clearable=True,
+                        with_input=True,
+                        label="Sector",
+                    )
+                    .classes("w-full")
+                    .props("dense")
+                )
+                sel_square = (
+                    ui.select(
+                        options=[],
+                        multiple=True,
+                        clearable=True,
+                        with_input=True,
+                        label="Square",
+                    )
+                    .classes("w-full")
+                    .props("dense")
+                )
+                sel_layer = (
+                    ui.select(
+                        options=[],
+                        multiple=True,
+                        clearable=True,
+                        with_input=True,
+                        label="Layer",
+                    )
+                    .classes("w-full")
+                    .props("dense")
                 )
 
-            inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
+            sel_limit = ui.select(
+                options=[100, 200, 500, 1000, 2500, 5000, "max"],
+                value=DEFAULT_LIMIT,
+                label="limit",
+            ).classes("w-full")
 
         # Center panel (chart only)
         with ui.column().classes("flex-1 min-w-0"):
             ui.label("Chart").classes("text-subtitle1 font-medium")
             status = ui.label("").classes("text-sm text-gray-600")
-            pending = ui.label("").classes("text-xs text-orange-700")
             dbg = ui.label("").classes("text-xs text-gray-500")
+            chart_type_debug = ui.label("").classes("text-xs text-blue-600")
 
             chart = (
                 ui.plotly({"data": [], "layout": {"height": 520}})
@@ -108,6 +154,11 @@ def page_analytics_chart() -> None:
                 sel_x = ui.select(options=[], label="Group by (x-axis)").classes(
                     "w-[420px]"
                 )
+                sel_chart_type = ui.select(
+                    options=["Bar", "Pie", "Donut"],
+                    value="Bar",
+                    label="Chart type",
+                ).classes("w-[160px]")
 
                 with ui.row().classes("gap-2"):
                     ui.button(
@@ -143,7 +194,7 @@ def page_analytics_chart() -> None:
                     ui.button(
                         "Print / Save as PDF",
                         on_click=lambda: ui.run_javascript(
-                            "window.open('/api/analytics/chart.html?query_id=' + encodeURIComponent(window.__gkrp_query_id || 'q1'), '_blank');"
+                            "window.open('/api/analytics/chart.html?query_id=' + encodeURIComponent(window.__gkrp_query_id || 'q2'), '_blank');"
                         ),
                     )
 
@@ -335,23 +386,10 @@ def page_analytics_chart() -> None:
                         .classes("w-full")
                         .props("dense"),
                     ),
-                    (
-                        "Note",
-                        ui.input(label="Note")
-                        .props("clearable dense")
-                        .classes("w-full"),
-                    ),
-                    (
-                        "Inventory",
-                        ui.input(label="Inventory")
-                        .props("clearable dense")
-                        .classes("w-full"),
-                    ),
                 ]
 
-            # ---- Ornaments section (only visible for q2) ----
+            # ---- Ornaments section (always visible) ----
             orn_section = ui.column().classes("w-full gap-1 mt-4")
-            orn_section.set_visibility(False)
             with orn_section:
                 ui.label("Ornaments").classes("text-subtitle1 font-medium")
                 orn_filters: list[tuple[str, Any]] = [
@@ -464,18 +502,39 @@ def page_analytics_chart() -> None:
             """
         )
 
+    def _build_figure(xs: list[str], ys: list[int], title: str) -> dict[str, Any]:
+        chart_type = (sel_chart_type.value or "Bar").lower()
+        chart_type_debug.set_text(f"chart_type={chart_type}")
+        if chart_type == "pie":
+            return plotly_pie(xs, ys, title)
+        if chart_type == "donut":
+            return plotly_donut(xs, ys, title)
+        return plotly_bar(xs, ys, title)
+
+    def _select_to_list(widget: Any) -> list[str] | None:
+        vals = widget.value
+        if isinstance(vals, list) and vals:
+            return [str(v).strip() for v in vals if str(v).strip()]
+        elif isinstance(vals, str) and vals.strip():
+            return [vals.strip()]
+        return None
+
     def _read_filters() -> dict[str, Any]:
-        query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
+        query_id = QUERY_OPTIONS.get(sel_query.value, "q2")
 
-        site = (inp_site.value or "").strip() or None
-        sector = (inp_sector.value or "").strip() or None
-        square = (inp_square.value or "").strip() or None
-        q = (inp_q.value or "").strip() or None
-        date_from = parse_date(inp_date_from.value)
-        date_to = parse_date(inp_date_to.value)
+        layer_filters_map: dict[str, list[str] | None] = {
+            "Site": _select_to_list(sel_site),
+            "Sector": _select_to_list(sel_sector),
+            "Square": _select_to_list(sel_square),
+            "Layer": _select_to_list(sel_layer),
+        }
 
-        limit = int(inp_limit.value or DEFAULT_LIMIT)
-        limit = max(1, min(limit, TABLE_MAX_LIMIT))
+        limit_raw = sel_limit.value
+        if limit_raw == "max":
+            limit = TABLE_MAX_LIMIT
+        else:
+            limit = int(limit_raw or DEFAULT_LIMIT)
+            limit = max(1, min(limit, TABLE_MAX_LIMIT))
 
         frag_filters_map: dict[str, list[str] | None] = {}
         for label, widget in frag_filters:
@@ -511,12 +570,7 @@ def page_analytics_chart() -> None:
 
         return {
             "query_id": query_id,
-            "site": site,
-            "sector": sector,
-            "square": square,
-            "date_from": date_from,
-            "date_to": date_to,
-            "q": q,
+            "layer_filters": layer_filters_map,
             "limit": limit,
             "offset": 0,
             "frag_filters": frag_filters_map,
@@ -526,63 +580,141 @@ def page_analytics_chart() -> None:
         # case-insensitive match; keeps original order
         return [c for c in cols if "type" in c.lower()]
 
+    def _fetch_layer_cache() -> None:
+        with session_scope() as db:
+            data = get_layer_hierarchy(db, query_id="q2")
+            state["_hierarchy"] = data.get("hierarchy", {})
+            state["_all_sites"] = data.get("all_sites", [])
+            state["_all_sectors"] = data.get("all_sectors", [])
+            state["_all_squares"] = data.get("all_squares", [])
+            state["_all_layers"] = data.get("all_layers", [])
+
+    def _populate_layer_options_hierarchical() -> None:
+        """Populate dropdowns using the cached hierarchy dict."""
+        hierarchy = state.get("_hierarchy", {})
+        all_sites = state.get("_all_sites", [])
+        all_sectors = state.get("_all_sectors", [])
+        all_squares = state.get("_all_squares", [])
+        all_layers = state.get("_all_layers", [])
+
+        sel_site.options = all_sites
+        sel_site.update()
+
+        # Sector: only those under selected sites
+        selected_sites = sel_site.value
+        if isinstance(selected_sites, list):
+            selected_sites = [s for s in selected_sites if s]
+        elif selected_sites:
+            selected_sites = [selected_sites]
+        else:
+            selected_sites = []
+
+        if len(selected_sites) == 1:
+            site_h = hierarchy.get(selected_sites[0], {})
+            sector_vals = sorted(site_h.keys())
+        else:
+            sector_vals = all_sectors
+        sel_sector.options = sector_vals
+        sel_sector.update()
+
+        # Square: only those under selected site+sector
+        selected_sectors = sel_sector.value
+        if isinstance(selected_sectors, list):
+            selected_sectors = [s for s in selected_sectors if s]
+        elif selected_sectors:
+            selected_sectors = [selected_sectors]
+        else:
+            selected_sectors = []
+
+        if len(selected_sites) == 1 and len(selected_sectors) == 1:
+            sq_h = hierarchy.get(selected_sites[0], {}).get(selected_sectors[0], {})
+            square_vals = sorted(sq_h.keys())
+        elif len(selected_sites) == 1:
+            square_vals = []
+            for sector in all_sectors:
+                sq_h = hierarchy.get(selected_sites[0], {}).get(sector, {})
+                square_vals.extend(sq_h.keys())
+            square_vals = sorted(set(square_vals))
+        else:
+            square_vals = all_squares
+        sel_square.options = square_vals
+        sel_square.update()
+
+        # Layer: only those under selected site+sector+square
+        selected_squares = sel_square.value
+        if isinstance(selected_squares, list):
+            selected_squares = [s for s in selected_squares if s]
+        elif selected_squares:
+            selected_squares = [selected_squares]
+        else:
+            selected_squares = []
+
+        if (
+            len(selected_sites) == 1
+            and len(selected_sectors) == 1
+            and len(selected_squares) == 1
+        ):
+            sq_h = hierarchy.get(selected_sites[0], {}).get(selected_sectors[0], {})
+            layer_vals = sorted(sq_h.get(selected_squares[0], []))
+        elif len(selected_sites) == 1 and len(selected_sectors) == 1:
+            layer_vals = set()
+            for sq in all_squares:
+                sq_h = hierarchy.get(selected_sites[0], {}).get(selected_sectors[0], {})
+                layer_vals.update(sq_h.get(sq, []))
+            layer_vals = sorted(layer_vals)
+        elif len(selected_sites) == 1:
+            layer_vals = set()
+            for sector in all_sectors:
+                sq_h = hierarchy.get(selected_sites[0], {}).get(sector, {})
+                for sq in all_squares:
+                    layer_vals.update(sq_h.get(sq, []))
+            layer_vals = sorted(layer_vals)
+        else:
+            layer_vals = all_layers
+        sel_layer.options = layer_vals
+        sel_layer.update()
+
     def _populate_frag_filter_options(items: list[dict[str, Any]]) -> None:
-        col_map: dict[str, str] = {
-            "Piecetype": "f_piecetype",
-            "Technology": "f_technology",
-            "Baking": "f_baking",
-            "Color / Primary color": "f_primarycolor",
-            "Covering": "f_covering",
-            "Surface": "f_surface",
-            "Wall thickness": "f_wallthickness",
-            "Handle type": "f_handletype",
-            "Handle size": "f_handlesize",
-            "Bottom type": "f_bottomtype",
-            "Category": "f_category",
-            "Form": "f_form",
-            "Type": "f_type",
-            "Subtype": "f_subtype",
-            "Variant": "f_variant",
-            "Primary": "o_primary_",
-            "Secondary": "o_secondary",
-            "Tertiary": "o_tertiary",
-            "Quarternary": "o_quarternary",
-            "Color / color1": "o_color1",
-            "Encrust color": "o_encrustcolor1",
-        }
+        # Determine which columns are needed by looking at active widgets
+        needed: set[str] = set()
+        for label in ["Site", "Sector", "Square", "Layer"]:
+            needed.add(label)
+        for label, widget in frag_filters:
+            if isinstance(widget, ui.select):
+                needed.add(label)
+        for label, widget in orn_filters:
+            if isinstance(widget, ui.select):
+                needed.add(label)
+
+        if not needed:
+            return
+
+        f = _read_filters()
+        with session_scope() as db:
+            distinct = get_distinct_values(
+                db,
+                query_id=f["query_id"],
+                layer_filters=f.get("layer_filters"),
+                frag_filters=f.get("frag_filters"),
+                columns=needed,
+            )
+
         for label, widget in frag_filters:
             if not isinstance(widget, ui.select):
                 continue
-            col = col_map.get(label)
-            if not col:
-                continue
-            values: set[str] = set()
-            for row in items:
-                v = row.get(col)
-                if isinstance(v, str) and v.strip():
-                    values.add(v.strip())
-                elif v is not None:
-                    values.add(str(v))
-            widget.options = sorted(values)
+            widget.options = distinct.get(label, [])
             widget.update()
 
         for label, widget in orn_filters:
             if not isinstance(widget, ui.select):
                 continue
-            col = col_map.get(label)
-            if not col:
-                continue
-            values: set[str] = set()
-            for row in items:
-                v = row.get(col)
-                if isinstance(v, str) and v.strip():
-                    values.add(v.strip())
-                elif v is not None:
-                    values.add(str(v))
-            widget.options = sorted(values)
+            widget.options = distinct.get(label, [])
             widget.update()
 
     def refresh() -> None:
+        _fetch_layer_cache()
+        _populate_layer_options_hierarchical()
+
         if state.get("_refreshing"):
             return
         state["_refreshing"] = True
@@ -590,67 +722,77 @@ def page_analytics_chart() -> None:
             f = _read_filters()
             notes: list[str] = []
 
+            if f["limit"] >= TABLE_MAX_LIMIT:
+                chart_fetch = f["limit"]
+            else:
+                chart_fetch = min(max(f["limit"], 0), CHART_MAX_FETCH)
+
             res = result_for(
                 f["query_id"],
-                site=f["site"],
-                sector=f["sector"],
-                square=f["square"],
-                date_from=f["date_from"],
-                date_to=f["date_to"],
-                q=f["q"],
-                limit=f["limit"],
+                layer_filters=f.get("layer_filters"),
+                limit=chart_fetch,
                 offset=f["offset"],
                 frag_filters=f.get("frag_filters"),
             )
 
             total = int(res.total or 0)
             if total == 0:
-                _set_chart(plotly_bar([], [], title=f"No results ({f['query_id']})"))
+                _set_chart(_build_figure([], [], f"No results ({f['query_id']})"))
                 dbg.set_text(f"query={f['query_id']} rows=0 total=0")
                 status.set_text("No results for current filters.")
                 return
 
-            chart_fetch = min(max(total, 0), CHART_MAX_FETCH)
-            if chart_fetch > len(res.items):
-                res = result_for(
-                    f["query_id"],
-                    site=f["site"],
-                    sector=f["sector"],
-                    square=f["square"],
-                    date_from=f["date_from"],
-                    date_to=f["date_to"],
-                    q=f["q"],
-                    limit=chart_fetch,
-                    offset=0,
-                    frag_filters=f.get("frag_filters"),
-                )
-
             if not res.items:
-                _set_chart(plotly_bar([], [], title=f"No results ({f['query_id']})"))
+                _set_chart(_build_figure([], [], f"No results ({f['query_id']})"))
                 dbg.set_text(f"query={f['query_id']} rows=0 total={res.total}")
                 status.set_text("No results for current filters.")
                 return
 
             ui_cols = ui_columns(res.columns) or list(res.columns)
 
-            sel_x.options = list(ui_cols)
+            _GROUPBY_EXCLUDE = frozenset(
+                {
+                    "l_layername",
+                    "l_context",
+                    "f_fragmenttype",
+                    "f_fract",
+                    "f_secondarycolor",
+                    "f_includesconc",
+                    "f_includessize",
+                    "f_onepot",
+                    "f_includestype",
+                    "f_han",
+                    "f_note",
+                    "f_inventory",
+                    "f_imageurl",
+                    "p_ornamentid",
+                    "o_fragmentid",
+                    "o_relationship",
+                    "o_ornament",
+                    "o_color1",
+                    "o_color2",
+                    "encrustcolor",
+                    "o_encrustcolor1",
+                    "o_encrustcolor2",
+                    "o_recordenteredon",
+                }
+            )
+            groupby_cols = [c for c in ui_cols if c.lower() not in _GROUPBY_EXCLUDE]
+            sel_x.options = groupby_cols
 
             preferred = [
                 "l_site",
                 "l_sector",
                 "l_square",
-                "l_context",
-                "l_layername",
                 "f_piecetype",
                 "f_category",
                 "f_form",
-                "f_fragmenttype",
                 "f_technology",
             ]
 
-            if not sel_x.value or sel_x.value not in ui_cols:
-                default_x = next((c for c in preferred if c in ui_cols), None) or (
-                    ui_cols[0] if ui_cols else None
+            if not sel_x.value or sel_x.value not in groupby_cols:
+                default_x = next((c for c in preferred if c in groupby_cols), None) or (
+                    groupby_cols[0] if groupby_cols else None
                 )
                 state["_suppress_x_change"] = True
                 sel_x.set_value(default_x)
@@ -660,7 +802,7 @@ def page_analytics_chart() -> None:
 
             x_key = sel_x.value
             xs, ys = build_histogram(res.items, x_key, top_n=30)
-            _set_chart(plotly_bar(xs, ys, title=f"Count by {x_key} ({f['query_id']})"))
+            _set_chart(_build_figure(xs, ys, f"Count by {x_key} ({f['query_id']})"))
 
             _populate_frag_filter_options(res.items)
 
@@ -677,35 +819,28 @@ def page_analytics_chart() -> None:
         finally:
             state["_refreshing"] = False
 
-    def request_refresh() -> None:
-        if sw_autorun.value:
-            pending.set_text("")
-            refresh()
-        else:
-            pending.set_text("Filters changed \u2014 click \u201cRun query\u201d")
+    def _on_layer_change() -> None:
+        _populate_layer_options_hierarchical()
 
-    btn_run.on("click", lambda e: (pending.set_text(""), refresh()))
+    btn_run.on("click", lambda e: refresh())
 
     def _on_query_change(e) -> None:
-        query_id = QUERY_OPTIONS.get(sel_query.value, "q1")
-        if query_id == "q2":
-            orn_section.set_visibility(True)
-        else:
-            orn_section.set_visibility(False)
-        request_refresh()
+        refresh()
 
     sel_query.on("change", _on_query_change)
-    for w in (inp_site, inp_sector, inp_square, inp_q, inp_limit):
-        w.on("change", lambda e: request_refresh())
-    inp_date_from.on("change", lambda e: request_refresh())
-    inp_date_to.on("change", lambda e: request_refresh())
+    sel_site.on("change", lambda e: _on_layer_change())
+    sel_sector.on("change", lambda e: _on_layer_change())
+    sel_square.on("change", lambda e: _on_layer_change())
+    sel_layer.on("change", lambda e: _on_layer_change())
+    sel_limit.on("change", lambda e: refresh())
 
     def _on_x_change(e) -> None:
         if state.get("_suppress_x_change"):
             return
-        request_refresh()
+        refresh()
 
     sel_x.on("change", _on_x_change)
+    sel_chart_type.on("change", lambda e: refresh())
 
     refresh()
 
@@ -717,7 +852,7 @@ def page_analytics_chart() -> None:
 
 @app.get("/api/analytics/data.csv")
 def analytics_data_csv(
-    query_id: str = "q1",
+    query_id: str = "q2",
     site: str | None = None,
     sector: str | None = None,
     square: str | None = None,
@@ -765,8 +900,9 @@ def analytics_data_csv(
 
 @app.get("/api/analytics/chart.json")
 def analytics_chart_json(
-    query_id: str = "q1",
+    query_id: str = "q2",
     x: str | None = None,
+    chart_type: str = "bar",
     site: str | None = None,
     sector: str | None = None,
     square: str | None = None,
@@ -811,13 +947,18 @@ def analytics_chart_json(
         x = "f_piecetype" if "f_piecetype" in cols else (cols[0] if cols else "")
 
     xs, ys = build_histogram(res.items, x)
-    fig = plotly_bar(xs, ys, title=f"Count by {x} ({query_id})")
+    if chart_type == "pie":
+        fig = plotly_pie(xs, ys, title=f"Count by {x} ({query_id})")
+    elif chart_type == "donut":
+        fig = plotly_donut(xs, ys, title=f"Count by {x} ({query_id})")
+    else:
+        fig = plotly_bar(xs, ys, title=f"Count by {x} ({query_id})")
     return Response(content=json.dumps(fig), media_type="application/json")
 
 
 @app.get("/api/analytics/chart.html")
-def analytics_chart_html(query_id: str = "q1") -> Response:
-    qid = query_id or (app.storage.general.get("analytics_last_query_id") or "q1")
+def analytics_chart_html(query_id: str = "q2") -> Response:
+    qid = query_id or (app.storage.general.get("analytics_last_query_id") or "q2")
     fig_json = analytics_chart_json(query_id=qid).body.decode("utf-8")
 
     html = f"""
@@ -834,7 +975,7 @@ def analytics_chart_html(query_id: str = "q1") -> Response:
   </style>
 </head>
 <body>
-  <div class="hint">Use browser Print → Save as PDF.</div>
+  <div class="hint">Use browser Print \u2192 Save as PDF.</div>
   <div id="chart"></div>
   <script>
     const fig = {fig_json};

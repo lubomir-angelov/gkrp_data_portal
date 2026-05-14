@@ -9,12 +9,10 @@ from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
     AnalyticsResult,
     query_finds,
-    query_q1_layers_fragments,
     query_q2_layers_fragments_ornaments,
 )
 
 QUERY_OPTIONS: dict[str, str] = {
-    "Filter #1 (Layers + Fragments)": "q1",
     "Filter #2 (Layers + Fragments + Ornaments)": "q2",
     "Finds (tblfinds)": "finds",
 }
@@ -22,7 +20,7 @@ QUERY_OPTIONS: dict[str, str] = {
 DEFAULT_LIMIT = 500
 
 TABLE_MAX_LIMIT = 50000  # table UI cap
-CHART_MAX_FETCH = 250000  # chart safety cap
+CHART_MAX_FETCH = 25000  # chart safety cap (top-N buckets don't benefit from >25k rows)
 
 
 _UI_HIDDEN_COLUMNS = frozenset(
@@ -90,11 +88,26 @@ def parse_date(s: Optional[str]) -> Optional[date]:
 
 def result_for(query_id: str, **kwargs) -> AnalyticsResult:
     with session_scope() as db:
-        if query_id == "q1":
-            return query_q1_layers_fragments(db, **kwargs)
         if query_id == "q2":
             return query_q2_layers_fragments_ornaments(db, **kwargs)
         return query_finds(db, **kwargs)
+
+
+def _extract_layer_filters(kwargs: dict) -> dict[str, Any] | None:
+    """Extract layer_filters from kwargs, falling back to legacy site/sector/square."""
+    lf = kwargs.get("layer_filters")
+    if lf:
+        return lf
+    site = kwargs.get("site")
+    sector = kwargs.get("sector")
+    square = kwargs.get("square")
+    if site or sector or square:
+        return {
+            "Site": [site] if site else [],
+            "Sector": [sector] if sector else [],
+            "Square": [square] if square else [],
+        }
+    return None
 
 
 def norm_bucket(v: Any) -> str:
@@ -140,5 +153,47 @@ def plotly_bar(xs: list[str], ys: list[int], title: str) -> dict:
             "margin": {"l": 50, "r": 20, "t": 50, "b": 90},
             "xaxis": {"automargin": True, "tickangle": -30},
             "yaxis": {"automargin": True},
+        },
+    }
+
+
+def plotly_pie(labels: list[str], values: list[int], title: str) -> dict:
+    return {
+        "data": [
+            {
+                "type": "pie",
+                "labels": labels,
+                "values": values,
+                "hole": 0.0,
+                "textinfo": "label+percent",
+                "textposition": "outside",
+                "automargin": True,
+            }
+        ],
+        "layout": {
+            "title": {"text": title},
+            "margin": {"l": 20, "r": 20, "t": 50, "b": 20},
+            "showlegend": True,
+        },
+    }
+
+
+def plotly_donut(labels: list[str], values: list[int], title: str) -> dict:
+    return {
+        "data": [
+            {
+                "type": "pie",
+                "labels": labels,
+                "values": values,
+                "hole": 0.4,
+                "textinfo": "label+percent",
+                "textposition": "outside",
+                "automargin": True,
+            }
+        ],
+        "layout": {
+            "title": {"text": title},
+            "margin": {"l": 20, "r": 20, "t": 50, "b": 20},
+            "showlegend": True,
         },
     }
