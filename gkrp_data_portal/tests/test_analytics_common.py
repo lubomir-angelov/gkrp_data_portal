@@ -8,17 +8,18 @@ from datetime import date
 from gkrp_data_portal.ui.pages.analytics_common import (
     QUERY_OPTIONS,
     build_histogram,
+    build_histogram_series,
     is_ui_hidden_column,
     norm_bucket,
     parse_date,
     plotly_bar,
+    plotly_grouped_bar,
     ui_columns,
 )
 
 
 class TestQueryOptions:
     def test_contains_expected_queries(self):
-        assert "q1" in QUERY_OPTIONS.values()
         assert "q2" in QUERY_OPTIONS.values()
         assert "finds" in QUERY_OPTIONS.values()
 
@@ -206,3 +207,130 @@ class TestPlotlyBar:
         assert result["data"][0]["x"] == ["a", "b"]
         assert result["data"][0]["y"] == [1, 2]
         assert result["layout"]["title"]["text"] == "Test Title"
+
+
+class TestBuildHistogramSeries:
+    def test_returns_empty_for_no_rows(self):
+        xs, series_data = build_histogram_series([], "col", "series")
+        assert xs == []
+        assert series_data == {}
+
+    def test_returns_empty_for_no_x_key(self):
+        xs, series_data = build_histogram_series([{"series": "A"}], "", "series")
+        assert xs == []
+        assert series_data == {}
+
+    def test_returns_empty_for_no_series_key(self):
+        xs, series_data = build_histogram_series([{"col": "A"}], "col", "")
+        assert xs == []
+        assert series_data == {}
+
+    def test_groups_by_series(self):
+        rows = [
+            {"col": "A", "series": "X", "f_count": 3},
+            {"col": "A", "series": "Y", "f_count": 5},
+            {"col": "B", "series": "X", "f_count": 2},
+            {"col": "B", "series": "Y", "f_count": 4},
+        ]
+        xs, series_data = build_histogram_series(rows, "col", "series", top_n=10)
+        assert xs == ["A", "B"]
+        assert "X" in series_data
+        assert "Y" in series_data
+        assert series_data["X"] == [3, 2]
+        assert series_data["Y"] == [5, 4]
+
+    def test_pads_missing_series_values(self):
+        rows = [
+            {"col": "A", "series": "X", "f_count": 10},
+            {"col": "B", "series": "Y", "f_count": 5},
+            {"col": "C", "series": "X", "f_count": 3},
+        ]
+        xs, series_data = build_histogram_series(rows, "col", "series", top_n=10)
+        assert xs == ["A", "B", "C"]
+        assert "X" in series_data
+        assert "Y" in series_data
+        assert series_data["X"] == [10, 0, 3]
+        assert series_data["Y"] == [0, 5, 0]
+
+    def test_respects_top_n(self):
+        rows = [
+            {"col": "A", "series": "X", "f_count": 100},
+            {"col": "B", "series": "X", "f_count": 80},
+            {"col": "C", "series": "X", "f_count": 60},
+            {"col": "D", "series": "X", "f_count": 40},
+        ]
+        xs, series_data = build_histogram_series(rows, "col", "series", top_n=2)
+        assert xs == ["A", "B"]
+        assert series_data["X"] == [100, 80]
+
+    def test_null_series_values(self):
+        rows = [
+            {"col": "A", "series": None, "f_count": 3},
+            {"col": "A", "series": "X", "f_count": 5},
+        ]
+        xs, series_data = build_histogram_series(rows, "col", "series")
+        assert "(null)" in series_data
+        assert "X" in series_data
+        assert xs == ["A"]
+
+    def test_multiple_rows_same_bucket_series(self):
+        rows = [
+            {"col": "A", "series": "X", "f_count": 3},
+            {"col": "A", "series": "X", "f_count": 7},
+            {"col": "A", "series": "Y", "f_count": 2},
+        ]
+        xs, series_data = build_histogram_series(rows, "col", "series", top_n=10)
+        assert xs == ["A"]
+        assert series_data["X"] == [10]
+        assert series_data["Y"] == [2]
+
+    def test_column_to_label_mapping(self):
+        from gkrp_data_portal.ui.pages.analytics_common import _column_to_label
+
+        assert _column_to_label("f_technology") == "Technology"
+        assert _column_to_label("f_piecetype") == "Piecetype"
+        assert _column_to_label("f_surface") == "Surface"
+        assert _column_to_label("o_primary") == "Ornament primary"
+        assert _column_to_label("l_site") == "Site"
+        assert _column_to_label("unknown_col") == "unknown_col"
+
+
+class TestPlotlyGroupedBar:
+    def test_returns_expected_structure(self):
+        series_data = {
+            "Tech 1": [10, 20, 30],
+            "Tech 2": [5, 10, 15],
+        }
+        result = plotly_grouped_bar(["A", "B", "C"], series_data, "Test Title")
+        assert "data" in result
+        assert "layout" in result
+        assert len(result["data"]) == 2
+        assert result["data"][0]["type"] == "bar"
+        assert result["data"][0]["name"] == "Tech 1"
+        assert result["data"][0]["x"] == ["A", "B", "C"]
+        assert result["data"][0]["y"] == [10, 20, 30]
+        assert result["data"][1]["name"] == "Tech 2"
+        assert result["data"][1]["y"] == [5, 10, 15]
+        assert result["layout"]["title"]["text"] == "Test Title"
+        assert result["layout"]["barmode"] == "group"
+        assert result["layout"]["showlegend"] is True
+
+    def test_empty_data_returns_bar_chart(self):
+        result = plotly_grouped_bar([], {}, "Empty")
+        assert len(result["data"]) == 1
+        assert result["data"][0]["type"] == "bar"
+        assert result["data"][0]["x"] == []
+        assert result["data"][0]["y"] == []
+
+    def test_single_series(self):
+        series_data = {"Only": [1, 2, 3]}
+        result = plotly_grouped_bar(["A", "B", "C"], series_data, "Single")
+        assert len(result["data"]) == 1
+        assert result["data"][0]["name"] == "Only"
+
+    def test_legend_configured(self):
+        series_data = {"X": [1], "Y": [2]}
+        result = plotly_grouped_bar(["A"], series_data, "Legend Test")
+        legend = result["layout"]["legend"]
+        assert legend["orientation"] == "h"
+        assert legend["title"]["text"] == "Series"

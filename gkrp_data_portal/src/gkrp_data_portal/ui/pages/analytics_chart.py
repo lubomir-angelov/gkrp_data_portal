@@ -23,12 +23,15 @@ from .analytics_common import (
     QUERY_OPTIONS,
     TABLE_MAX_LIMIT,
     build_histogram,
+    build_histogram_series,
     parse_date,
     plotly_bar,
     plotly_donut,
+    plotly_grouped_bar,
     plotly_pie,
     result_for,
     ui_columns,
+    _column_to_label,
 )
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
@@ -152,8 +155,13 @@ def page_analytics_chart() -> None:
 
             with ui.row().classes("w-full items-center justify-between gap-2"):
                 sel_x = ui.select(options=[], label="Group by (x-axis)").classes(
-                    "w-[420px]"
+                    "w-[300px]"
                 )
+                sel_series = ui.select(
+                    options=[],
+                    label="Series (group by)",
+                    clearable=True,
+                ).classes("w-[200px]")
                 sel_chart_type = ui.select(
                     options=["Bar", "Pie", "Donut"],
                     value="Bar",
@@ -197,6 +205,14 @@ def page_analytics_chart() -> None:
                             "window.open('/api/analytics/chart.html?query_id=' + encodeURIComponent(window.__gkrp_query_id || 'q2'), '_blank');"
                         ),
                     )
+
+            with ui.column().classes("w-full mt-2"):
+                ui.label("Chart type: choose Bar, Pie, or Donut.").classes(
+                    "text-sm text-gray-500"
+                )
+                ui.label(
+                    "Add a series dimension (e.g. Technology, Surface) to split bars into grouped traces."
+                ).classes("text-sm text-gray-500")
 
         # Right panel (fragments filters)
         with ui.column().classes("w-[320px] shrink-0"):
@@ -502,9 +518,17 @@ def page_analytics_chart() -> None:
             """
         )
 
-    def _build_figure(xs: list[str], ys: list[int], title: str) -> dict[str, Any]:
+    def _build_figure(
+        xs: list[str],
+        ys: list[int],
+        title: str,
+        series_data: dict[str, list[int]] | None = None,
+        series_label: str = "Series",
+    ) -> dict[str, Any]:
         chart_type = (sel_chart_type.value or "Bar").lower()
-        chart_type_debug.set_text(f"chart_type={chart_type}")
+        chart_type_debug.set_text(f"chart_type={chart_type} series={bool(series_data)}")
+        if series_data:
+            return plotly_grouped_bar(xs, series_data, title, series_label=series_label)
         if chart_type == "pie":
             return plotly_pie(xs, ys, title)
         if chart_type == "donut":
@@ -779,6 +803,9 @@ def page_analytics_chart() -> None:
             )
             groupby_cols = [c for c in ui_cols if c.lower() not in _GROUPBY_EXCLUDE]
             sel_x.options = groupby_cols
+            sel_x.update()
+            sel_series.options = groupby_cols
+            sel_series.update()
 
             preferred = [
                 "l_site",
@@ -801,14 +828,30 @@ def page_analytics_chart() -> None:
                     notes.append(f"group-by defaulted to {default_x}")
 
             x_key = sel_x.value
-            xs, ys = build_histogram(res.items, x_key, top_n=30)
-            _set_chart(_build_figure(xs, ys, f"Count by {x_key} ({f['query_id']})"))
+            series_key = sel_series.value
+            if series_key and series_key in groupby_cols:
+                series_label = _column_to_label(series_key)
+                xs, series_data = build_histogram_series(
+                    res.items, x_key, series_key, top_n=30
+                )
+                _set_chart(
+                    _build_figure(
+                        xs,
+                        [],
+                        f"Count by {x_key} grouped by {series_key} ({f['query_id']})",
+                        series_data=series_data,
+                        series_label=series_label,
+                    )
+                )
+            else:
+                xs, ys = build_histogram(res.items, x_key, top_n=30)
+                _set_chart(_build_figure(xs, ys, f"Count by {x_key} ({f['query_id']})"))
 
             _populate_frag_filter_options(res.items)
 
             dbg.set_text(
                 f"query={f['query_id']} rows={len(res.items)} total={res.total} "
-                f"x={x_key} buckets={len(xs)}"
+                f"x={x_key} series={series_key or 'none'} buckets={len(xs)}"
             )
 
             base = f"Chart built from {len(res.items)} rows (total {res.total})."
@@ -903,6 +946,7 @@ def analytics_chart_json(
     query_id: str = "q2",
     x: str | None = None,
     chart_type: str = "bar",
+    series: str | None = None,
     site: str | None = None,
     sector: str | None = None,
     square: str | None = None,
@@ -946,13 +990,23 @@ def analytics_chart_json(
     if not x:
         x = "f_piecetype" if "f_piecetype" in cols else (cols[0] if cols else "")
 
-    xs, ys = build_histogram(res.items, x)
-    if chart_type == "pie":
-        fig = plotly_pie(xs, ys, title=f"Count by {x} ({query_id})")
-    elif chart_type == "donut":
-        fig = plotly_donut(xs, ys, title=f"Count by {x} ({query_id})")
+    if series and series in cols:
+        series_label = _column_to_label(series)
+        xs, series_data = build_histogram_series(res.items, x, series)
+        fig = plotly_grouped_bar(
+            xs,
+            series_data,
+            title=f"Count by {x} grouped by {series} ({query_id})",
+            series_label=series_label,
+        )
     else:
-        fig = plotly_bar(xs, ys, title=f"Count by {x} ({query_id})")
+        xs, ys = build_histogram(res.items, x)
+        if chart_type == "pie":
+            fig = plotly_pie(xs, ys, title=f"Count by {x} ({query_id})")
+        elif chart_type == "donut":
+            fig = plotly_donut(xs, ys, title=f"Count by {x} ({query_id})")
+        else:
+            fig = plotly_bar(xs, ys, title=f"Count by {x} ({query_id})")
     return Response(content=json.dumps(fig), media_type="application/json")
 
 
