@@ -138,6 +138,10 @@ def page_analytics_chart() -> None:
                 value=DEFAULT_LIMIT,
                 label="limit",
             ).classes("w-full")
+            ui.label(
+                "Use 'max' to query all matching rows (up to 50,000). "
+                "Charts only use the top 30 buckets, so higher limits don't change chart detail — they just ensure rare categories are included."
+            ).classes("text-xs text-gray-400 mt-1")
 
         # Center panel (chart only)
         with ui.column().classes("flex-1 min-w-0"):
