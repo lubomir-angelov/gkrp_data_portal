@@ -23,7 +23,7 @@ from gkrp_data_portal.core.settings import get_storage_secret
 def index() -> None:
     with ui.row().classes("w-full"):
         with ui.column().classes("w-64"):
-            ui.label("Navigation").classes("text-h6 text-gray-900")
+            ui.label("Navigation").classes("text-h6 text-blue-600")
             ui.link("Layers", "/layers")
             ui.link("Fragments", "/fragments")
             ui.link("Ornaments", "/ornaments")
@@ -31,7 +31,7 @@ def index() -> None:
             ui.link("Analytics", "/analytics")
 
         with ui.column().classes("grow"):
-            ui.label("GKR Portal — Data Entry").classes("text-h5 text-gray-900")
+            ui.label("GKR Portal — Data Entry").classes("text-h5 text-blue-600")
             ui.markdown(
                 "Use the navigation links on the left. This phase implements parity-first CRUD pages."
             )

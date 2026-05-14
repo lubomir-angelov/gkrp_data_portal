@@ -46,7 +46,7 @@ def _save_fragment(db: Session, obj: Tblfragment, data: dict) -> Tblfragment:
 
 @ui.page("/fragments")
 def page_fragments() -> None:
-    ui.label("Fragments (tblfragments)").classes("text-h5 text-gray-900")
+    ui.label("Fragments (tblfragments)").classes("text-h5 text-blue-600")
 
     search = ui.input("Search (inventory/note/piecetype/fragmenttype/technology)").props("clearable")
 
@@ -84,7 +84,7 @@ def page_fragments() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[1100px]"):
-            ui.label("Edit Fragment" if fragmentid else "Create Fragment").classes("text-h6 text-gray-900")
+            ui.label("Edit Fragment" if fragmentid else "Create Fragment").classes("text-h6 text-blue-600")
 
             # Parity-first workflow: infer locationid if not provided.
             ui.markdown(

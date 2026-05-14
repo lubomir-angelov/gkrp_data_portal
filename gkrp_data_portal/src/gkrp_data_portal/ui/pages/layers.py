@@ -40,7 +40,7 @@ def _save_layer(db: Session, obj: Tbllayer, data: dict) -> Tbllayer:
 
 @ui.page("/layers")
 def page_layers() -> None:
-    ui.label("Layers (tbllayers)").classes("text-h5 text-gray-900")
+    ui.label("Layers (tbllayers)").classes("text-h5 text-blue-600")
 
     search = ui.input("Search (site/sector/square/layer)").props("clearable")
 
@@ -72,7 +72,7 @@ def page_layers() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[800px]"):
-            ui.label("Edit Layer" if layerid else "Create Layer").classes("text-h6 text-gray-900")
+            ui.label("Edit Layer" if layerid else "Create Layer").classes("text-h6 text-blue-600")
 
             ui.markdown(
                 "If **Layer ID** is empty, it will be inferred as the **most recent layer** (parity with ceramics workflow)."

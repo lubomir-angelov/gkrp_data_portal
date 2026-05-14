@@ -55,7 +55,7 @@ def _load_chart_guide() -> str:
 
 @ui.page("/analytics")
 def page_analytics_index() -> None:
-    ui.label("Analytics").classes("text-h5")
+    ui.label("Analytics").classes("text-h5 text-blue-600")
     with ui.row().classes("gap-2"):
         ui.button(
             "Chart view",
@@ -71,7 +71,7 @@ def page_analytics_index() -> None:
 
 @ui.page("/analytics/chart")
 def page_analytics_chart() -> None:
-    ui.label("Analytics — Chart").classes("text-h5")
+    ui.label("Analytics — Chart").classes("text-h5 text-blue-600")
 
     state: dict[str, Any] = {
         "query_id": "q2",
@@ -87,7 +87,7 @@ def page_analytics_chart() -> None:
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
         # Left panel
         with ui.column().classes("w-[340px] shrink-0"):
-            ui.label("Query + Filters").classes("text-subtitle1 font-medium text-gray-900")
+            ui.label("Query + Filters").classes("text-subtitle1 font-medium text-blue-600")
 
             sel_query = ui.select(
                 options=list(QUERY_OPTIONS.keys()),
@@ -158,7 +158,7 @@ def page_analytics_chart() -> None:
         # Center panel (chart only)
         with ui.column().classes("flex-1 min-w-0"):
             with ui.row().classes("w-full items-center justify-between"):
-                ui.label("Chart").classes("text-subtitle1 font-medium text-gray-900")
+                ui.label("Chart").classes("text-subtitle1 font-medium text-blue-600")
                 with ui.column().classes("items-center gap-0"):
                     ui.label("Упътване").classes("text-subtitle2 text-blue-600")
                     help_btn = ui.button(
@@ -256,7 +256,7 @@ def page_analytics_chart() -> None:
 
         # Right panel (fragments filters)
         with ui.column().classes("w-[320px] shrink-0"):
-            ui.label("Fragments").classes("text-subtitle1 font-medium text-gray-900")
+            ui.label("Fragments").classes("text-subtitle1 font-medium text-blue-600")
             with ui.scroll_area().classes(
                 "w-full h-[820px] border rounded p-2 bg-white"
             ):
@@ -447,7 +447,7 @@ def page_analytics_chart() -> None:
             # ---- Ornaments section (always visible) ----
             orn_section = ui.column().classes("w-full gap-1 mt-4")
             with orn_section:
-                ui.label("Ornaments").classes("text-subtitle1 font-medium text-gray-900")
+                ui.label("Ornaments").classes("text-subtitle1 font-medium text-blue-600")
                 orn_filters: list[tuple[str, Any]] = [
                     (
                         "Primary",

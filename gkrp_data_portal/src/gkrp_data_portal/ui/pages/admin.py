@@ -24,7 +24,7 @@ def page_admin() -> None:
     # Guard: raise if not admin. NiceGUI will show error; you can add friendly redirect later.
     require_admin()
 
-    ui.label("Admin").classes("text-h5 text-gray-900")
+    ui.label("Admin").classes("text-h5 text-blue-600")
 
     invite_link_label = ui.label("").classes("text-sm")
     invite_link_copy = ui.input("Invite link").props("readonly").classes("w-full")
@@ -32,7 +32,7 @@ def page_admin() -> None:
 
     ui.separator()
 
-    ui.label("Create invite").classes("text-h6 text-gray-900")
+    ui.label("Create invite").classes("text-h6 text-blue-600")
     with ui.row().classes("w-full items-end"):
         inp_email = ui.input("Email").classes("w-[420px]")
         sel_role = ui.select(["user", "admin"], value="user", label="Role").classes("w-[180px]")
@@ -74,7 +74,7 @@ def page_admin() -> None:
 
     ui.separator()
 
-    ui.label("Users").classes("text-h6 text-gray-900")
+    ui.label("Users").classes("text-h6 text-blue-600")
     users_table = ui.table(
         columns=[
             {"name": "id", "label": "ID", "field": "id", "sortable": True},
@@ -120,7 +120,7 @@ def page_admin() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[520px]"):
-            ui.label(f"User {uid} actions").classes("text-h6 text-gray-900")
+            ui.label(f"User {uid} actions").classes("text-h6 text-blue-600")
             ui.label(f"Email: {row.get('email')}")
             ui.label(f"Username: {row.get('username')}")
             ui.label(f"Role: {row.get('role')}")

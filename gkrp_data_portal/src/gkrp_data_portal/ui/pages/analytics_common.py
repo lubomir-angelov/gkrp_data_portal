@@ -64,6 +64,16 @@ _UI_HIDDEN_COLUMNS = frozenset(
         "f_recordenteredon",
         "f_image",
         "f_count",
+        "l_layername",
+        "f_fragmenttype",
+        "f_fract",
+        "f_onepot",
+        "f_handlesize",
+        "f_img_url",
+        "o_ornamentid",
+        "o_fragmentid",
+        "o_relationship",
+        "o_onornament",
     }
 )
 

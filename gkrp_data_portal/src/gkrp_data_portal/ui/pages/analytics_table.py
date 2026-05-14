@@ -52,7 +52,7 @@ def page_analytics_table() -> None:
         - All columns are shown (no column toggles).
         - Layer filters follow a Site->Sector->Square->Layer hierarchy.
     """
-    ui.label("Analytics — Table").classes("text-h5")
+    ui.label("Analytics — Table").classes("text-h5 text-blue-600")
 
     # Mutable state shared across callbacks (kept in-memory for this page instance).
     state: dict[str, Any] = {
@@ -70,7 +70,7 @@ def page_analytics_table() -> None:
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
         # Left panel
         with ui.column().classes("w-[340px] shrink-0"):
-            ui.label("Query + Filters").classes("text-subtitle1 font-medium text-gray-900")
+            ui.label("Query + Filters").classes("text-subtitle1 font-medium text-blue-600")
 
             sel_query = ui.select(
                 options=list(QUERY_OPTIONS.keys()),
@@ -136,7 +136,7 @@ def page_analytics_table() -> None:
 
         # Center panel (grid)
         with ui.column().classes("flex-1 min-w-0"):
-            ui.label("Table (scrollable)").classes("text-subtitle1 font-medium text-gray-900")
+            ui.label("Table (scrollable)").classes("text-subtitle1 font-medium text-blue-600")
             status = ui.label("").classes("text-sm text-gray-600")
             dbg = ui.label("").classes("text-xs text-gray-500")
 
@@ -177,6 +177,8 @@ def page_analytics_table() -> None:
             {
                 "headerName": c,
                 "field": c,
+                "width": 200,
+                "minWidth": 150,
                 "filter": "agSetColumnFilter",
                 "filterParams": {"buttons": ["reset", "apply"], "closeOnApply": True},
             }
