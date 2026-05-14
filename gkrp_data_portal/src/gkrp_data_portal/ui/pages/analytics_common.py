@@ -155,3 +155,45 @@ def plotly_bar(xs: list[str], ys: list[int], title: str) -> dict:
             "yaxis": {"automargin": True},
         },
     }
+
+
+def plotly_pie(labels: list[str], values: list[int], title: str) -> dict:
+    return {
+        "data": [
+            {
+                "type": "pie",
+                "labels": labels,
+                "values": values,
+                "hole": 0.0,
+                "textinfo": "label+percent",
+                "textposition": "outside",
+                "automargin": True,
+            }
+        ],
+        "layout": {
+            "title": {"text": title},
+            "margin": {"l": 20, "r": 20, "t": 50, "b": 20},
+            "showlegend": True,
+        },
+    }
+
+
+def plotly_donut(labels: list[str], values: list[int], title: str) -> dict:
+    return {
+        "data": [
+            {
+                "type": "pie",
+                "labels": labels,
+                "values": values,
+                "hole": 0.4,
+                "textinfo": "label+percent",
+                "textposition": "outside",
+                "automargin": True,
+            }
+        ],
+        "layout": {
+            "title": {"text": title},
+            "margin": {"l": 20, "r": 20, "t": 50, "b": 20},
+            "showlegend": True,
+        },
+    }

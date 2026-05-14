@@ -25,6 +25,8 @@ from .analytics_common import (
     build_histogram,
     parse_date,
     plotly_bar,
+    plotly_donut,
+    plotly_pie,
     result_for,
     ui_columns,
 )
@@ -139,6 +141,7 @@ def page_analytics_chart() -> None:
             ui.label("Chart").classes("text-subtitle1 font-medium")
             status = ui.label("").classes("text-sm text-gray-600")
             dbg = ui.label("").classes("text-xs text-gray-500")
+            chart_type_debug = ui.label("").classes("text-xs text-blue-600")
 
             chart = (
                 ui.plotly({"data": [], "layout": {"height": 520}})
@@ -151,6 +154,11 @@ def page_analytics_chart() -> None:
                 sel_x = ui.select(options=[], label="Group by (x-axis)").classes(
                     "w-[420px]"
                 )
+                sel_chart_type = ui.select(
+                    options=["Bar", "Pie", "Donut"],
+                    value="Bar",
+                    label="Chart type",
+                ).classes("w-[160px]")
 
                 with ui.row().classes("gap-2"):
                     ui.button(
@@ -494,6 +502,15 @@ def page_analytics_chart() -> None:
             """
         )
 
+    def _build_figure(xs: list[str], ys: list[int], title: str) -> dict[str, Any]:
+        chart_type = (sel_chart_type.value or "Bar").lower()
+        chart_type_debug.set_text(f"chart_type={chart_type}")
+        if chart_type == "pie":
+            return plotly_pie(xs, ys, title)
+        if chart_type == "donut":
+            return plotly_donut(xs, ys, title)
+        return plotly_bar(xs, ys, title)
+
     def _select_to_list(widget: Any) -> list[str] | None:
         vals = widget.value
         if isinstance(vals, list) and vals:
@@ -720,44 +737,46 @@ def page_analytics_chart() -> None:
 
             total = int(res.total or 0)
             if total == 0:
-                _set_chart(plotly_bar([], [], title=f"No results ({f['query_id']})"))
+                _set_chart(_build_figure([], [], f"No results ({f['query_id']})"))
                 dbg.set_text(f"query={f['query_id']} rows=0 total=0")
                 status.set_text("No results for current filters.")
                 return
 
             if not res.items:
-                _set_chart(plotly_bar([], [], title=f"No results ({f['query_id']})"))
+                _set_chart(_build_figure([], [], f"No results ({f['query_id']})"))
                 dbg.set_text(f"query={f['query_id']} rows=0 total={res.total}")
                 status.set_text("No results for current filters.")
                 return
 
             ui_cols = ui_columns(res.columns) or list(res.columns)
 
-            _GROUPBY_EXCLUDE = frozenset({
-                "l_layername",
-                "l_context",
-                "f_fragmenttype",
-                "f_fract",
-                "f_secondarycolor",
-                "f_includesconc",
-                "f_includessize",
-                "f_onepot",
-                "f_includestype",
-                "f_han",
-                "f_note",
-                "f_inventory",
-                "f_imageurl",
-                "p_ornamentid",
-                "o_fragmentid",
-                "o_relationship",
-                "o_ornament",
-                "o_color1",
-                "o_color2",
-                "encrustcolor",
-            "o_encrustcolor1",
-            "o_encrustcolor2",
-            "o_recordenteredon",
-            })
+            _GROUPBY_EXCLUDE = frozenset(
+                {
+                    "l_layername",
+                    "l_context",
+                    "f_fragmenttype",
+                    "f_fract",
+                    "f_secondarycolor",
+                    "f_includesconc",
+                    "f_includessize",
+                    "f_onepot",
+                    "f_includestype",
+                    "f_han",
+                    "f_note",
+                    "f_inventory",
+                    "f_imageurl",
+                    "p_ornamentid",
+                    "o_fragmentid",
+                    "o_relationship",
+                    "o_ornament",
+                    "o_color1",
+                    "o_color2",
+                    "encrustcolor",
+                    "o_encrustcolor1",
+                    "o_encrustcolor2",
+                    "o_recordenteredon",
+                }
+            )
             groupby_cols = [c for c in ui_cols if c.lower() not in _GROUPBY_EXCLUDE]
             sel_x.options = groupby_cols
 
@@ -783,7 +802,7 @@ def page_analytics_chart() -> None:
 
             x_key = sel_x.value
             xs, ys = build_histogram(res.items, x_key, top_n=30)
-            _set_chart(plotly_bar(xs, ys, title=f"Count by {x_key} ({f['query_id']})"))
+            _set_chart(_build_figure(xs, ys, f"Count by {x_key} ({f['query_id']})"))
 
             _populate_frag_filter_options(res.items)
 
@@ -821,6 +840,7 @@ def page_analytics_chart() -> None:
         refresh()
 
     sel_x.on("change", _on_x_change)
+    sel_chart_type.on("change", lambda e: refresh())
 
     refresh()
 
@@ -882,6 +902,7 @@ def analytics_data_csv(
 def analytics_chart_json(
     query_id: str = "q2",
     x: str | None = None,
+    chart_type: str = "bar",
     site: str | None = None,
     sector: str | None = None,
     square: str | None = None,
@@ -926,7 +947,12 @@ def analytics_chart_json(
         x = "f_piecetype" if "f_piecetype" in cols else (cols[0] if cols else "")
 
     xs, ys = build_histogram(res.items, x)
-    fig = plotly_bar(xs, ys, title=f"Count by {x} ({query_id})")
+    if chart_type == "pie":
+        fig = plotly_pie(xs, ys, title=f"Count by {x} ({query_id})")
+    elif chart_type == "donut":
+        fig = plotly_donut(xs, ys, title=f"Count by {x} ({query_id})")
+    else:
+        fig = plotly_bar(xs, ys, title=f"Count by {x} ({query_id})")
     return Response(content=json.dumps(fig), media_type="application/json")
 
 
