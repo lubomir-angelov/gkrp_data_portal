@@ -11,8 +11,10 @@ from __future__ import annotations
 import csv
 import io
 import json
+import pathlib
 from typing import Any
 
+import markdown
 from loguru import logger
 from nicegui import app, ui
 from starlette.responses import HTMLResponse, PlainTextResponse, Response
@@ -38,6 +40,17 @@ from gkrp_data_portal.ui.repository.analytics_repo import (
     get_distinct_values,
     get_layer_hierarchy,
 )
+
+_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[4]
+_CHART_GUIDE_PATH = _PROJECT_ROOT / "CHART.md"
+
+
+def _load_chart_guide() -> str:
+    """Load and render CHART.md as HTML."""
+    if _CHART_GUIDE_PATH.exists():
+        md = _CHART_GUIDE_PATH.read_text(encoding="utf-8")
+        return markdown.markdown(md, extensions=["tables", "fenced_code"])
+    return "<p>Chart guide not found.</p>"
 
 
 @ui.page("/analytics")
@@ -139,8 +152,7 @@ def page_analytics_chart() -> None:
                 label="limit",
             ).classes("w-full")
             ui.label(
-                "Use 'max' to query all matching rows (up to 50,000). "
-                "Charts only use the top 30 buckets, so higher limits don't change chart detail — they just ensure rare categories are included."
+                "Use 'max' to query all matching rows (up to 100,000)."
             ).classes("text-xs text-gray-400 mt-1")
 
         # Center panel (chart only)
@@ -158,19 +170,31 @@ def page_analytics_chart() -> None:
             chart_id = chart.id
 
             with ui.row().classes("w-full items-center justify-between gap-2"):
-                sel_x = ui.select(options=[], label="Group by (x-axis)").classes(
-                    "w-[300px]"
-                )
-                sel_series = ui.select(
-                    options=[],
-                    label="Series (group by)",
-                    clearable=True,
-                ).classes("w-[200px]")
-                sel_chart_type = ui.select(
-                    options=["Bar", "Pie", "Donut"],
-                    value="Bar",
-                    label="Chart type",
-                ).classes("w-[160px]")
+                with ui.column().classes("gap-0"):
+                    sel_x = ui.select(options=[], label="Group by (x-axis)").classes(
+                        "w-[300px]"
+                    )
+                    ui.label(
+                        "The primary dimension the chart is grouped by (e.g. Site, Sector, Square)."
+                    ).classes("text-xs text-gray-400")
+                with ui.column().classes("gap-0"):
+                    sel_series = ui.select(
+                        options=[],
+                        label="Series (group by)",
+                        clearable=True,
+                    ).classes("w-[200px]")
+                    ui.label(
+                        "Optional: splits bars into grouped traces by a second dimension (e.g. Piecetype, Technology, Surface)."
+                    ).classes("text-xs text-gray-400")
+                with ui.column().classes("gap-0"):
+                    sel_chart_type = ui.select(
+                        options=["Bar", "Pie", "Donut"],
+                        value="Pie",
+                        label="Chart type",
+                    ).classes("w-[160px]")
+                    ui.label(
+                        "Bar shows grouped bars, Pie/Donut show proportions."
+                    ).classes("text-xs text-gray-400")
 
                 with ui.row().classes("gap-2"):
                     ui.button(
@@ -211,12 +235,27 @@ def page_analytics_chart() -> None:
                     )
 
             with ui.column().classes("w-full mt-2"):
-                ui.label("Chart type: choose Bar, Pie, or Donut.").classes(
-                    "text-sm text-gray-500"
-                )
-                ui.label(
-                    "Add a series dimension (e.g. Technology, Surface) to split bars into grouped traces."
-                ).classes("text-sm text-gray-500")
+                with ui.row().classes("items-center gap-2"):
+                    ui.label(
+                        "Charts fetch up to 25,000 rows to build the top 30 buckets. "
+                        "This is enough for columns with up to ~40 categories; "
+                        "if you filter to a small subset (e.g. one site and sector) the limit may truncate rare categories."
+                    ).classes("text-sm text-gray-500")
+                    use_all_rows = ui.toggle(
+                        {True: "On", False: "Off"},
+                        value=False,
+                    ).classes("text-sm")
+                    ui.label("Enable all rows for small subset")
+                    ui.button(
+                        "📖",
+                        on_click=lambda: help_dialog.open(),
+                        icon="help",
+                    ).classes("p-1").style("font-size: 1.2rem;")
+
+    # --- Help dialog ---
+    with ui.dialog() as help_dialog, ui.card().classes("w-[600px] max-h-[80vh]"):
+        ui.markdown(_load_chart_guide())
+        ui.button("Затвори", on_click=help_dialog.close).classes("w-full mt-2")
 
         # Right panel (fragments filters)
         with ui.column().classes("w-[320px] shrink-0"):
@@ -752,6 +791,8 @@ def page_analytics_chart() -> None:
 
             if f["limit"] >= TABLE_MAX_LIMIT:
                 chart_fetch = f["limit"]
+            elif use_all_rows.value:
+                chart_fetch = TABLE_MAX_LIMIT
             else:
                 chart_fetch = min(max(f["limit"], 0), CHART_MAX_FETCH)
 
@@ -888,6 +929,7 @@ def page_analytics_chart() -> None:
 
     sel_x.on("change", _on_x_change)
     sel_chart_type.on("change", lambda e: refresh())
+    use_all_rows.on("change", lambda e: refresh())
 
     refresh()
 
