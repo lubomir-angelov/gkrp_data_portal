@@ -43,7 +43,7 @@ def _save_ornament(db: Session, obj: Tblornament, data: dict) -> Tblornament:
 
 @ui.page("/ornaments")
 def page_ornaments() -> None:
-    ui.label("Ornaments (tblornaments)").classes("text-h5")
+    ui.label("Ornaments (tblornaments)").classes("text-h5 text-gray-900")
 
     search = ui.input("Search (location/primary/secondary/tertiary)").props("clearable")
 
@@ -78,7 +78,7 @@ def page_ornaments() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[1000px]"):
-            ui.label("Edit Ornament" if ornamentid else "Create Ornament").classes("text-h6")
+            ui.label("Edit Ornament" if ornamentid else "Create Ornament").classes("text-h6 text-gray-900")
 
             ui.markdown(
                 "If **Fragment ID** is empty, it will be inferred as the **most recent fragment** (parity with ceramics workflow)."

@@ -115,7 +115,7 @@ class TestBuildWhere:
         )
         assert "COALESCE(f.inventory,'') ILIKE :q" in sql
         assert "COALESCE(f.note,'') ILIKE :q" in sql
-        assert "COALESCE(f.piecetype,'') ILIKE :q" in sql
+        assert "COALESCE(f.piecetype::text,'') ILIKE :q" in sql
 
     def test_free_text_q2(self):
         sql, params = _build_where(

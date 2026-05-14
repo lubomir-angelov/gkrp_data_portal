@@ -152,15 +152,16 @@ def _build_where(
     # Layer-scoped filters (always safe; all queries include l alias)
     if layer_filters:
         _apply_layer_filters(clauses, params, layer_filters)
-    elif site:
-        clauses.append("l.site ILIKE :site")
-        params["site"] = f"%{site}%"
-    elif sector:
-        clauses.append("l.sector ILIKE :sector")
-        params["sector"] = f"%{sector}%"
-    elif square:
-        clauses.append("l.square ILIKE :square")
-        params["square"] = f"%{square}%"
+    else:
+        if site:
+            clauses.append("l.site ILIKE :site")
+            params["site"] = f"%{site}%"
+        if sector:
+            clauses.append("l.sector ILIKE :sector")
+            params["sector"] = f"%{sector}%"
+        if square:
+            clauses.append("l.square ILIKE :square")
+            params["square"] = f"%{square}%"
 
     if date_from:
         clauses.append("l.recordenteredon >= :date_from")
@@ -172,7 +173,7 @@ def _build_where(
     # Free-text: differs slightly by query (which aliases exist)
     if q:
         params["q"] = f"%{q}%"
-        if query_id in ("q2",):
+        if query_id in ("q1", "q2"):
             clauses.append(
                 "(COALESCE(f.inventory,'') ILIKE :q OR COALESCE(f.note,'') ILIKE :q OR COALESCE(f.piecetype::text,'') ILIKE :q)"
             )
@@ -208,6 +209,57 @@ def _run_sql(
 def _count_sql(db: Session, *, count_sql: str, params: dict[str, Any]) -> int:
     row = db.execute(text(count_sql), params).scalar_one()
     return int(row)
+
+
+def query_q1_layers_fragments(
+    db: Session,
+    *,
+    site: Optional[str] = None,
+    sector: Optional[str] = None,
+    square: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    q: Optional[str] = None,
+    limit: int = 500,
+    offset: int = 0,
+    frag_filters: Optional[dict[str, Any]] = None,
+    layer_filters: Optional[dict[str, Any]] = None,
+) -> AnalyticsResult:
+    """Filter #1: tbllayers INNER JOIN tblfragments (no ornaments)."""
+    select_cols = (
+        _model_select_list("l_", "l", Tbllayer)
+        + _model_select_list("f_", "f", Tblfragment)
+    )
+    base = f"""
+    SELECT
+      {", ".join(select_cols)}
+    FROM tbllayers l
+    INNER JOIN tblfragments f ON l.layerid = f.locationid
+    """
+
+    where_sql, params = _build_where(
+        query_id="q1",
+        site=site,
+        sector=sector,
+        square=square,
+        date_from=date_from,
+        date_to=date_to,
+        q=q,
+        frag_filters=frag_filters,
+        layer_filters=layer_filters,
+    )
+
+    sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC"
+    count_sql = f"SELECT COALESCE(SUM(f_count), 0) FROM ({base}\n{where_sql}) x"
+
+    rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
+    total = _count_sql(db, count_sql=count_sql, params=params)
+
+    items = [dict(r) for r in rows]
+    columns = (
+        list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
+    )
+    return AnalyticsResult(items=items, total=total, columns=columns)
 
 
 def query_q2_layers_fragments_ornaments(

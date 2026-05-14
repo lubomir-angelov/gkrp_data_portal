@@ -70,7 +70,7 @@ def page_analytics_table() -> None:
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
         # Left panel
         with ui.column().classes("w-[340px] shrink-0"):
-            ui.label("Query + Filters").classes("text-subtitle1 font-medium")
+            ui.label("Query + Filters").classes("text-subtitle1 font-medium text-gray-900")
 
             sel_query = ui.select(
                 options=list(QUERY_OPTIONS.keys()),
@@ -136,7 +136,7 @@ def page_analytics_table() -> None:
 
         # Center panel (grid)
         with ui.column().classes("flex-1 min-w-0"):
-            ui.label("Table (scrollable)").classes("text-subtitle1 font-medium")
+            ui.label("Table (scrollable)").classes("text-subtitle1 font-medium text-gray-900")
             status = ui.label("").classes("text-sm text-gray-600")
             dbg = ui.label("").classes("text-xs text-gray-500")
 

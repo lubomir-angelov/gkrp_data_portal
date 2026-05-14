@@ -87,7 +87,7 @@ def page_analytics_chart() -> None:
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
         # Left panel
         with ui.column().classes("w-[340px] shrink-0"):
-            ui.label("Query + Filters").classes("text-subtitle1 font-medium")
+            ui.label("Query + Filters").classes("text-subtitle1 font-medium text-gray-900")
 
             sel_query = ui.select(
                 options=list(QUERY_OPTIONS.keys()),
@@ -158,11 +158,13 @@ def page_analytics_chart() -> None:
         # Center panel (chart only)
         with ui.column().classes("flex-1 min-w-0"):
             with ui.row().classes("w-full items-center justify-between"):
-                ui.label("Chart").classes("text-subtitle1 font-medium")
-                help_btn = ui.button(
-                    icon="help",
-                ).classes("p-1").style("font-size: 1.2rem;")
-                help_btn.on("click", lambda: help_dialog.open())
+                ui.label("Chart").classes("text-subtitle1 font-medium text-gray-900")
+                with ui.column().classes("items-center gap-0"):
+                    ui.label("Упътване").classes("text-subtitle2 text-blue-600")
+                    help_btn = ui.button(
+                        icon="help",
+                    ).classes("p-1").style("font-size: 1.2rem;")
+                    help_btn.on("click", lambda: help_dialog.open())
             status = ui.label("").classes("text-sm text-gray-600")
             dbg = ui.label("").classes("text-xs text-gray-500")
             chart_type_debug = ui.label("").classes("text-xs text-blue-600")
@@ -254,7 +256,7 @@ def page_analytics_chart() -> None:
 
         # Right panel (fragments filters)
         with ui.column().classes("w-[320px] shrink-0"):
-            ui.label("Fragments").classes("text-subtitle1 font-medium")
+            ui.label("Fragments").classes("text-subtitle1 font-medium text-gray-900")
             with ui.scroll_area().classes(
                 "w-full h-[820px] border rounded p-2 bg-white"
             ):
@@ -445,7 +447,7 @@ def page_analytics_chart() -> None:
             # ---- Ornaments section (always visible) ----
             orn_section = ui.column().classes("w-full gap-1 mt-4")
             with orn_section:
-                ui.label("Ornaments").classes("text-subtitle1 font-medium")
+                ui.label("Ornaments").classes("text-subtitle1 font-medium text-gray-900")
                 orn_filters: list[tuple[str, Any]] = [
                     (
                         "Primary",
@@ -929,7 +931,7 @@ def page_analytics_chart() -> None:
     refresh()
 
     # --- Help dialog (outside the 3-column row) ---
-    with ui.dialog() as help_dialog, ui.card().classes("w-[600px] max-h-[80vh]"):
+    with ui.dialog() as help_dialog, ui.card().classes("w-[750px] max-h-[80vh]"):
         ui.markdown(_load_chart_guide())
         ui.button("Затвори", on_click=help_dialog.close).classes("w-full mt-2")
 
