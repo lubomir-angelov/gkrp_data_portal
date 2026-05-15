@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from .analytics_common import LOCALE
+from gkrp_data_portal.ui.pages.analytics_common import LOCALE
 
 # Import pages to register routes
 from gkrp_data_portal.ui.pages.layers import page_layers  # noqa: F401

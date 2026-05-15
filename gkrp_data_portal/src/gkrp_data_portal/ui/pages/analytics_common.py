@@ -125,6 +125,7 @@ LOCALE: dict[str, str] = {
     "col_baking": "Печене",
     "col_primary": "Основно",
     "col_secondary": "Вторично",
+    "col_tertiary": "Третично",
     "col_count": "Брой",
     "col_inventory": "Инвентарен №",
     "col_image_url": "URL Изображение",
