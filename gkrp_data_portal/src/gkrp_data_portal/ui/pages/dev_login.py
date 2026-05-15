@@ -5,13 +5,14 @@ from sqlalchemy import select
 
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.models.auth import User
+from .analytics_common import LOCALE
 
 SESSION_USER_KEY = "user_id"
 
 
 @ui.page("/dev-login")
 def page_dev_login() -> None:
-    ui.label("DEV Login (sets session user_id)").classes("text-h5")
+    ui.label(LOCALE["title_dev_login"]).classes("text-h5")
 
     with session_scope() as db:
         rows = db.execute(
@@ -25,8 +26,8 @@ def page_dev_login() -> None:
         ).all()
 
     if not rows:
-        ui.notify("No users found in tblregistered", type="warning")
-        ui.label("Create a user (or invite) first, then come back.")
+        ui.notify(LOCALE["notify_no_users"], type="warning")
+        ui.label(LOCALE["other_create_user_first"])
         return
 
     options = {
@@ -34,24 +35,24 @@ def page_dev_login() -> None:
         for (uid, email, username, role, is_active) in rows
     }
 
-    sel = ui.select(options=list(options.keys()), label="Select user to become").classes("w-full")
+    sel = ui.select(options=list(options.keys()), label=LOCALE["label_select_user"]).classes("w-full")
 
     def do_login() -> None:
         key = sel.value
         if not key:
-            ui.notify("Select a user", type="negative")
+            ui.notify(LOCALE["notify_select_user"], type="negative")
             return
         user_id = int(options[key])
         app.storage.user[SESSION_USER_KEY] = user_id
-        ui.notify(f"Session set: user_id={user_id}", type="positive")
+        ui.notify(LOCALE["notify_session_set"].format(user_id=user_id), type="positive")
         ui.navigate.to("/admin")
 
     def do_logout() -> None:
         app.storage.user.pop(SESSION_USER_KEY, None)
-        ui.notify("Session cleared", type="positive")
+        ui.notify(LOCALE["notify_session_cleared"], type="positive")
 
     with ui.row().classes("gap-2"):
-        ui.button("Login as selected user", on_click=do_login)
-        ui.button("Logout (clear session)", on_click=do_logout)
+        ui.button(LOCALE["btn_login"], on_click=do_login)
+        ui.button(LOCALE["btn_logout"], on_click=do_logout)
 
-    ui.markdown("After logging in, open **/admin** to test admin features.").classes("text-sm")
+    ui.markdown(LOCALE["title_dev_login_text"]).classes("text-sm")

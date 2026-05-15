@@ -285,13 +285,13 @@ class TestBuildHistogramSeries:
         assert series_data["Y"] == [2]
 
     def test_column_to_label_mapping(self):
-        from gkrp_data_portal.ui.pages.analytics_common import _column_to_label
+        from gkrp_data_portal.ui.pages.analytics_common import LOCALE, _column_to_label
 
-        assert _column_to_label("f_technology") == "Technology"
-        assert _column_to_label("f_piecetype") == "Piecetype"
-        assert _column_to_label("f_surface") == "Surface"
-        assert _column_to_label("o_primary") == "Ornament primary"
-        assert _column_to_label("l_site") == "Site"
+        assert _column_to_label("f_technology") == LOCALE["frag_technology"]
+        assert _column_to_label("f_piecetype") == LOCALE["frag_piecetype"]
+        assert _column_to_label("f_surface") == LOCALE["frag_surface"]
+        assert _column_to_label("o_primary") == LOCALE["frag_primary"]
+        assert _column_to_label("l_site") == LOCALE["label_site"]
         assert _column_to_label("unknown_col") == "unknown_col"
 
 

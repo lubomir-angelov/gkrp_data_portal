@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from nicegui import ui
 
+from .analytics_common import LOCALE
 from gkrp_data_portal.auth.deps import require_admin
 from gkrp_data_portal.core.email import maybe_send_invite_email
 from gkrp_data_portal.core.invitations import new_invite_token
@@ -24,24 +25,24 @@ def page_admin() -> None:
     # Guard: raise if not admin. NiceGUI will show error; you can add friendly redirect later.
     require_admin()
 
-    ui.label("Admin").classes("text-h5 text-blue-600")
+    ui.label(LOCALE["title_admin"]).classes("text-h5 text-blue-600")
 
     invite_link_label = ui.label("").classes("text-sm")
-    invite_link_copy = ui.input("Invite link").props("readonly").classes("w-full")
+    invite_link_copy = ui.input(LOCALE["label_invite_link"]).props("readonly").classes("w-full")
     invite_link_copy.set_visibility(False)
 
     ui.separator()
 
-    ui.label("Create invite").classes("text-h6 text-blue-600")
+    ui.label(LOCALE["btn_create_invite"]).classes("text-h6 text-blue-600")
     with ui.row().classes("w-full items-end"):
-        inp_email = ui.input("Email").classes("w-[420px]")
-        sel_role = ui.select(["user", "admin"], value="user", label="Role").classes("w-[180px]")
-        btn_create = ui.button("Create invite")
+        inp_email = ui.input(LOCALE["label_email"]).classes("w-[420px]")
+        sel_role = ui.select(["user", "admin"], value="user", label=LOCALE["label_role"]).classes("w-[180px]")
+        btn_create = ui.button(LOCALE["btn_create_invite"])
 
     def do_create_invite() -> None:
         email = (inp_email.value or "").strip()
         if not email:
-            ui.notify("Email is required", type="negative")
+            ui.notify(LOCALE["notify_email_required"], type="negative")
             return
 
         token = new_invite_token()
@@ -53,20 +54,20 @@ def page_admin() -> None:
         base = get_app_base_url()
         link = f"{base}/accept-invite?token={token.raw}"
 
-        invite_link_label.text = "Invite created. Copy and send this link:"
+        invite_link_label.text = LOCALE["notify_invite_created"]
         invite_link_copy.value = link
         invite_link_copy.set_visibility(True)
 
         # optional SMTP (will no-op if not configured)
         sent = maybe_send_invite_email(
             to_email=email,
-            subject="Invitation to GKR Portal",
-            body=f"You have been invited.\n\nOpen this link to activate your account:\n{link}\n\nThis link expires in {ttl} hours.",
+            subject=LOCALE["other_invite_created_text"],
+            body=LOCALE["other_invite_body"].format(link=link, ttl=ttl),
         )
         if sent:
-            ui.notify("Invite email sent via SMTP", type="positive")
+            ui.notify(LOCALE["notify_invite_email_sent"], type="positive")
         else:
-            ui.notify("SMTP not configured; link shown for manual sending", type="warning")
+            ui.notify(LOCALE["notify_smtp_not_configured"], type="warning")
 
         refresh_users()
 
@@ -74,16 +75,16 @@ def page_admin() -> None:
 
     ui.separator()
 
-    ui.label("Users").classes("text-h6 text-blue-600")
+    ui.label("Потребители").classes("text-h6 text-blue-600")
     users_table = ui.table(
         columns=[
-            {"name": "id", "label": "ID", "field": "id", "sortable": True},
-            {"name": "username", "label": "Username", "field": "username"},
-            {"name": "email", "label": "Email", "field": "email"},
-            {"name": "role", "label": "Role", "field": "role"},
-            {"name": "is_active", "label": "Active", "field": "is_active"},
-            {"name": "invited_at", "label": "Invited", "field": "invited_at"},
-            {"name": "invite_expires_at", "label": "Invite Expires", "field": "invite_expires_at"},
+            {"name": "id", "label": LOCALE["col_id"], "field": "id", "sortable": True},
+            {"name": "username", "label": LOCALE["col_username"], "field": "username"},
+            {"name": "email", "label": LOCALE["admin_email"], "field": "email"},
+            {"name": "role", "label": LOCALE["admin_role"], "field": "role"},
+            {"name": "is_active", "label": LOCALE["admin_active"], "field": "is_active"},
+            {"name": "invited_at", "label": LOCALE["col_invited"], "field": "invited_at"},
+            {"name": "invite_expires_at", "label": LOCALE["col_invite_expires"], "field": "invite_expires_at"},
         ],
         rows=[],
         row_key="id",
@@ -120,18 +121,18 @@ def page_admin() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[520px]"):
-            ui.label(f"User {uid} actions").classes("text-h6 text-blue-600")
-            ui.label(f"Email: {row.get('email')}")
-            ui.label(f"Username: {row.get('username')}")
-            ui.label(f"Role: {row.get('role')}")
-            ui.label(f"Active: {row.get('is_active')}")
+            ui.label(LOCALE["dialog_user_actions"].format(uid=uid)).classes("text-h6 text-blue-600")
+            ui.label(f"{LOCALE['admin_email']}: {row.get('email')}")
+            ui.label(f"{LOCALE['admin_username']}: {row.get('username')}")
+            ui.label(f"{LOCALE['admin_role']}: {row.get('role')}")
+            ui.label(f"{LOCALE['admin_active']}: {row.get('is_active')}")
 
             with ui.row().classes("w-full justify-end"):
-                ui.button("Close", on_click=dialog.close)
+                ui.button(LOCALE["btn_close"], on_click=dialog.close)
                 if row.get("is_active"):
-                    ui.button("Disable", on_click=lambda: (toggle_user(int(uid), False), dialog.close()))
+                    ui.button(LOCALE["btn_disable"], on_click=lambda: (toggle_user(int(uid), False), dialog.close()))
                 else:
-                    ui.button("Activate", on_click=lambda: (toggle_user(int(uid), True), dialog.close()))
+                    ui.button(LOCALE["btn_activate"], on_click=lambda: (toggle_user(int(uid), True), dialog.close()))
 
         dialog.open()
 

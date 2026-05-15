@@ -12,6 +12,7 @@ from gkrp_data_portal.ui.repository.archaeology_repo import (
     list_layers,
     most_recent_layer_id,
 )
+from .analytics_common import LOCALE
 
 
 def _row_to_dict(r: Tbllayer) -> dict:
@@ -40,17 +41,17 @@ def _save_layer(db: Session, obj: Tbllayer, data: dict) -> Tbllayer:
 
 @ui.page("/layers")
 def page_layers() -> None:
-    ui.label("Layers (tbllayers)").classes("text-h5 text-blue-600")
+    ui.label(LOCALE["title_layers"]).classes("text-h5 text-blue-600")
 
-    search = ui.input("Search (site/sector/square/layer)").props("clearable")
+    search = ui.input(LOCALE["search_layers"]).props("clearable")
 
     table = ui.table(
         columns=[
-            {"name": "layerid", "label": "ID", "field": "layerid", "sortable": True},
-            {"name": "site", "label": "Site", "field": "site"},
-            {"name": "sector", "label": "Sector", "field": "sector"},
-            {"name": "square", "label": "Square", "field": "square"},
-            {"name": "layer", "label": "Layer", "field": "layer"},
+            {"name": "layerid", "label": LOCALE["col_id"], "field": "layerid", "sortable": True},
+            {"name": "site", "label": LOCALE["label_site"], "field": "site"},
+            {"name": "sector", "label": LOCALE["label_sector"], "field": "sector"},
+            {"name": "square", "label": LOCALE["label_square"], "field": "square"},
+            {"name": "layer", "label": LOCALE["label_layer"], "field": "layer"},
         ],
         rows=[],
         row_key="layerid",
@@ -72,11 +73,9 @@ def page_layers() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[800px]"):
-            ui.label("Edit Layer" if layerid else "Create Layer").classes("text-h6 text-blue-600")
+            ui.label(LOCALE["dialog_edit_layer"] if layerid else LOCALE["dialog_create_layer"]).classes("text-h6 text-blue-600")
 
-            ui.markdown(
-                "If **Layer ID** is empty, it will be inferred as the **most recent layer** (parity with ceramics workflow)."
-            ).classes("text-sm")
+            ui.markdown(LOCALE["dialog_layer_hint"]).classes("text-sm")
 
             with ui.grid(columns=2).classes("w-full gap-4"):
                 # location selection
@@ -91,7 +90,7 @@ def page_layers() -> None:
                 sel_layer = ui.select(
                     options=list(layer_map.keys()),
                     value=layer_label_default,
-                    label="Layer (optional)",
+                    label=LOCALE["label_layer_optional"],
                 ).props("clearable")
 
                 inp_site = ui.input("site", value=obj.site or "")
@@ -100,7 +99,7 @@ def page_layers() -> None:
                 inp_layer = ui.input("layer", value=obj.layer or "")
 
             with ui.row().classes("w-full justify-end"):
-                ui.button("Cancel", on_click=dialog.close)
+                ui.button(LOCALE["btn_cancel"], on_click=dialog.close)
 
                 def do_save() -> None:
                     chosen_layer_id = (
@@ -122,13 +121,13 @@ def page_layers() -> None:
                     dialog.close()
                     refresh()
 
-                ui.button("Save", on_click=do_save)
+                ui.button(LOCALE["btn_save"], on_click=do_save)
 
         dialog.open()
 
     with ui.row().classes("w-full justify-between"):
-        ui.button("Refresh", on_click=refresh)
-        ui.button("New Layer", on_click=lambda: open_editor(None))
+        ui.button(LOCALE["btn_refresh"], on_click=refresh)
+        ui.button(LOCALE["btn_new_layer"], on_click=lambda: open_editor(None))
 
     def on_row_click(e) -> None:
         row = e.args.get("row") or {}
