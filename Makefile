@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 ENV_FILE := .env
-COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml
+COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yaml
 PYTHON ?= python
 
 # ---- Defaults (can be overridden via: make run POSTGRES_PASSWORD=... etc.) ----
