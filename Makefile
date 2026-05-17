@@ -69,7 +69,7 @@ reset-db:
 
 wait-db:
 	@set -euo pipefail; \
-	set -a; source "$(ENV_FILE)"; set +a; \
+	set -a; source "$(ENV_FILE)"; \
 	echo "Waiting for Postgres in container $$PG_CONTAINER ..."; \
 	for i in $$(seq 1 60); do \
 	  if docker exec -e PGPASSWORD="$$POSTGRES_PASSWORD" "$$PG_CONTAINER" pg_isready -U "$$POSTGRES_USER" -d postgres >/dev/null 2>&1; then \
@@ -83,10 +83,10 @@ wait-db:
 
 copy-backup: up-db wait-db
 	@set -euo pipefail; \
-	set -a; source "$(ENV_FILE)"; set +a; \
-	export BACKUP_FILE="$(BACKUP_FILE)"; \
-	export DUMP_IN_CONTAINER="$(DUMP_IN_CONTAINER)"; \
-	export PG_CONTAINER="$(PG_CONTAINER)"; \
+	set -a; source "$(ENV_FILE)"; \
+	export BACKUP_FILE="${BACKUP_FILE:-$(BACKUP_FILE)}"; \
+	export DUMP_IN_CONTAINER="${DUMP_IN_CONTAINER:-$(DUMP_IN_CONTAINER)}"; \
+	export PG_CONTAINER="${PG_CONTAINER:-$(PG_CONTAINER)}"; \
 	if [ -z "$$BACKUP_FILE" ]; then \
 	  echo "BACKUP_FILE is required. Example: make initial-setup BACKUP_FILE=/path/to/Pottery_backup_260118.dump"; \
 	  exit 1; \
@@ -100,10 +100,10 @@ copy-backup: up-db wait-db
 
 restore-app-db: copy-backup
 	@set -euo pipefail; \
-	set -a; source "$(ENV_FILE)"; set +a; \
-	export BACKUP_FILE="$(BACKUP_FILE)"; \
-	export DUMP_IN_CONTAINER="$(DUMP_IN_CONTAINER)"; \
-	export PG_CONTAINER="$(PG_CONTAINER)"; \
+	set -a; source "$(ENV_FILE)"; \
+	export BACKUP_FILE="${BACKUP_FILE:-$(BACKUP_FILE)}"; \
+	export DUMP_IN_CONTAINER="${DUMP_IN_CONTAINER:-$(DUMP_IN_CONTAINER)}"; \
+	export PG_CONTAINER="${PG_CONTAINER:-$(PG_CONTAINER)}"; \
 	echo "Running restore script with env from $(ENV_FILE)"; \
 	bash ./create_app_db_from_restore_and_populate.sh
 
@@ -114,9 +114,7 @@ initial-setup: restore-app-db
 
 run:
 	@set -euo pipefail; \
-	set -a; source "$(ENV_FILE)"; set +a; \
-	export DATABASE_URL="$(DATABASE_URL)"; \
-	export STORAGE_SECRET="$(STORAGE_SECRET)"; \
+	set -a; source "$(ENV_FILE)"; \
 	export PYTHONPATH="$$(pwd)/gkrp_data_portal/src:$${PYTHONPATH:-}"; \
 	echo "Starting app with DATABASE_URL=$$DATABASE_URL"; \
 	$(PYTHON) -m gkrp_data_portal.main

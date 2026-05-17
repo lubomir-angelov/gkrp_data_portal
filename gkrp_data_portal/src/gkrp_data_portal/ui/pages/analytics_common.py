@@ -16,7 +16,7 @@ LOCALE: dict[str, str] = {
     # --- Navigation ---
     "nav_navigation": "Навигация",
     "nav_layers": "Пластове",
-    "nav_fragments": "Отломъци",
+    "nav_fragments": "Фрагменти",
     "nav_ornaments": "Орнаменти",
     "nav_admin": "Админ",
     "nav_analytics": "Аналитика",
@@ -25,7 +25,7 @@ LOCALE: dict[str, str] = {
 
     # --- Page titles ---
     "title_layers": "Пластове (tbllayers)",
-    "title_fragments": "Отломъци (tblfragments)",
+    "title_fragments": "Фрагменти (tblfragments)",
     "title_ornaments": "Орнаменти (tblornaments)",
     "title_admin": "Админ",
     "title_analytics": "Аналитика",
@@ -41,7 +41,7 @@ LOCALE: dict[str, str] = {
     "panel_query_filters": "Запитване и Филтри",
     "panel_chart": "Графика",
     "panel_table": "Таблица (преместване)",
-    "panel_fragments": "Отломъци",
+    "panel_fragments": "Фрагменти",
     "panel_ornaments": "Орнаменти",
 
     # --- Buttons ---
@@ -50,7 +50,7 @@ LOCALE: dict[str, str] = {
     "btn_run_query": "Изпълни запитване",
     "btn_refresh": "Обнови",
     "btn_new_layer": "Нов Пласт",
-    "btn_new_fragment": "Нов Отломък",
+    "btn_new_fragment": "Нов Фрагмент",
     "btn_new_ornament": "Нов Орнамент",
     "btn_cancel": "Отказ",
     "btn_save": "Запази",
@@ -73,7 +73,7 @@ LOCALE: dict[str, str] = {
     "label_square": "Квадрат",
     "label_layer": "Пласт",
     "label_layer_optional": "Пласт (по избор)",
-    "label_fragment_optional": "Отломък (по избор)",
+    "label_fragment_optional": "Фрагмент (по избор)",
     "label_email": "Имейл",
     "label_role": "Роля",
     "label_group_by": "Групирай по (x-ос)",
@@ -120,7 +120,7 @@ LOCALE: dict[str, str] = {
     "col_id": "ИД",
     "col_layer_id": "ИД Пласт",
     "col_piecetype": "Тип Отломък",
-    "col_fragmenttype": "Вид Отломък",
+    "col_fragmenttype": "Вид фрагмент",
     "col_technology": "Технология",
     "col_baking": "Печене",
     "col_primary": "Основно",
@@ -129,7 +129,7 @@ LOCALE: dict[str, str] = {
     "col_count": "Брой",
     "col_inventory": "Инвентарен №",
     "col_image_url": "URL Изображение",
-    "col_fragment_id": "ИД Отломък",
+    "col_fragment_id": "ИД фрагмент",
     "col_location": "Местоположение",
     "col_primary_": "Основно",
     "col_color1": "Цвят1",
@@ -141,17 +141,17 @@ LOCALE: dict[str, str] = {
     # --- Dialogs ---
     "dialog_edit_layer": "Редактиране на Пласт",
     "dialog_create_layer": "Създаване на Пласт",
-    "dialog_edit_fragment": "Редактиране на Отломък",
-    "dialog_create_fragment": "Създаване на Отломък",
+    "dialog_edit_fragment": "Редактиране на фрагмент",
+    "dialog_create_fragment": "Създаване на фрагмент",
     "dialog_edit_ornament": "Редактиране на Орнамент",
     "dialog_create_ornament": "Създаване на Орнамент",
     "dialog_user_actions": "Действия за потребител {uid}",
     "dialog_layer_hint": "Ако **ИД на Пласт** е празно, ще бъде изведено като **най-новият пласт** (паритет с керамичния работен процес).",
     "dialog_fragment_hint": "Ако **ИД на Пласт** е празно, ще бъде изведено като **най-новият пласт** (паритет с керамичния работен процес).",
-    "dialog_ornament_hint": "Ако **ИД на Отломък** е празно, ще бъде изведено като **най-новият отломък** (паритет с керамичния работен процес).",
+    "dialog_ornament_hint": "Ако **ИД на фрагмент** е празно, ще бъде изведено като **най-новият фрагмент** (паритет с керамичния работен процес).",
 
     # --- Queries ---
-    "query_filter2": "Филтър #2 (Пластове + Отломъци + Орнаменти)",
+    "query_filter2": "Филтър #2 (Пластове + Фрагменти + Орнаменти)",
     "query_finds": "Открития (tblfinds)",
 
     # --- Chart controls ---
@@ -174,7 +174,7 @@ LOCALE: dict[str, str] = {
 
     # --- Search ---
     "search_layers": "Търсене (обект/сектор/квадрат/пласт)",
-    "search_fragments": "Търсене (инвентарен бр./бележка/тип отломък/вид отломък/технология)",
+    "search_fragments": "Търсене (инвентарен бр./бележка/тип фрагмент/вид фрагмент/технология)",
     "search_ornaments": "Търсене (местоположение/основно/вторично/третично)",
 
     # --- Notifications ---
