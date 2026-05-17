@@ -251,7 +251,7 @@ def page_analytics_chart() -> None:
 
         # Right panel (fragments filters)
         with ui.column().classes("w-[320px] shrink-0"):
-            ui.label(LOCALE["panel_fragments"]).classes("text-subtitle1 font-medium text-blue-600")
+            ui.label("Fragments").classes("text-subtitle1 font-medium text-blue-600")
             with ui.scroll_area().classes(
                 "w-full h-[820px] border rounded p-2 bg-white"
             ):
@@ -260,7 +260,7 @@ def page_analytics_chart() -> None:
                         "Piecetype",
                         ui.select(
                             options=[],
-                            label=LOCALE["frag_piecetype"],
+                            label="Piecetype",
                             value=[],
                             multiple=True,
                             clearable=True,
@@ -276,7 +276,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_technology"],
+                            label="Technology",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -288,7 +288,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_baking"],
+                            label="Baking",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -300,7 +300,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_color_primary"],
+                            label="Color / Primary color",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -312,7 +312,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_covering"],
+                            label="Covering",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -324,7 +324,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_surface"],
+                            label="Surface",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -336,7 +336,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_wall_thickness"],
+                            label="Wall thickness",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -348,7 +348,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_handle_type"],
+                            label="Handle type",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -360,7 +360,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_handle_size"],
+                            label="Handle size",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -372,7 +372,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_bottom_type"],
+                            label="Bottom type",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -384,7 +384,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_category"],
+                            label="Category",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -396,7 +396,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_form"],
+                            label="Form",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -408,7 +408,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_type"],
+                            label="Type",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -420,7 +420,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_subtype"],
+                            label="Subtype",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -432,7 +432,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label=LOCALE["frag_variant"],
+                            label="Variant",
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -442,13 +442,13 @@ def page_analytics_chart() -> None:
             # ---- Ornaments section (always visible) ----
             orn_section = ui.column().classes("w-full gap-1 mt-4")
             with orn_section:
-                ui.label(LOCALE["panel_ornaments"]).classes("text-subtitle1 font-medium text-blue-600")
+                ui.label("Ornaments").classes("text-subtitle1 font-medium text-blue-600")
                 orn_filters: list[tuple[str, Any]] = [
                     (
                         "Primary",
                         ui.select(
                             options=[],
-                            label=LOCALE["frag_primary"],
+                            label="Primary",
                             multiple=True,
                             clearable=True,
                             with_input=True,
@@ -460,7 +460,7 @@ def page_analytics_chart() -> None:
                         "Secondary",
                         ui.select(
                             options=[],
-                            label=LOCALE["frag_secondary"],
+                            label="Secondary",
                             multiple=True,
                             clearable=True,
                             with_input=True,
@@ -472,7 +472,7 @@ def page_analytics_chart() -> None:
                         "Tertiary",
                         ui.select(
                             options=[],
-                            label=LOCALE["frag_tertiary"],
+                            label="Tertiary",
                             multiple=True,
                             clearable=True,
                             with_input=True,
@@ -484,7 +484,7 @@ def page_analytics_chart() -> None:
                         "Quarternary",
                         ui.select(
                             options=[],
-                            label=LOCALE["frag_quarternary"],
+                            label="Quarternary",
                             multiple=True,
                             clearable=True,
                             with_input=True,
@@ -496,7 +496,7 @@ def page_analytics_chart() -> None:
                         "Color / color1",
                         ui.select(
                             options=[],
-                            label=LOCALE["frag_color_color1"],
+                            label="Color / color1",
                             multiple=True,
                             clearable=True,
                             with_input=True,
@@ -508,7 +508,7 @@ def page_analytics_chart() -> None:
                         "Encrust color",
                         ui.select(
                             options=[],
-                            label=LOCALE["frag_encrust_color"],
+                            label="Encrust color",
                             multiple=True,
                             clearable=True,
                             with_input=True,
