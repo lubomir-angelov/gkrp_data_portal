@@ -90,7 +90,7 @@ def upgrade() -> None:
         )
 
     # Use the same constraint name as the ORM (role_allowed)
-    if not _check_exists("tblregistered", "role_allowed"):
+    if not _check_exists("tblregistered", "role_allowed") and not _check_exists("tblregistered", "ck_tblregistered_role_allowed"):
         op.create_check_constraint(
             "role_allowed",
             "tblregistered",
@@ -102,6 +102,8 @@ def downgrade() -> None:
     # Drop check if present (idempotent downgrade)
     if _check_exists("tblregistered", "role_allowed"):
         op.drop_constraint("role_allowed", "tblregistered", type_="check")
+    if _check_exists("tblregistered", "ck_tblregistered_role_allowed"):
+        op.drop_constraint("ck_tblregistered_role_allowed", "tblregistered", type_="check")
 
     # Columns: drop only if present
     if _column_exists("tblregistered", "last_login_at"):
