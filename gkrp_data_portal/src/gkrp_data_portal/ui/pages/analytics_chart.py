@@ -11,8 +11,10 @@ from __future__ import annotations
 import csv
 import io
 import json
+import pathlib
 from typing import Any
 
+import markdown
 from loguru import logger
 from nicegui import app, ui
 from starlette.responses import HTMLResponse, PlainTextResponse, Response
@@ -20,15 +22,19 @@ from starlette.responses import HTMLResponse, PlainTextResponse, Response
 from .analytics_common import (
     CHART_MAX_FETCH,
     DEFAULT_LIMIT,
+    LOCALE,
     QUERY_OPTIONS,
     TABLE_MAX_LIMIT,
     build_histogram,
+    build_histogram_series,
     parse_date,
     plotly_bar,
     plotly_donut,
+    plotly_grouped_bar,
     plotly_pie,
     result_for,
     ui_columns,
+    _column_to_label,
 )
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
@@ -36,18 +42,29 @@ from gkrp_data_portal.ui.repository.analytics_repo import (
     get_layer_hierarchy,
 )
 
+_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
+_CHART_GUIDE_PATH = _PROJECT_ROOT / "CHART.md"
+
+
+def _load_chart_guide() -> str:
+    """Load and render CHART.md as HTML."""
+    if _CHART_GUIDE_PATH.exists():
+        md = _CHART_GUIDE_PATH.read_text(encoding="utf-8")
+        return markdown.markdown(md, extensions=["tables", "fenced_code"])
+    return "<p>Chart guide not found.</p>"
+
 
 @ui.page("/analytics")
 def page_analytics_index() -> None:
-    ui.label("Analytics").classes("text-h5")
+    ui.label(LOCALE["title_analytics"]).classes("text-h5 text-blue-600")
     with ui.row().classes("gap-2"):
         ui.button(
-            "Chart view",
+            LOCALE["btn_chart_view"],
             on_click=lambda: ui.navigate.to("/analytics/chart"),
             icon="bar_chart",
         )
         ui.button(
-            "Table view",
+            LOCALE["btn_table_view"],
             on_click=lambda: ui.navigate.to("/analytics/table"),
             icon="table_chart",
         )
@@ -55,7 +72,7 @@ def page_analytics_index() -> None:
 
 @ui.page("/analytics/chart")
 def page_analytics_chart() -> None:
-    ui.label("Analytics — Chart").classes("text-h5")
+    ui.label(LOCALE["title_analytics_chart"]).classes("text-h5 text-blue-600")
 
     state: dict[str, Any] = {
         "query_id": "q2",
@@ -71,16 +88,16 @@ def page_analytics_chart() -> None:
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
         # Left panel
         with ui.column().classes("w-[340px] shrink-0"):
-            ui.label("Query + Filters").classes("text-subtitle1 font-medium")
+            ui.label(LOCALE["panel_query_filters"]).classes("text-subtitle1 font-medium text-blue-600")
 
             sel_query = ui.select(
                 options=list(QUERY_OPTIONS.keys()),
-                value="Filter #2 (Layers + Fragments + Ornaments)",
-                label="Predefined query",
+                value=LOCALE["query_filter2"],
+                label=LOCALE["label_predefined_query"],
             ).classes("w-full")
 
             with ui.row().classes("w-full gap-2 items-center"):
-                btn_run = ui.button("Run query", icon="play_arrow").classes("flex-1")
+                btn_run = ui.button(LOCALE["btn_run_query"], icon="play_arrow").classes("flex-1")
 
             with ui.scroll_area().classes(
                 "w-full h-[320px] border rounded p-2 bg-white"
@@ -88,7 +105,7 @@ def page_analytics_chart() -> None:
                 sel_site = (
                     ui.select(
                         options=[],
-                        label="Site",
+                        label=LOCALE["label_site"],
                         multiple=True,
                         clearable=True,
                         with_input=True,
@@ -102,7 +119,7 @@ def page_analytics_chart() -> None:
                         multiple=True,
                         clearable=True,
                         with_input=True,
-                        label="Sector",
+                        label=LOCALE["label_sector"],
                     )
                     .classes("w-full")
                     .props("dense")
@@ -113,7 +130,7 @@ def page_analytics_chart() -> None:
                         multiple=True,
                         clearable=True,
                         with_input=True,
-                        label="Square",
+                        label=LOCALE["label_square"],
                     )
                     .classes("w-full")
                     .props("dense")
@@ -124,7 +141,7 @@ def page_analytics_chart() -> None:
                         multiple=True,
                         clearable=True,
                         with_input=True,
-                        label="Layer",
+                        label=LOCALE["label_layer"],
                     )
                     .classes("w-full")
                     .props("dense")
@@ -133,12 +150,20 @@ def page_analytics_chart() -> None:
             sel_limit = ui.select(
                 options=[100, 200, 500, 1000, 2500, 5000, "max"],
                 value=DEFAULT_LIMIT,
-                label="limit",
+                label=LOCALE["label_limit"],
             ).classes("w-full")
+            ui.label(LOCALE["limit_max_info"]).classes("text-xs text-gray-400 mt-1")
 
         # Center panel (chart only)
         with ui.column().classes("flex-1 min-w-0"):
-            ui.label("Chart").classes("text-subtitle1 font-medium")
+            with ui.row().classes("w-full items-center justify-between"):
+                ui.label(LOCALE["panel_chart"]).classes("text-subtitle1 font-medium text-blue-600")
+                with ui.column().classes("items-center gap-0"):
+                    ui.label(LOCALE["chart_help_label"]).classes("text-subtitle2 text-blue-600")
+                    help_btn = ui.button(
+                        icon="help",
+                    ).classes("p-1").style("font-size: 1.2rem;")
+                    help_btn.on("click", lambda: help_dialog.open())
             status = ui.label("").classes("text-sm text-gray-600")
             dbg = ui.label("").classes("text-xs text-gray-500")
             chart_type_debug = ui.label("").classes("text-xs text-blue-600")
@@ -151,18 +176,35 @@ def page_analytics_chart() -> None:
             chart_id = chart.id
 
             with ui.row().classes("w-full items-center justify-between gap-2"):
-                sel_x = ui.select(options=[], label="Group by (x-axis)").classes(
-                    "w-[420px]"
-                )
-                sel_chart_type = ui.select(
-                    options=["Bar", "Pie", "Donut"],
-                    value="Bar",
-                    label="Chart type",
-                ).classes("w-[160px]")
+                with ui.column().classes("gap-0"):
+                    sel_x = ui.select(options=[], label=LOCALE["label_group_by"]).classes(
+                        "w-[300px]"
+                    )
+                    ui.label(
+                        "Основната размерност, по която графиката е групирана (напр. Обект, Сектор, Квадрат)."
+                    ).classes("text-xs text-gray-400")
+                with ui.column().classes("gap-0"):
+                    sel_series = ui.select(
+                        options=[],
+                        label=LOCALE["label_series"],
+                        clearable=True,
+                    ).classes("w-[200px]")
+                    ui.label(
+                        "По избор: разделя стълбовете на групирани следи по втора размерност (напр. Тип Отломък, Технология, Повърхност)."
+                    ).classes("text-xs text-gray-400")
+                with ui.column().classes("gap-0"):
+                    sel_chart_type = ui.select(
+                        options=[LOCALE["chart_type_bar"], LOCALE["chart_type_pie"], LOCALE["chart_type_donut"]],
+                        value=LOCALE["chart_type_pie"],
+                        label=LOCALE["label_chart_type"],
+                    ).classes("w-[160px]")
+                    ui.label(
+                        "Стълб показва групирани стълбове, Кръг/Поничка показват пропорции."
+                    ).classes("text-xs text-gray-400")
 
                 with ui.row().classes("gap-2"):
                     ui.button(
-                        "Download PNG",
+                        LOCALE["btn_download_png"],
                         on_click=lambda: ui.run_javascript(
                             f"""
                             (function() {{
@@ -177,7 +219,7 @@ def page_analytics_chart() -> None:
                         ),
                     )
                     ui.button(
-                        "Download JPG",
+                        LOCALE["btn_download_jpg"],
                         on_click=lambda: ui.run_javascript(
                             f"""
                             (function() {{
@@ -192,15 +234,24 @@ def page_analytics_chart() -> None:
                         ),
                     )
                     ui.button(
-                        "Print / Save as PDF",
+                        LOCALE["btn_print_pdf"],
                         on_click=lambda: ui.run_javascript(
                             "window.open('/api/analytics/chart.html?query_id=' + encodeURIComponent(window.__gkrp_query_id || 'q2'), '_blank');"
                         ),
                     )
 
+            with ui.column().classes("w-full mt-2"):
+                with ui.row().classes("items-center gap-2"):
+                    ui.label(LOCALE["chart_fetch_info"]).classes("text-sm text-gray-500")
+                    use_all_rows = ui.toggle(
+                        {True: LOCALE["toggle_on"], False: LOCALE["toggle_off"]},
+                        value=False,
+                    ).classes("text-sm")
+                    ui.label(LOCALE["enable_all_rows"])
+
         # Right panel (fragments filters)
         with ui.column().classes("w-[320px] shrink-0"):
-            ui.label("Fragments").classes("text-subtitle1 font-medium")
+            ui.label(LOCALE["panel_fragments"]).classes("text-subtitle1 font-medium text-blue-600")
             with ui.scroll_area().classes(
                 "w-full h-[820px] border rounded p-2 bg-white"
             ):
@@ -209,7 +260,7 @@ def page_analytics_chart() -> None:
                         "Piecetype",
                         ui.select(
                             options=[],
-                            label="Piecetype",
+                            label=LOCALE["frag_piecetype"],
                             value=[],
                             multiple=True,
                             clearable=True,
@@ -225,7 +276,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Technology",
+                            label=LOCALE["frag_technology"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -237,7 +288,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Baking",
+                            label=LOCALE["frag_baking"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -249,7 +300,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Color / Primary color",
+                            label=LOCALE["frag_color_primary"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -261,7 +312,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Covering",
+                            label=LOCALE["frag_covering"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -273,7 +324,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Surface",
+                            label=LOCALE["frag_surface"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -285,7 +336,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Wall thickness",
+                            label=LOCALE["frag_wall_thickness"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -297,7 +348,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Handle type",
+                            label=LOCALE["frag_handle_type"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -309,7 +360,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Handle size",
+                            label=LOCALE["frag_handle_size"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -321,7 +372,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Bottom type",
+                            label=LOCALE["frag_bottom_type"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -333,7 +384,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Category",
+                            label=LOCALE["frag_category"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -345,7 +396,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Form",
+                            label=LOCALE["frag_form"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -357,7 +408,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Type",
+                            label=LOCALE["frag_type"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -369,7 +420,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Subtype",
+                            label=LOCALE["frag_subtype"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -381,7 +432,7 @@ def page_analytics_chart() -> None:
                             multiple=True,
                             clearable=True,
                             with_input=True,
-                            label="Variant",
+                            label=LOCALE["frag_variant"],
                         )
                         .classes("w-full")
                         .props("dense"),
@@ -391,13 +442,13 @@ def page_analytics_chart() -> None:
             # ---- Ornaments section (always visible) ----
             orn_section = ui.column().classes("w-full gap-1 mt-4")
             with orn_section:
-                ui.label("Ornaments").classes("text-subtitle1 font-medium")
+                ui.label(LOCALE["panel_ornaments"]).classes("text-subtitle1 font-medium text-blue-600")
                 orn_filters: list[tuple[str, Any]] = [
                     (
                         "Primary",
                         ui.select(
                             options=[],
-                            label="Primary",
+                            label=LOCALE["frag_primary"],
                             multiple=True,
                             clearable=True,
                             with_input=True,
@@ -409,7 +460,7 @@ def page_analytics_chart() -> None:
                         "Secondary",
                         ui.select(
                             options=[],
-                            label="Secondary",
+                            label=LOCALE["frag_secondary"],
                             multiple=True,
                             clearable=True,
                             with_input=True,
@@ -421,7 +472,7 @@ def page_analytics_chart() -> None:
                         "Tertiary",
                         ui.select(
                             options=[],
-                            label="Tertiary",
+                            label=LOCALE["frag_tertiary"],
                             multiple=True,
                             clearable=True,
                             with_input=True,
@@ -433,7 +484,7 @@ def page_analytics_chart() -> None:
                         "Quarternary",
                         ui.select(
                             options=[],
-                            label="Quarternary",
+                            label=LOCALE["frag_quarternary"],
                             multiple=True,
                             clearable=True,
                             with_input=True,
@@ -445,7 +496,7 @@ def page_analytics_chart() -> None:
                         "Color / color1",
                         ui.select(
                             options=[],
-                            label="Color / color1",
+                            label=LOCALE["frag_color_color1"],
                             multiple=True,
                             clearable=True,
                             with_input=True,
@@ -457,7 +508,7 @@ def page_analytics_chart() -> None:
                         "Encrust color",
                         ui.select(
                             options=[],
-                            label="Encrust color",
+                            label=LOCALE["frag_encrust_color"],
                             multiple=True,
                             clearable=True,
                             with_input=True,
@@ -502,9 +553,17 @@ def page_analytics_chart() -> None:
             """
         )
 
-    def _build_figure(xs: list[str], ys: list[int], title: str) -> dict[str, Any]:
+    def _build_figure(
+        xs: list[str],
+        ys: list[int],
+        title: str,
+        series_data: dict[str, list[int]] | None = None,
+        series_label: str = "Series",
+    ) -> dict[str, Any]:
         chart_type = (sel_chart_type.value or "Bar").lower()
-        chart_type_debug.set_text(f"chart_type={chart_type}")
+        chart_type_debug.set_text(f"chart_type={chart_type} series={bool(series_data)}")
+        if series_data:
+            return plotly_grouped_bar(xs, series_data, title, series_label=series_label)
         if chart_type == "pie":
             return plotly_pie(xs, ys, title)
         if chart_type == "donut":
@@ -724,6 +783,8 @@ def page_analytics_chart() -> None:
 
             if f["limit"] >= TABLE_MAX_LIMIT:
                 chart_fetch = f["limit"]
+            elif use_all_rows.value:
+                chart_fetch = TABLE_MAX_LIMIT
             else:
                 chart_fetch = min(max(f["limit"], 0), CHART_MAX_FETCH)
 
@@ -737,15 +798,15 @@ def page_analytics_chart() -> None:
 
             total = int(res.total or 0)
             if total == 0:
-                _set_chart(_build_figure([], [], f"No results ({f['query_id']})"))
+                _set_chart(_build_figure([], [], LOCALE["status_no_results_query"].format(query_id=f['query_id'])))
                 dbg.set_text(f"query={f['query_id']} rows=0 total=0")
-                status.set_text("No results for current filters.")
+                status.set_text(LOCALE["status_no_results"])
                 return
 
             if not res.items:
-                _set_chart(_build_figure([], [], f"No results ({f['query_id']})"))
+                _set_chart(_build_figure([], [], LOCALE["status_no_results_query"].format(query_id=f['query_id'])))
                 dbg.set_text(f"query={f['query_id']} rows=0 total={res.total}")
-                status.set_text("No results for current filters.")
+                status.set_text(LOCALE["status_no_results"])
                 return
 
             ui_cols = ui_columns(res.columns) or list(res.columns)
@@ -779,6 +840,9 @@ def page_analytics_chart() -> None:
             )
             groupby_cols = [c for c in ui_cols if c.lower() not in _GROUPBY_EXCLUDE]
             sel_x.options = groupby_cols
+            sel_x.update()
+            sel_series.options = groupby_cols
+            sel_series.update()
 
             preferred = [
                 "l_site",
@@ -801,17 +865,33 @@ def page_analytics_chart() -> None:
                     notes.append(f"group-by defaulted to {default_x}")
 
             x_key = sel_x.value
-            xs, ys = build_histogram(res.items, x_key, top_n=30)
-            _set_chart(_build_figure(xs, ys, f"Count by {x_key} ({f['query_id']})"))
+            series_key = sel_series.value
+            if series_key and series_key in groupby_cols:
+                series_label = _column_to_label(series_key)
+                xs, series_data = build_histogram_series(
+                    res.items, x_key, series_key, top_n=30
+                )
+                _set_chart(
+                    _build_figure(
+                        xs,
+                        [],
+                        f"Count by {x_key} grouped by {series_key} ({f['query_id']})",
+                        series_data=series_data,
+                        series_label=series_label,
+                    )
+                )
+            else:
+                xs, ys = build_histogram(res.items, x_key, top_n=30)
+                _set_chart(_build_figure(xs, ys, f"Count by {x_key} ({f['query_id']})"))
 
             _populate_frag_filter_options(res.items)
 
             dbg.set_text(
                 f"query={f['query_id']} rows={len(res.items)} total={res.total} "
-                f"x={x_key} buckets={len(xs)}"
+                f"x={x_key} series={series_key or 'none'} buckets={len(xs)}"
             )
 
-            base = f"Chart built from {len(res.items)} rows (total {res.total})."
+            base = LOCALE["status_returned"].format(count=len(res.items), total=res.total)
             if notes:
                 base += "  " + " \u2022 ".join(notes)
             status.set_text(base)
@@ -841,8 +921,14 @@ def page_analytics_chart() -> None:
 
     sel_x.on("change", _on_x_change)
     sel_chart_type.on("change", lambda e: refresh())
+    use_all_rows.on("change", lambda e: refresh())
 
     refresh()
+
+    # --- Help dialog (outside the 3-column row) ---
+    with ui.dialog() as help_dialog, ui.card().classes("w-[750px] max-h-[80vh]"):
+        ui.markdown(_load_chart_guide())
+        ui.button(LOCALE["chart_help_close"], on_click=help_dialog.close).classes("w-full mt-2")
 
 
 # -------------------------
@@ -903,6 +989,7 @@ def analytics_chart_json(
     query_id: str = "q2",
     x: str | None = None,
     chart_type: str = "bar",
+    series: str | None = None,
     site: str | None = None,
     sector: str | None = None,
     square: str | None = None,
@@ -946,13 +1033,23 @@ def analytics_chart_json(
     if not x:
         x = "f_piecetype" if "f_piecetype" in cols else (cols[0] if cols else "")
 
-    xs, ys = build_histogram(res.items, x)
-    if chart_type == "pie":
-        fig = plotly_pie(xs, ys, title=f"Count by {x} ({query_id})")
-    elif chart_type == "donut":
-        fig = plotly_donut(xs, ys, title=f"Count by {x} ({query_id})")
+    if series and series in cols:
+        series_label = _column_to_label(series)
+        xs, series_data = build_histogram_series(res.items, x, series)
+        fig = plotly_grouped_bar(
+            xs,
+            series_data,
+            title=f"Count by {x} grouped by {series} ({query_id})",
+            series_label=series_label,
+        )
     else:
-        fig = plotly_bar(xs, ys, title=f"Count by {x} ({query_id})")
+        xs, ys = build_histogram(res.items, x)
+        if chart_type == "pie":
+            fig = plotly_pie(xs, ys, title=f"Count by {x} ({query_id})")
+        elif chart_type == "donut":
+            fig = plotly_donut(xs, ys, title=f"Count by {x} ({query_id})")
+        else:
+            fig = plotly_bar(xs, ys, title=f"Count by {x} ({query_id})")
     return Response(content=json.dumps(fig), media_type="application/json")
 
 

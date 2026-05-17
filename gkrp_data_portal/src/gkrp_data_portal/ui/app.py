@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from nicegui import ui
 
+from gkrp_data_portal.ui.pages.analytics_common import LOCALE
+
 # Import pages to register routes
 from gkrp_data_portal.ui.pages.layers import page_layers  # noqa: F401
 from gkrp_data_portal.ui.pages.fragments import page_fragments  # noqa: F401
@@ -23,18 +25,16 @@ from gkrp_data_portal.core.settings import get_storage_secret
 def index() -> None:
     with ui.row().classes("w-full"):
         with ui.column().classes("w-64"):
-            ui.label("Navigation").classes("text-h6")
-            ui.link("Layers", "/layers")
-            ui.link("Fragments", "/fragments")
-            ui.link("Ornaments", "/ornaments")
-            ui.link("Admin", "/admin")
-            ui.link("Analytics", "/analytics")
+            ui.label(LOCALE["nav_navigation"]).classes("text-h6 text-blue-600")
+            ui.link(LOCALE["nav_layers"], "/layers")
+            ui.link(LOCALE["nav_fragments"], "/fragments")
+            ui.link(LOCALE["nav_ornaments"], "/ornaments")
+            ui.link(LOCALE["nav_admin"], "/admin")
+            ui.link(LOCALE["nav_analytics"], "/analytics")
 
         with ui.column().classes("grow"):
-            ui.label("GKR Portal — Data Entry").classes("text-h5")
-            ui.markdown(
-                "Use the navigation links on the left. This phase implements parity-first CRUD pages."
-            )
+            ui.label(LOCALE["nav_welcome_title"]).classes("text-h5 text-blue-600")
+            ui.markdown(LOCALE["nav_welcome_text"])
 
 
 def run() -> None:

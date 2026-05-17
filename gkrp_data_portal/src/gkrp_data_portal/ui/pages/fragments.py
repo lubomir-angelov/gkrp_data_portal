@@ -12,6 +12,7 @@ from gkrp_data_portal.ui.repository.archaeology_repo import (
     list_fragments,
     most_recent_layer_id,
 )
+from .analytics_common import LOCALE
 
 
 def _row_to_dict(r: Tblfragment) -> dict:
@@ -46,23 +47,23 @@ def _save_fragment(db: Session, obj: Tblfragment, data: dict) -> Tblfragment:
 
 @ui.page("/fragments")
 def page_fragments() -> None:
-    ui.label("Fragments (tblfragments)").classes("text-h5")
+    ui.label(LOCALE["title_fragments"]).classes("text-h5 text-blue-600")
 
-    search = ui.input("Search (inventory/note/piecetype/fragmenttype/technology)").props("clearable")
+    search = ui.input(LOCALE["search_fragments"]).props("clearable")
 
     table = ui.table(
         columns=[
-            {"name": "fragmentid", "label": "ID", "field": "fragmentid", "sortable": True},
-            {"name": "locationid", "label": "Layer ID", "field": "locationid", "sortable": True},
-            {"name": "piecetype", "label": "Piece Type", "field": "piecetype"},
-            {"name": "fragmenttype", "label": "Fragment Type", "field": "fragmenttype"},
-            {"name": "technology", "label": "Technology", "field": "technology"},
-            {"name": "baking", "label": "Baking", "field": "baking"},
-            {"name": "primarycolor", "label": "Primary", "field": "primarycolor"},
-            {"name": "secondarycolor", "label": "Secondary", "field": "secondarycolor"},
-            {"name": "count", "label": "Count", "field": "count"},
-            {"name": "inventory", "label": "Inventory", "field": "inventory"},
-            {"name": "image_url", "label": "Image URL", "field": "image_url"},
+            {"name": "fragmentid", "label": LOCALE["col_id"], "field": "fragmentid", "sortable": True},
+            {"name": "locationid", "label": LOCALE["col_layer_id"], "field": "locationid", "sortable": True},
+            {"name": "piecetype", "label": LOCALE["col_piecetype"], "field": "piecetype"},
+            {"name": "fragmenttype", "label": LOCALE["col_fragmenttype"], "field": "fragmenttype"},
+            {"name": "technology", "label": LOCALE["col_technology"], "field": "technology"},
+            {"name": "baking", "label": LOCALE["col_baking"], "field": "baking"},
+            {"name": "primarycolor", "label": LOCALE["col_primary"], "field": "primarycolor"},
+            {"name": "secondarycolor", "label": LOCALE["col_secondary"], "field": "secondarycolor"},
+            {"name": "count", "label": LOCALE["col_count"], "field": "count"},
+            {"name": "inventory", "label": LOCALE["col_inventory"], "field": "inventory"},
+            {"name": "image_url", "label": LOCALE["col_image_url"], "field": "image_url"},
         ],
         rows=[],
         row_key="fragmentid",
@@ -84,12 +85,9 @@ def page_fragments() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[1100px]"):
-            ui.label("Edit Fragment" if fragmentid else "Create Fragment").classes("text-h6")
+            ui.label(LOCALE["dialog_edit_fragment"] if fragmentid else LOCALE["dialog_create_fragment"]).classes("text-h6 text-blue-600")
 
-            # Parity-first workflow: infer locationid if not provided.
-            ui.markdown(
-                "If **Layer ID** is empty, it will be inferred as the **most recent layer** (parity with ceramics workflow)."
-            ).classes("text-sm")
+            ui.markdown(LOCALE["dialog_fragment_hint"]).classes("text-sm")
 
             with ui.grid(columns=4).classes("w-full gap-4"):
                 # location selection
@@ -104,7 +102,7 @@ def page_fragments() -> None:
                 sel_layer = ui.select(
                     options=list(layer_map.keys()),
                     value=layer_label_default,
-                    label="Layer (optional)",
+                    label=LOCALE["label_layer_optional"],
                 ).props("clearable")
 
                 inp_piecetype = ui.input("piecetype (required)", value=obj.piecetype or "")
@@ -145,7 +143,7 @@ def page_fragments() -> None:
                 inp_image_url = ui.input("image_url", value=obj.image_url or "").classes("col-span-4")
 
             with ui.row().classes("w-full justify-end"):
-                ui.button("Cancel", on_click=dialog.close)
+                ui.button(LOCALE["btn_cancel"], on_click=dialog.close)
 
                 def do_save() -> None:
                     chosen_layer_id = layer_map.get(sel_layer.value) if sel_layer.value else None
@@ -153,10 +151,10 @@ def page_fragments() -> None:
                         chosen_layer_id = inferred_layer_id  # parity inference
 
                     if not inp_piecetype.value:
-                        ui.notify("piecetype is required", type="negative")
+                        ui.notify(LOCALE["notify_piecetype_required"], type="negative")
                         return
                     if not inp_count.value:
-                        ui.notify("count is required", type="negative")
+                        ui.notify(LOCALE["notify_count_required"], type="negative")
                         return
 
                     with session_scope() as db:
@@ -198,13 +196,13 @@ def page_fragments() -> None:
                     dialog.close()
                     refresh()
 
-                ui.button("Save", on_click=do_save)
+                ui.button(LOCALE["btn_save"], on_click=do_save)
 
         dialog.open()
 
     with ui.row().classes("w-full justify-between"):
-        ui.button("Refresh", on_click=refresh)
-        ui.button("New Fragment", on_click=lambda: open_editor(None))
+        ui.button(LOCALE["btn_refresh"], on_click=refresh)
+        ui.button(LOCALE["btn_new_fragment"], on_click=lambda: open_editor(None))
 
     def on_row_click(e) -> None:
         row = e.args.get("row") or {}
