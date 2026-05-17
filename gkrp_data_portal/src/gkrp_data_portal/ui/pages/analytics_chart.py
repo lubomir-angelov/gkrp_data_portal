@@ -194,8 +194,8 @@ def page_analytics_chart() -> None:
                     ).classes("text-xs text-gray-400")
                 with ui.column().classes("gap-0"):
                     sel_chart_type = ui.select(
-                        options=[LOCALE["chart_type_bar"], LOCALE["chart_type_pie"], LOCALE["chart_type_donut"]],
-                        value=LOCALE["chart_type_pie"],
+                        options=["Bar", "Pie", "Donut"],
+                        value="Pie",
                         label=LOCALE["label_chart_type"],
                     ).classes("w-[160px]")
                     ui.label(
