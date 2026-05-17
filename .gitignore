@@ -215,3 +215,4 @@ setup.sh
 .aider*
 cache.db*
 tmp/
+scripts/
