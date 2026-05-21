@@ -250,7 +250,7 @@ def page_analytics_chart() -> None:
                     ui.label(LOCALE["enable_all_rows"])
 
         # Right panel (fragments filters)
-        with ui.column().classes("w-[320px] shrink-0"):
+        with ui.column().classes("w-[320px] shrink-0") as frag_panel:
             ui.label("Fragments").classes("text-subtitle1 font-medium text-blue-600")
             with ui.scroll_area().classes(
                 "w-full h-[820px] border rounded p-2 bg-white"
@@ -518,6 +518,108 @@ def page_analytics_chart() -> None:
                     ),
                 ]
 
+            # ---- Archaeological finds section (visible for finds_arch query) ----
+            with ui.column().classes("w-full gap-1 mt-4") as arch_section:
+                ui.label("Archaeological Finds").classes("text-subtitle1 font-medium text-blue-600")
+                arch_filters: list[tuple[str, Any]] = [
+                    (
+                        "Find Type",
+                        ui.select(
+                            options=[],
+                            label="Find Type",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Material",
+                        ui.select(
+                            options=[],
+                            label="Material",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Coin",
+                        ui.select(
+                            options=[],
+                            label="Coin",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Denomination",
+                        ui.select(
+                            options=[],
+                            label="Denomination",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Mint",
+                        ui.select(
+                            options=[],
+                            label="Mint",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Year",
+                        ui.select(
+                            options=[],
+                            label="Year",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Depth",
+                        ui.select(
+                            options=[],
+                            label="Depth",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                    (
+                        "Context",
+                        ui.select(
+                            options=[],
+                            label="Context",
+                            multiple=True,
+                            clearable=True,
+                            with_input=True,
+                        )
+                        .classes("w-full")
+                        .props("dense"),
+                    ),
+                ]
+
     # --- local state ---
 
     def _set_chart(figure: dict[str, Any]) -> None:
@@ -612,6 +714,18 @@ def page_analytics_chart() -> None:
                 frag_filters_map[label] = val
 
         for label, widget in orn_filters:
+            if isinstance(widget, ui.select):
+                vals = widget.value
+                if isinstance(vals, list) and vals:
+                    frag_filters_map[label] = [
+                        str(v).strip() for v in vals if str(v).strip()
+                    ]
+                elif isinstance(vals, str) and vals.strip():
+                    frag_filters_map[label] = [vals.strip()]
+                else:
+                    frag_filters_map[label] = None
+
+        for label, widget in arch_filters:
             if isinstance(widget, ui.select):
                 vals = widget.value
                 if isinstance(vals, list) and vals:
@@ -744,6 +858,9 @@ def page_analytics_chart() -> None:
         for label, widget in orn_filters:
             if isinstance(widget, ui.select):
                 needed.add(label)
+        for label, widget in arch_filters:
+            if isinstance(widget, ui.select):
+                needed.add(label)
 
         if not needed:
             return
@@ -770,8 +887,15 @@ def page_analytics_chart() -> None:
             widget.options = distinct.get(label, [])
             widget.update()
 
+        for label, widget in arch_filters:
+            if not isinstance(widget, ui.select):
+                continue
+            widget.options = distinct.get(label, [])
+            widget.update()
+
     def refresh() -> None:
-        _fetch_layer_cache()
+        qid = QUERY_OPTIONS.get(sel_query.value, "q2")
+        _fetch_layer_cache(qid)
         _populate_layer_options_hierarchical()
 
         if state.get("_refreshing"):
@@ -905,6 +1029,12 @@ def page_analytics_chart() -> None:
     btn_run.on("click", lambda e: refresh())
 
     def _on_query_change(e) -> None:
+        qid = QUERY_OPTIONS.get(sel_query.value, "q2")
+        is_arch = qid == "finds_arch"
+        frag_panel.visible = not is_arch
+        arch_section.visible = is_arch
+        frag_panel.update()
+        arch_section.update()
         refresh()
 
     sel_query.on("change", _on_query_change)

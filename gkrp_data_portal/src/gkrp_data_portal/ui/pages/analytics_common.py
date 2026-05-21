@@ -9,6 +9,7 @@ from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
     AnalyticsResult,
     query_finds,
+    query_finds_archaeology,
     query_q2_layers_fragments_ornaments,
 )
 
@@ -19,6 +20,7 @@ LOCALE: dict[str, str] = {
     "nav_fragments": "Фрагменти",
     "nav_ornaments": "Орнаменти",
     "nav_admin": "Админ",
+    "nav_finds": "Находки",
     "nav_analytics": "Анализ",
     "nav_welcome_title": "GKR Портал — Вход на Данни",
     "nav_welcome_text": "Използвайте връзките от лявата навигация. Тази фаза реализира CRUD страници.",
@@ -153,6 +155,7 @@ LOCALE: dict[str, str] = {
     # --- Queries ---
     "query_filter2": "Филтър #2 (Пластове + Фрагменти + Орнаменти)",
     "query_finds": "Открития (tblfinds)",
+    "query_archaeology": "Археологически находки (finds)",
 
     # --- Chart controls ---
     "chart_type_bar": "Стълб",
@@ -214,6 +217,7 @@ LOCALE: dict[str, str] = {
 QUERY_OPTIONS: dict[str, str] = {
     LOCALE["query_filter2"]: "q2",
     LOCALE["query_finds"]: "finds",
+    LOCALE["query_archaeology"]: "finds_arch",
 }
 
 DEFAULT_LIMIT = 500
@@ -299,6 +303,10 @@ def result_for(query_id: str, **kwargs) -> AnalyticsResult:
     with session_scope() as db:
         if query_id == "q2":
             return query_q2_layers_fragments_ornaments(db, **kwargs)
+        if query_id == "finds":
+            return query_finds(db, **kwargs)
+        if query_id == "finds_arch":
+            return query_finds_archaeology(db, **kwargs)
         return query_finds(db, **kwargs)
 
 

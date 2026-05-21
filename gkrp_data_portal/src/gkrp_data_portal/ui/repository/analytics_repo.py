@@ -21,6 +21,7 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
 from gkrp_data_portal.models.archaeology import (
+    Find,
     Tbllayer,
     Tblfragment,
     Tblornament,
@@ -92,6 +93,48 @@ def _apply_frag_filters(
                 params[f"{param_name}_{i}"] = f"%{v}%"
         elif isinstance(values, str) and values.strip():
             param_name = f"frag_{safe_label}"
+            params[param_name] = f"%{values.strip()}%"
+            clauses.append(f"{col_expr} ILIKE :{param_name}")
+
+
+def _apply_arch_filters(
+    clauses: list[str],
+    params: dict[str, Any],
+    arch_filters: dict[str, Any],
+) -> None:
+    """Apply archaeological finds field filters from the UI dropdowns.
+
+    Maps UI labels to SQL column references using the 'fi' alias.
+    Multi-select uses ILIKE with OR; single text inputs use ILIKE.
+    """
+    label_to_col: dict[str, str] = {
+        "Find Type": "fi.find_type",
+        "Material": "fi.material",
+        "Coin": "fi.coin",
+        "Denomination": "fi.denomination",
+        "Mint": "fi.mint",
+        "Year": "fi.year",
+        "Inv No": "fi.inv_no",
+        "Depth": "fi.depth_m",
+        "Context": "fi.context",
+    }
+    for label, values in arch_filters.items():
+        col = label_to_col.get(label)
+        if not col:
+            continue
+        col_expr = f"{col}::text"
+        safe_label = label.replace(" ", "_")
+        if isinstance(values, list) and values:
+            param_name = f"arch_{safe_label}"
+            params[param_name] = values
+            conditions = " OR ".join(
+                [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
+            )
+            clauses.append(f"({conditions})")
+            for i, v in enumerate(values):
+                params[f"{param_name}_{i}"] = f"%{v}%"
+        elif isinstance(values, str) and values.strip():
+            param_name = f"arch_{safe_label}"
             params[param_name] = f"%{values.strip()}%"
             clauses.append(f"{col_expr} ILIKE :{param_name}")
 
@@ -185,6 +228,10 @@ def _build_where(
     # Fragment field filters (only applied for q2 which has f alias)
     if frag_filters and query_id in ("q2",):
         _apply_frag_filters(clauses, params, frag_filters)
+
+    # Archaeological finds filters (only applied for finds_arch)
+    if frag_filters and query_id == "finds_arch":
+        _apply_arch_filters(clauses, params, frag_filters)
 
     if not clauses:
         return "", params
@@ -416,6 +463,16 @@ _DISTINCT_COL_DEFS: list[tuple[str, str, tuple[str, ...]]] = [
     ("Quarternary", "o.quarternary", ("q2",)),
     ("Color / color1", "o.color1", ("q2",)),
     ("Encrust color", "o.encrustcolor1", ("q2",)),
+    # Archaeological finds columns
+    ("Find Type", "fi.find_type", ("finds_arch",)),
+    ("Material", "fi.material", ("finds_arch",)),
+    ("Coin", "fi.coin", ("finds_arch",)),
+    ("Denomination", "fi.denomination", ("finds_arch",)),
+    ("Mint", "fi.mint", ("finds_arch",)),
+    ("Year", "fi.year", ("finds_arch",)),
+    ("Inv No", "fi.inv_no", ("finds_arch",)),
+    ("Depth", "fi.depth_m", ("finds_arch",)),
+    ("Context", "fi.context", ("finds_arch",)),
 ]
 
 
@@ -451,6 +508,11 @@ def get_distinct_values(
             "INNER JOIN tbllayers l ON l.layerid = fi.layerid "
             "LEFT JOIN tblfragments f ON f.fragmentid = fi.fragmentid "
             "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
+        )
+    elif query_id == "finds_arch":
+        base = (
+            "FROM finds fi "
+            "LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
         )
     else:
         return {}
@@ -522,6 +584,11 @@ def get_distinct_values_for_field(
             "LEFT JOIN tblfragments f ON f.fragmentid = fi.fragmentid "
             "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
         )
+    elif query_id == "finds_arch":
+        base = (
+            "FROM finds fi "
+            "LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
+        )
     else:
         return []
 
@@ -529,19 +596,19 @@ def get_distinct_values_for_field(
     params: dict[str, Any] = {}
 
     if site:
-        clauses.append("l.site ILIKE :site")
+        clauses.append("l.sector ILIKE :site")
         params["site"] = f"%{site}%"
     if sector:
-        clauses.append("l.sector ILIKE :sector")
+        clauses.append("l.square ILIKE :sector")
         params["sector"] = f"%{sector}%"
     if square:
-        clauses.append("l.square ILIKE :square")
+        clauses.append("l.layer ILIKE :square")
         params["square"] = f"%{square}%"
 
     col_map = {
-        "Site": "l.site",
-        "Sector": "l.sector",
-        "Square": "l.square",
+        "Site": "l.sector",
+        "Sector": "l.square",
+        "Square": "l.layer",
         "Layer": "l.layer",
     }
     col_expr = col_map.get(field)
@@ -586,16 +653,21 @@ def get_layer_hierarchy(
             "LEFT JOIN tblfragments f ON f.fragmentid = fi.fragmentid "
             "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
         )
+    elif query_id == "finds_arch":
+        base = (
+            "FROM finds fi "
+            "LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
+        )
     else:
         return {}
 
     # Fetch all combinations in one query
     sql = f"""
-        SELECT DISTINCT l.site, l.sector, l.square, l.layer
+        SELECT DISTINCT l.sector, l.square, l.layer, fi.findid
         {base}
-        WHERE l.site IS NOT NULL AND l.sector IS NOT NULL
-          AND l.square IS NOT NULL AND l.layer IS NOT NULL
-        ORDER BY l.site, l.sector, l.square, l.layer
+        WHERE l.sector IS NOT NULL AND l.square IS NOT NULL
+          AND l.layer IS NOT NULL
+        ORDER BY l.sector, l.square, l.layer
     """
     rows = db.execute(text(sql)).mappings().all()
 
@@ -635,3 +707,108 @@ def get_layer_hierarchy(
         "all_squares": sorted(all_squares),
         "all_layers": sorted(all_layers),
     }
+
+
+def query_finds_archaeology(
+    db: Session,
+    *,
+    site: Optional[str] = None,
+    sector: Optional[str] = None,
+    square: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    q: Optional[str] = None,
+    limit: int = 500,
+    offset: int = 0,
+    frag_filters: Optional[dict[str, Any]] = None,
+    layer_filters: Optional[dict[str, Any]] = None,
+) -> AnalyticsResult:
+    """Archaeological finds: finds table with optional layer join."""
+    select_cols = (
+        _model_select_list("fi_", "fi", Find)
+        + _model_select_list("l_", "l", Tbllayer)
+    )
+
+    base = f"""
+    SELECT
+      {", ".join(select_cols)}
+    FROM finds fi
+    LEFT JOIN tbllayers l ON l.layerid = fi.layerid
+    """
+
+    where_sql, params = _build_where_finds(
+        query_id="finds_arch",
+        site=site,
+        sector=sector,
+        square=square,
+        date_from=date_from,
+        date_to=date_to,
+        q=q,
+        layer_filters=layer_filters,
+        arch_filters=frag_filters,
+    )
+
+    sql = f"{base}\n{where_sql}\nORDER BY fi.findid DESC"
+    count_sql = f"SELECT COUNT(*) FROM ({base}\n{where_sql}) x"
+
+    rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
+    total = _count_sql(db, count_sql=count_sql, params=params)
+
+    items = [dict(r) for r in rows]
+    columns = (
+        list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
+    )
+    return AnalyticsResult(items=items, total=total, columns=columns)
+
+
+def _build_where_finds(
+    *,
+    query_id: str,
+    site: Optional[str],
+    sector: Optional[str],
+    square: Optional[str],
+    date_from: Optional[date],
+    date_to: Optional[date],
+    q: Optional[str],
+    layer_filters: Optional[dict[str, Any]] = None,
+    arch_filters: Optional[dict[str, Any]] = None,
+) -> tuple[str, dict[str, Any]]:
+    """Build WHERE clause for the finds_arch query (finds table + layers)."""
+    clauses: list[str] = []
+    params: dict[str, Any] = {}
+
+    if layer_filters:
+        _apply_layer_filters(clauses, params, layer_filters)
+    else:
+        if site:
+            clauses.append("l.sector ILIKE :site")
+            params["site"] = f"%{site}%"
+        if sector:
+            clauses.append("l.square ILIKE :sector")
+            params["sector"] = f"%{sector}%"
+        if square:
+            clauses.append("l.layer ILIKE :square")
+            params["square"] = f"%{square}%"
+
+    if date_from:
+        clauses.append("fi.date_found >= :date_from")
+        params["date_from"] = date_from
+    if date_to:
+        clauses.append("fi.date_found <= :date_to")
+        params["date_to"] = date_to
+
+    if q:
+        params["q"] = f"%{q}%"
+        clauses.append(
+            "(COALESCE(fi.description,'') ILIKE :q "
+            "OR COALESCE(fi.find_type,'') ILIKE :q "
+            "OR COALESCE(fi.material,'') ILIKE :q "
+            "OR COALESCE(fi.inv_no::text,'') ILIKE :q)"
+        )
+
+    if arch_filters:
+        _apply_arch_filters(clauses, params, arch_filters)
+
+    if not clauses:
+        return "", params
+    return "WHERE " + " AND ".join(clauses), params

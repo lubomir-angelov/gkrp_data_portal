@@ -6,6 +6,9 @@ from nicegui import ui
 
 from gkrp_data_portal.ui.pages.analytics_common import LOCALE
 
+# Import finds page to register route
+from gkrp_data_portal.ui.pages.finds import page_finds  # noqa: F401
+
 # Import pages to register routes
 from gkrp_data_portal.ui.pages.layers import page_layers  # noqa: F401
 from gkrp_data_portal.ui.pages.fragments import page_fragments  # noqa: F401
@@ -29,6 +32,7 @@ def index() -> None:
             ui.link(LOCALE["nav_layers"], "/layers")
             ui.link(LOCALE["nav_fragments"], "/fragments")
             ui.link(LOCALE["nav_ornaments"], "/ornaments")
+            ui.link(LOCALE["nav_finds"], "/finds")
             ui.link(LOCALE["nav_admin"], "/admin")
             ui.link(LOCALE["nav_analytics"], "/analytics")
 

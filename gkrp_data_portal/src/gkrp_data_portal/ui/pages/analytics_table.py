@@ -395,7 +395,20 @@ def page_analytics_table() -> None:
 
     btn_run.on("click", lambda e: refresh())
 
-    sel_query.on("change", lambda e: refresh())
+    def _on_query_change(e) -> None:
+        qid = QUERY_OPTIONS.get(sel_query.value, "q2")
+        is_arch = qid == "finds_arch"
+        sel_site_t.visible = not is_arch
+        sel_sector_t.visible = not is_arch
+        sel_square_t.visible = not is_arch
+        sel_layer_t.visible = not is_arch
+        sel_site_t.update()
+        sel_sector_t.update()
+        sel_square_t.update()
+        sel_layer_t.update()
+        refresh()
+
+    sel_query.on("change", _on_query_change)
 
     def _on_site_change(e) -> None:
         _populate_layer_options_hierarchical()

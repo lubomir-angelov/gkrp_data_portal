@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Optional
 
-from sqlalchemy import desc, or_, select
+from sqlalchemy import desc, or_, select, text as sqlalchemy_text
 from sqlalchemy.orm import Session
 
-from gkrp_data_portal.models.archaeology import Tbllayer, Tblfragment, Tblornament
+from gkrp_data_portal.models.archaeology import Find, Tbllayer, Tblfragment, Tblornament
 
 
 @dataclass(frozen=True)
@@ -113,3 +113,24 @@ def fragment_choices(db: Session, limit: int = 300) -> list[tuple[int, str]]:
         label = f"{r.fragmentid} | loc={r.locationid or ''} | {r.piecetype or ''} | {r.inventory or ''}"
         out.append((r.fragmentid, label))
     return out
+
+
+def list_finds(db: Session, q: str | None = None, limit: int = 300) -> SearchResult:
+    stmt = select(Find).order_by(desc(Find.findid)).limit(limit)
+    if q:
+        like = f"%{q.strip()}%"
+        stmt = (
+            select(Find)
+            .where(
+                or_(
+                    Find.description.ilike(like),
+                    Find.find_type.ilike(like),
+                    Find.material.ilike(like),
+                    Find.inv_no.cast(sqlalchemy_text).ilike(like),
+                )
+            )
+            .order_by(desc(Find.findid))
+            .limit(limit)
+        )
+    items = db.execute(stmt).scalars().all()
+    return SearchResult(items=items, total=len(items))
