@@ -753,9 +753,9 @@ def page_analytics_chart() -> None:
         # case-insensitive match; keeps original order
         return [c for c in cols if "type" in c.lower()]
 
-    def _fetch_layer_cache() -> None:
+    def _fetch_layer_cache(query_id: str = "q2") -> None:
         with session_scope() as db:
-            data = get_layer_hierarchy(db, query_id="q2")
+            data = get_layer_hierarchy(db, query_id=query_id)
             state["_hierarchy"] = data.get("hierarchy", {})
             state["_all_sites"] = data.get("all_sites", [])
             state["_all_sectors"] = data.get("all_sectors", [])

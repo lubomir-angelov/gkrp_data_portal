@@ -662,8 +662,12 @@ def get_layer_hierarchy(
         return {}
 
     # Fetch all combinations in one query
+    if query_id == "finds_arch":
+        id_col = "fi.findid"
+    else:
+        id_col = "l.layerid"
     sql = f"""
-        SELECT DISTINCT l.sector, l.square, l.layer, fi.findid
+        SELECT DISTINCT l.sector, l.square, l.layer, {id_col}
         {base}
         WHERE l.sector IS NOT NULL AND l.square IS NOT NULL
           AND l.layer IS NOT NULL
