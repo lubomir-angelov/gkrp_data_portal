@@ -216,6 +216,8 @@ setup.sh
 cache.db*
 tmp/
 scripts/
+.claude/
+.mcp*
 
 # CCE (code-context-engine)
 # CCE local cache (per-machine, not for version control)
