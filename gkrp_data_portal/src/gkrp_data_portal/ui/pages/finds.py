@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.models.archaeology import Find
 from gkrp_data_portal.ui.repository.archaeology_repo import (
+    column_distinct,
     layer_choices,
     list_finds,
     most_recent_layer_id,
@@ -54,35 +55,93 @@ def _save_find(db: Session, obj: Find, data: dict) -> Find:
 def page_finds() -> None:
     ui.label(t("title_finds")).classes("text-h5 text-blue-600")
 
-    search = ui.input(t("search_finds")).props("clearable")
+    search = ui.input(t("search_finds")).props("clearable").classes("w-[500px]")
 
-    table = ui.table(
-        columns=[
-            {"name": "findid", "label": t("col_id"), "field": "findid", "sortable": True},
-            {"name": "year", "label": t("col_year"), "field": "year"},
-            {"name": "inv_no", "label": t("col_inventory"), "field": "inv_no"},
-            {"name": "find_type", "label": t("col_find_type"), "field": "find_type"},
-            {"name": "material", "label": t("col_material"), "field": "material"},
-            {"name": "description", "label": t("col_description"), "field": "description"},
-            {"name": "coin", "label": t("col_coin"), "field": "coin"},
-            {"name": "mint", "label": t("col_mint"), "field": "mint"},
-            {"name": "depth_m", "label": t("col_depth_m"), "field": "depth_m"},
-            {"name": "context", "label": t("col_context"), "field": "context"},
-            {"name": "coord_north_m", "label": t("col_coord_north_m"), "field": "coord_north_m"},
-            {"name": "coord_east_m", "label": t("col_coord_east_m"), "field": "coord_east_m"},
-            {"name": "photo", "label": t("col_photo"), "field": "photo"},
-        ],
-        rows=[],
-        row_key="findid",
-        pagination=25,
-    ).classes("w-full")
+    filter_widgets: dict[str, ui.select] = {}
+    filter_cols = ["find_type", "material", "coin", "mint", "context"]
+    filter_labels = {
+        "find_type": t("col_find_type"),
+        "material": t("col_material"),
+        "coin": t("col_coin"),
+        "mint": t("col_mint"),
+        "context": t("col_context"),
+    }
 
     def refresh() -> None:
         q = (search.value or "").strip()
+        filters = {col: sel.value for col, sel in filter_widgets.items() if sel.value}
         with session_scope() as db:
-            res = list_finds(db, q=q if q else None)
+            res = list_finds(
+                db,
+                q=q if q else None,
+                filters=filters or None,
+            )
             table.rows = [_row_to_dict(x) for x in res.items]
         table.update()
+
+    table_columns = [
+        {
+            "name": "findid",
+            "label": t("col_id"),
+            "field": "findid",
+            "sortable": True,
+        },
+        {"name": "year", "label": t("col_year"), "field": "year"},
+        {"name": "inv_no", "label": t("col_inventory"), "field": "inv_no"},
+        {"name": "find_type", "label": t("col_find_type"), "field": "find_type"},
+        {"name": "material", "label": t("col_material"), "field": "material"},
+        {
+            "name": "description",
+            "label": t("col_description"),
+            "field": "description",
+        },
+        {"name": "coin", "label": t("col_coin"), "field": "coin"},
+        {"name": "mint", "label": t("col_mint"), "field": "mint"},
+        {"name": "depth_m", "label": t("col_depth_m"), "field": "depth_m"},
+        {"name": "context", "label": t("col_context"), "field": "context"},
+        {
+            "name": "coord_north_m",
+            "label": t("col_coord_north_m"),
+            "field": "coord_north_m",
+        },
+        {
+            "name": "coord_east_m",
+            "label": t("col_coord_east_m"),
+            "field": "coord_east_m",
+        },
+        {"name": "photo", "label": t("col_photo"), "field": "photo"},
+    ]
+
+    ordered_filter_cols = sorted(
+        filter_cols,
+        key=lambda c: next(
+            (i for i, col in enumerate(table_columns) if col["name"] == c), 99
+        ),
+    )
+
+    with ui.column().classes("w-full"):
+        with ui.row().classes("w-full items-center gap-2 flex-wrap"):
+            ui.button(t("btn_refresh"), on_click=refresh)
+            with session_scope() as db:
+                for col in ordered_filter_cols:
+                    opts = column_distinct(db, Find, col)
+                    sel = (
+                        ui.select(
+                            options=opts,
+                            multiple=True,
+                            label=filter_labels[col],
+                        )
+                        .props("clearable use-chips dense")
+                        .classes("min-w-[130px] flex-1")
+                    )
+                    filter_widgets[col] = sel
+
+        table = ui.table(
+            columns=table_columns,
+            rows=[],
+            row_key="findid",
+            pagination=25,
+        ).classes("w-full")
 
     def open_editor(findid: int | None = None) -> None:
         with session_scope() as db:
@@ -92,7 +151,9 @@ def page_finds() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[1100px]"):
-            ui.label(t("dialog_edit_find") if findid else t("dialog_create_find")).classes("text-h6 text-blue-600")
+            ui.label(
+                t("dialog_edit_find") if findid else t("dialog_create_find")
+            ).classes("text-h6 text-blue-600")
 
             with ui.grid(columns=4).classes("w-full gap-4"):
                 layer_map = {label: lid for (lid, label) in layer_opts}
@@ -111,27 +172,45 @@ def page_finds() -> None:
 
                 inp_year = ui.number(t("label_year"), value=obj.year or None)
                 inp_inv_no = ui.number(t("label_inv_no"), value=obj.inv_no or None)
-                inp_find_type = ui.input(t("label_find_type"), value=obj.find_type or "")
+                inp_find_type = ui.input(
+                    t("label_find_type"), value=obj.find_type or ""
+                )
                 inp_material = ui.input(t("label_material"), value=obj.material or "")
-                inp_description = ui.textarea(t("label_description"), value=obj.description or "").classes("col-span-2")
+                inp_description = ui.textarea(
+                    t("label_description"), value=obj.description or ""
+                ).classes("col-span-2")
                 inp_coin = ui.input(t("label_coin"), value=obj.coin or "")
-                inp_denomination = ui.input(t("label_denomination"), value=obj.denomination or "")
+                inp_denomination = ui.input(
+                    t("label_denomination"), value=obj.denomination or ""
+                )
                 inp_mint = ui.input(t("label_mint"), value=obj.mint or "")
-                inp_dimensions_cm = ui.input(t("label_dimensions_cm"), value=obj.dimensions_cm or "")
-                inp_weight_g = ui.number(t("label_weight_g"), value=obj.weight_g or None)
+                inp_dimensions_cm = ui.input(
+                    t("label_dimensions_cm"), value=obj.dimensions_cm or ""
+                )
+                inp_weight_g = ui.number(
+                    t("label_weight_g"), value=obj.weight_g or None
+                )
                 inp_depth_m = ui.input(t("label_depth_m"), value=obj.depth_m or "")
                 inp_context = ui.input(t("label_context"), value=obj.context or "")
-                inp_coord_north = ui.input(t("label_coord_north_m"), value=obj.coord_north_m or "")
-                inp_coord_east = ui.input(t("label_coord_east_m"), value=obj.coord_east_m or "")
+                inp_coord_north = ui.input(
+                    t("label_coord_north_m"), value=obj.coord_north_m or ""
+                )
+                inp_coord_east = ui.input(
+                    t("label_coord_east_m"), value=obj.coord_east_m or ""
+                )
                 inp_photo = ui.input(t("label_photo"), value=obj.photo or "")
                 inp_drw_link = ui.input(t("label_drw_link"), value=obj.drw_link or "")
-                inp_entered_by = ui.input(t("label_entered_by"), value=obj.recordenteredby or "")
+                inp_entered_by = ui.input(
+                    t("label_entered_by"), value=obj.recordenteredby or ""
+                )
 
             with ui.row().classes("w-full justify-end"):
                 ui.button(t("btn_cancel"), on_click=dialog.close)
 
                 def do_save() -> None:
-                    chosen_layer_id = layer_map.get(sel_layer.value) if sel_layer.value else None
+                    chosen_layer_id = (
+                        layer_map.get(sel_layer.value) if sel_layer.value else None
+                    )
                     if chosen_layer_id is None:
                         chosen_layer_id = inferred_layer_id
 
@@ -139,8 +218,12 @@ def page_finds() -> None:
                         obj2 = db.get(Find, findid) if findid else Find()
                         payload = {
                             "layerid": chosen_layer_id,
-                            "year": int(inp_year.value) if inp_year.value is not None else None,
-                            "inv_no": int(inp_inv_no.value) if inp_inv_no.value is not None else None,
+                            "year": int(inp_year.value)
+                            if inp_year.value is not None
+                            else None,
+                            "inv_no": int(inp_inv_no.value)
+                            if inp_inv_no.value is not None
+                            else None,
                             "find_type": inp_find_type.value or None,
                             "material": inp_material.value or None,
                             "description": inp_description.value or None,
@@ -148,7 +231,9 @@ def page_finds() -> None:
                             "denomination": inp_denomination.value or None,
                             "mint": inp_mint.value or None,
                             "dimensions_cm": inp_dimensions_cm.value or None,
-                            "weight_g": float(inp_weight_g.value) if inp_weight_g.value is not None else None,
+                            "weight_g": float(inp_weight_g.value)
+                            if inp_weight_g.value is not None
+                            else None,
                             "depth_m": inp_depth_m.value or None,
                             "context": inp_context.value or None,
                             "coord_north_m": inp_coord_north.value or None,
@@ -166,8 +251,7 @@ def page_finds() -> None:
 
         dialog.open()
 
-    with ui.row().classes("w-full justify-between"):
-        ui.button(t("btn_refresh"), on_click=refresh)
+    with ui.row().classes("w-full justify-end"):
         ui.button(t("btn_new_find"), on_click=lambda: open_editor(None))
 
     def on_row_click(e) -> None:
@@ -176,5 +260,7 @@ def page_finds() -> None:
 
     table.on("rowClick", on_row_click)
     search.on("change", lambda: refresh())
+    for sel in filter_widgets.values():
+        sel.on("change", lambda: refresh())
 
     refresh()

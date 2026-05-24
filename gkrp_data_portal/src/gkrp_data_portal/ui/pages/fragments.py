@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.models.archaeology import Tblfragment
 from gkrp_data_portal.ui.repository.archaeology_repo import (
+    column_distinct,
     layer_choices,
     list_fragments,
     most_recent_layer_id,
@@ -40,7 +41,7 @@ def _save_fragment(db: Session, obj: Tblfragment, data: dict) -> Tblfragment:
         if hasattr(obj, k):
             setattr(obj, k, v)
     db.add(obj)
-    db.flush()   # ensures PK assigned for new objects inside the transaction
+    db.flush()  # ensures PK assigned for new objects inside the transaction
     db.refresh(obj)
     return obj
 
@@ -49,33 +50,104 @@ def _save_fragment(db: Session, obj: Tblfragment, data: dict) -> Tblfragment:
 def page_fragments() -> None:
     ui.label(t("title_fragments")).classes("text-h5 text-blue-600")
 
-    search = ui.input(t("search_fragments")).props("clearable")
+    search = ui.input(t("search_fragments")).props("clearable").classes("w-[500px]")
 
-    table = ui.table(
-        columns=[
-            {"name": "fragmentid", "label": t("col_id"), "field": "fragmentid", "sortable": True},
-            {"name": "locationid", "label": t("col_layer_id"), "field": "locationid", "sortable": True},
-            {"name": "piecetype", "label": t("col_piecetype"), "field": "piecetype"},
-            {"name": "fragmenttype", "label": t("col_fragmenttype"), "field": "fragmenttype"},
-            {"name": "technology", "label": t("col_technology"), "field": "technology"},
-            {"name": "baking", "label": t("col_baking"), "field": "baking"},
-            {"name": "primarycolor", "label": t("col_primary"), "field": "primarycolor"},
-            {"name": "secondarycolor", "label": t("col_secondary"), "field": "secondarycolor"},
-            {"name": "count", "label": t("col_count"), "field": "count"},
-            {"name": "inventory", "label": t("col_inventory"), "field": "inventory"},
-            {"name": "image_url", "label": t("col_image_url"), "field": "image_url"},
-        ],
-        rows=[],
-        row_key="fragmentid",
-        pagination=25,
-    ).classes("w-full")
+    filter_widgets: dict[str, ui.select] = {}
+    filter_cols = [
+        "piecetype",
+        "fragmenttype",
+        "technology",
+        "baking",
+        "primarycolor",
+        "secondarycolor",
+    ]
+    filter_labels = {
+        "piecetype": t("col_piecetype"),
+        "fragmenttype": t("col_fragmenttype"),
+        "technology": t("col_technology"),
+        "baking": t("col_baking"),
+        "primarycolor": t("col_primary"),
+        "secondarycolor": t("col_secondary"),
+    }
 
     def refresh() -> None:
         q = (search.value or "").strip()
+        filters = {col: sel.value for col, sel in filter_widgets.items() if sel.value}
         with session_scope() as db:
-            res = list_fragments(db, q=q if q else None)
+            res = list_fragments(
+                db,
+                q=q if q else None,
+                filters=filters or None,
+            )
             table.rows = [_row_to_dict(x) for x in res.items]
         table.update()
+
+    table_columns = [
+        {
+            "name": "fragmentid",
+            "label": t("col_id"),
+            "field": "fragmentid",
+            "sortable": True,
+        },
+        {
+            "name": "locationid",
+            "label": t("col_layer_id"),
+            "field": "locationid",
+            "sortable": True,
+        },
+        {"name": "piecetype", "label": t("col_piecetype"), "field": "piecetype"},
+        {
+            "name": "fragmenttype",
+            "label": t("col_fragmenttype"),
+            "field": "fragmenttype",
+        },
+        {"name": "technology", "label": t("col_technology"), "field": "technology"},
+        {"name": "baking", "label": t("col_baking"), "field": "baking"},
+        {
+            "name": "primarycolor",
+            "label": t("col_primary"),
+            "field": "primarycolor",
+        },
+        {
+            "name": "secondarycolor",
+            "label": t("col_secondary"),
+            "field": "secondarycolor",
+        },
+        {"name": "count", "label": t("col_count"), "field": "count"},
+        {"name": "inventory", "label": t("col_inventory"), "field": "inventory"},
+        {"name": "image_url", "label": t("col_image_url"), "field": "image_url"},
+    ]
+
+    ordered_filter_cols = sorted(
+        filter_cols,
+        key=lambda c: next(
+            (i for i, col in enumerate(table_columns) if col["name"] == c), 99
+        ),
+    )
+
+    with ui.column().classes("w-full"):
+        with ui.row().classes("w-full items-center gap-2 flex-wrap"):
+            ui.button(t("btn_refresh"), on_click=refresh)
+            with session_scope() as db:
+                for col in ordered_filter_cols:
+                    opts = column_distinct(db, Tblfragment, col)
+                    sel = (
+                        ui.select(
+                            options=opts,
+                            multiple=True,
+                            label=filter_labels[col],
+                        )
+                        .props("clearable use-chips dense")
+                        .classes("min-w-[130px] flex-1")
+                    )
+                    filter_widgets[col] = sel
+
+        table = ui.table(
+            columns=table_columns,
+            rows=[],
+            row_key="fragmentid",
+            pagination=25,
+        ).classes("w-full")
 
     def open_editor(fragmentid: int | None = None) -> None:
         with session_scope() as db:
@@ -85,7 +157,9 @@ def page_fragments() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[1100px]"):
-            ui.label(t("dialog_edit_fragment") if fragmentid else t("dialog_create_fragment")).classes("text-h6 text-blue-600")
+            ui.label(
+                t("dialog_edit_fragment") if fragmentid else t("dialog_create_fragment")
+            ).classes("text-h6 text-blue-600")
 
             ui.markdown(t("dialog_fragment_hint")).classes("text-sm")
 
@@ -105,18 +179,28 @@ def page_fragments() -> None:
                     label=t("label_layer_optional"),
                 ).props("clearable")
 
-                inp_piecetype = ui.input("piecetype (required)", value=obj.piecetype or "")
-                inp_fragmenttype = ui.input("fragmenttype", value=obj.fragmenttype or "")
+                inp_piecetype = ui.input(
+                    "piecetype (required)", value=obj.piecetype or ""
+                )
+                inp_fragmenttype = ui.input(
+                    "fragmenttype", value=obj.fragmenttype or ""
+                )
                 inp_technology = ui.input("technology", value=obj.technology or "")
 
                 inp_baking = ui.input("baking", value=obj.baking or "")
                 inp_fract = ui.input("fract", value=obj.fract or "")
                 inp_primary = ui.input("primarycolor", value=obj.primarycolor or "")
-                inp_secondary = ui.input("secondarycolor", value=obj.secondarycolor or "")
+                inp_secondary = ui.input(
+                    "secondarycolor", value=obj.secondarycolor or ""
+                )
 
                 inp_covering = ui.input("covering", value=obj.covering or "")
-                inp_includesconc = ui.input("includesconc", value=obj.includesconc or "")
-                inp_includessize = ui.input("includessize", value=obj.includessize or "")
+                inp_includesconc = ui.input(
+                    "includesconc", value=obj.includesconc or ""
+                )
+                inp_includessize = ui.input(
+                    "includessize", value=obj.includessize or ""
+                )
                 inp_surface = ui.input("surface", value=obj.surface or "")
 
                 inp_wall = ui.input("wallthickness", value=obj.wallthickness or "")
@@ -136,17 +220,27 @@ def page_fragments() -> None:
 
                 inp_count = ui.number("count (required)", value=obj.count or 1)
                 inp_inventory = ui.input("inventory", value=obj.inventory or "")
-                inp_entered_by = ui.input("recordenteredby", value=obj.recordenteredby or "")
-                inp_recordenteredon = ui.input("recordenteredon (legacy str)", value=obj.recordenteredon or "")
+                inp_entered_by = ui.input(
+                    "recordenteredby", value=obj.recordenteredby or ""
+                )
+                inp_recordenteredon = ui.input(
+                    "recordenteredon (legacy str)", value=obj.recordenteredon or ""
+                )
 
-                inp_note = ui.textarea("note", value=obj.note or "").classes("col-span-4")
-                inp_image_url = ui.input("image_url", value=obj.image_url or "").classes("col-span-4")
+                inp_note = ui.textarea("note", value=obj.note or "").classes(
+                    "col-span-4"
+                )
+                inp_image_url = ui.input(
+                    "image_url", value=obj.image_url or ""
+                ).classes("col-span-4")
 
             with ui.row().classes("w-full justify-end"):
                 ui.button(t("btn_cancel"), on_click=dialog.close)
 
                 def do_save() -> None:
-                    chosen_layer_id = layer_map.get(sel_layer.value) if sel_layer.value else None
+                    chosen_layer_id = (
+                        layer_map.get(sel_layer.value) if sel_layer.value else None
+                    )
                     if chosen_layer_id is None:
                         chosen_layer_id = inferred_layer_id  # parity inference
 
@@ -158,7 +252,11 @@ def page_fragments() -> None:
                         return
 
                     with session_scope() as db:
-                        obj2 = db.get(Tblfragment, fragmentid) if fragmentid else Tblfragment()
+                        obj2 = (
+                            db.get(Tblfragment, fragmentid)
+                            if fragmentid
+                            else Tblfragment()
+                        )
                         payload = {
                             "locationid": chosen_layer_id,
                             "piecetype": inp_piecetype.value,
@@ -180,9 +278,13 @@ def page_fragments() -> None:
                             "outline": inp_outline.value or None,
                             "category": inp_category.value or None,
                             "form": inp_form.value or None,
-                            "type": int(inp_type.value) if inp_type.value is not None else None,
+                            "type": int(inp_type.value)
+                            if inp_type.value is not None
+                            else None,
                             "subtype": inp_subtype.value or None,
-                            "variant": int(inp_variant.value) if inp_variant.value is not None else None,
+                            "variant": int(inp_variant.value)
+                            if inp_variant.value is not None
+                            else None,
                             "onepot": inp_onepot.value or None,
                             "count": int(inp_count.value),
                             "inventory": inp_inventory.value or None,
@@ -200,8 +302,7 @@ def page_fragments() -> None:
 
         dialog.open()
 
-    with ui.row().classes("w-full justify-between"):
-        ui.button(t("btn_refresh"), on_click=refresh)
+    with ui.row().classes("w-full justify-end"):
         ui.button(t("btn_new_fragment"), on_click=lambda: open_editor(None))
 
     def on_row_click(e) -> None:
@@ -210,5 +311,7 @@ def page_fragments() -> None:
 
     table.on("rowClick", on_row_click)
     search.on("change", lambda: refresh())
+    for sel in filter_widgets.values():
+        sel.on("change", lambda: refresh())
 
     refresh()

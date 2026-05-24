@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.models.archaeology import Tblornament
 from gkrp_data_portal.ui.repository.archaeology_repo import (
+    column_distinct,
     fragment_choices,
     list_ornaments,
     most_recent_fragment_id,
@@ -46,30 +47,82 @@ def _save_ornament(db: Session, obj: Tblornament, data: dict) -> Tblornament:
 def page_ornaments() -> None:
     ui.label(t("title_ornaments")).classes("text-h5 text-blue-600")
 
-    search = ui.input(t("search_ornaments")).props("clearable")
+    search = ui.input(t("search_ornaments")).props("clearable").classes("w-[500px]")
 
-    table = ui.table(
-        columns=[
-            {"name": "ornamentid", "label": t("col_id"), "field": "ornamentid", "sortable": True},
-            {"name": "fragmentid", "label": t("col_fragment_id"), "field": "fragmentid", "sortable": True},
-            {"name": "location", "label": t("col_location"), "field": "location"},
-            {"name": "primary_", "label": t("col_primary_"), "field": "primary_"},
-            {"name": "secondary", "label": t("col_secondary"), "field": "secondary"},
-            {"name": "tertiary", "label": t("col_tertiary"), "field": "tertiary"},
-            {"name": "color1", "label": t("col_color1"), "field": "color1"},
-            {"name": "color2", "label": t("col_color2"), "field": "color2"},
-        ],
-        rows=[],
-        row_key="ornamentid",
-        pagination=25,
-    ).classes("w-full")
+    filter_widgets: dict[str, ui.select] = {}
+    filter_cols = ["location", "primary_", "secondary", "tertiary", "color1", "color2"]
+    filter_labels = {
+        "location": t("col_location"),
+        "primary_": t("col_primary_"),
+        "secondary": t("col_secondary"),
+        "tertiary": t("col_tertiary"),
+        "color1": t("col_color1"),
+        "color2": t("col_color2"),
+    }
 
     def refresh() -> None:
         q = (search.value or "").strip()
+        filters = {col: sel.value for col, sel in filter_widgets.items() if sel.value}
         with session_scope() as db:
-            res = list_ornaments(db, q=q if q else None)
+            res = list_ornaments(
+                db,
+                q=q if q else None,
+                filters=filters or None,
+            )
             table.rows = [_row_to_dict(x) for x in res.items]
         table.update()
+
+    table_columns = [
+        {
+            "name": "ornamentid",
+            "label": t("col_id"),
+            "field": "ornamentid",
+            "sortable": True,
+        },
+        {
+            "name": "fragmentid",
+            "label": t("col_fragment_id"),
+            "field": "fragmentid",
+            "sortable": True,
+        },
+        {"name": "location", "label": t("col_location"), "field": "location"},
+        {"name": "primary_", "label": t("col_primary_"), "field": "primary_"},
+        {"name": "secondary", "label": t("col_secondary"), "field": "secondary"},
+        {"name": "tertiary", "label": t("col_tertiary"), "field": "tertiary"},
+        {"name": "color1", "label": t("col_color1"), "field": "color1"},
+        {"name": "color2", "label": t("col_color2"), "field": "color2"},
+    ]
+
+    ordered_filter_cols = sorted(
+        filter_cols,
+        key=lambda c: next(
+            (i for i, col in enumerate(table_columns) if col["name"] == c), 99
+        ),
+    )
+
+    with ui.column().classes("w-full"):
+        with ui.row().classes("w-full items-center gap-2 flex-wrap"):
+            ui.button(t("btn_refresh"), on_click=refresh)
+            with session_scope() as db:
+                for col in ordered_filter_cols:
+                    opts = column_distinct(db, Tblornament, col)
+                    sel = (
+                        ui.select(
+                            options=opts,
+                            multiple=True,
+                            label=filter_labels[col],
+                        )
+                        .props("clearable use-chips dense")
+                        .classes("min-w-[130px] flex-1")
+                    )
+                    filter_widgets[col] = sel
+
+        table = ui.table(
+            columns=table_columns,
+            rows=[],
+            row_key="ornamentid",
+            pagination=25,
+        ).classes("w-full")
 
     def open_editor(ornamentid: int | None = None) -> None:
         with session_scope() as db:
@@ -79,7 +132,9 @@ def page_ornaments() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[1000px]"):
-            ui.label(t("dialog_edit_ornament") if ornamentid else t("dialog_create_ornament")).classes("text-h6 text-blue-600")
+            ui.label(
+                t("dialog_edit_ornament") if ornamentid else t("dialog_create_ornament")
+            ).classes("text-h6 text-blue-600")
 
             ui.markdown(t("dialog_ornament_hint")).classes("text-sm")
 
@@ -105,8 +160,12 @@ def page_ornaments() -> None:
                 )
                 inp_onornament = ui.number("onornament", value=obj.onornament or 0)
 
-                inp_color1 = ui.input("color1", value=getattr(obj, "color1", None) or "")
-                inp_color2 = ui.input("color2", value=getattr(obj, "color2", None) or "")
+                inp_color1 = ui.input(
+                    "color1", value=getattr(obj, "color1", None) or ""
+                )
+                inp_color2 = ui.input(
+                    "color2", value=getattr(obj, "color2", None) or ""
+                )
                 inp_en1 = ui.input("encrustcolor1", value=obj.encrustcolor1 or "")
                 inp_en2 = ui.input("encrustcolor2", value=obj.encrustcolor2 or "")
 
@@ -119,12 +178,18 @@ def page_ornaments() -> None:
                 ui.button(t("btn_cancel"), on_click=dialog.close)
 
                 def do_save() -> None:
-                    chosen_fragment_id = frag_map.get(sel_fragment.value) if sel_fragment.value else None
+                    chosen_fragment_id = (
+                        frag_map.get(sel_fragment.value) if sel_fragment.value else None
+                    )
                     if chosen_fragment_id is None:
                         chosen_fragment_id = inferred_fragment_id  # parity inference
 
                     with session_scope() as db:
-                        obj2 = db.get(Tblornament, ornamentid) if ornamentid else Tblornament()
+                        obj2 = (
+                            db.get(Tblornament, ornamentid)
+                            if ornamentid
+                            else Tblornament()
+                        )
                         payload = {
                             "fragmentid": chosen_fragment_id,
                             "location": inp_location.value or None,
@@ -153,8 +218,7 @@ def page_ornaments() -> None:
 
         dialog.open()
 
-    with ui.row().classes("w-full justify-between"):
-        ui.button(t("btn_refresh"), on_click=refresh)
+    with ui.row().classes("w-full justify-end"):
         ui.button(t("btn_new_ornament"), on_click=lambda: open_editor(None))
 
     def on_row_click(e) -> None:
@@ -163,5 +227,7 @@ def page_ornaments() -> None:
 
     table.on("rowClick", on_row_click)
     search.on("change", lambda: refresh())
+    for sel in filter_widgets.values():
+        sel.on("change", lambda: refresh())
 
     refresh()

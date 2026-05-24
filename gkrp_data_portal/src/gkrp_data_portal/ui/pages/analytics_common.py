@@ -76,6 +76,13 @@ LOCALE: dict[str, str] = {
     "label_sector": "Сектор",
     "label_square": "Квадрат",
     "label_layer": "Пласт",
+    "label_layertype": "Вид пласт",
+    "label_layername": "Име на пласт",
+    "label_stratum": "Стратум",
+    "label_level": "Ниво",
+    "label_structure": "Структура",
+    "label_color1": "Цвят 1",
+    "label_color2": "Цвят 2",
     "label_layer_optional": "Пласт (по избор)",
     "label_fragment_optional": "Фрагмент (по избор)",
     "label_email": "Имейл",
@@ -299,6 +306,13 @@ LOCALE: dict[str, str] = {
     "label_sector_en": "Sector",
     "label_square_en": "Square",
     "label_layer_en": "Layer",
+    "label_layertype_en": "Layer Type",
+    "label_layername_en": "Layer Name",
+    "label_stratum_en": "Stratum",
+    "label_level_en": "Level",
+    "label_structure_en": "Structure",
+    "label_color1_en": "Color 1",
+    "label_color2_en": "Color 2",
     "label_layer_optional_en": "Layer (optional)",
     "label_fragment_optional_en": "Fragment (optional)",
     "label_email_en": "Email",
@@ -454,6 +468,7 @@ LOCALE: dict[str, str] = {
     "other_access_by_invite_en": "Access is by invitation only. Please contact the administrator.",
     "other_create_user_first_en": "Create a user (or invite) first, then return.",
 }
+
 
 def _query_options() -> dict[str, str]:
     """Build QUERY_OPTIONS respecting the current language."""
