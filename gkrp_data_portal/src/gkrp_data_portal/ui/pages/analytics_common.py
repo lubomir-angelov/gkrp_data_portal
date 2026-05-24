@@ -259,7 +259,6 @@ _UI_HIDDEN_COLUMNS = frozenset(
         "f_recordenteredon",
         "f_image",
         "f_count",
-        "f_count_deduped",
         "l_layername",
         "f_fragmenttype",
         "f_fract",
