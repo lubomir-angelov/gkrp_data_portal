@@ -10,7 +10,7 @@ Manual testing protocol for the GKRP archaeology data portal. Designed for repea
 
 Before every test session:
 
-1. **Verify the app is running** — open `http://localhost:8080` (or the deployed URL). The home page should show the left navigation panel.
+1. **Verify the app is running** — open `http://78.83.34.46:5000/` (or the deployed URL). The home page should show the left navigation panel.
 2. **Confirm database connectivity** — the Layers page should load rows without errors.
 3. **Note the current language** — the language toggle button (top-right, "EN"/"BG") sets the session language. Record which language you are testing in.
 4. **Ensure a fresh session** — open the page in an incognito/private window or clear browser storage before starting.
@@ -191,7 +191,7 @@ When a defect is found:
 
 Преди всяка тестова сесия:
 
-1. **Проверете дали приложението работи** — отворете `http://localhost:8080` (или деплойнатия URL). Домашната страница трябва да показва лявото навигационно меню.
+1. **Проверете дали приложението работи** — отворете `http://78.83.34.46:5000/` (или деплойнатия URL). Домашната страница трябва да показва лявото навигационно меню.
 2. **Потвърдете връзката с базата данни** — страницата Пластове трябва да зарежда редове без грешки.
 3. **Запишете текущия език** — бутонът за превключване (горен десен ъгъл, "EN"/"BG") задава езика на сесията. Запишете на кой език тествате.
 4. **Уверете се в чиста сесия** — отворете страницата в режим "инкогнито" или изчистете браузърското съхранение преди началото.
