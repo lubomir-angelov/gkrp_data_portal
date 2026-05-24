@@ -10,7 +10,7 @@
         "/home/ubuntu/experiment/gkrp_data_portal"
       ]
     }
-  }
+  },
   "model": "llamacpp/Qwen3.6-35B-A3B",
   "share": "disabled",
   "autoupdate": false,

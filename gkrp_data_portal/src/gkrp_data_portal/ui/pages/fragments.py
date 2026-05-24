@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.models.archaeology import Tblfragment
 from gkrp_data_portal.ui.repository.archaeology_repo import (
+    column_distinct,
     layer_choices,
     list_fragments,
     most_recent_layer_id,
@@ -51,6 +52,30 @@ def page_fragments() -> None:
 
     search = ui.input(t("search_fragments")).props("clearable").classes("w-[500px]")
 
+    filter_widgets: dict[str, ui.select] = {}
+    filter_cols = ["piecetype", "fragmenttype", "technology", "baking", "primarycolor", "secondarycolor"]
+    filter_labels = {
+        "piecetype": t("col_piecetype"),
+        "fragmenttype": t("col_fragmenttype"),
+        "technology": t("col_technology"),
+        "baking": t("col_baking"),
+        "primarycolor": t("col_primary"),
+        "secondarycolor": t("col_secondary"),
+    }
+    with ui.row().classes("gap-2 flex-wrap"):
+        ui.button(t("btn_refresh"), on_click=refresh)
+        with session_scope() as db:
+            for col in filter_cols:
+                opts = column_distinct(db, Tblfragment, col)
+                sel = (
+                    ui.select(
+                        options=opts, multiple=True, label=filter_labels[col],
+                    )
+                    .props("clearable use-chips")
+                    .classes("min-w-[160px]")
+                )
+                filter_widgets[col] = sel
+
     table = ui.table(
         columns=[
             {"name": "fragmentid", "label": t("col_id"), "field": "fragmentid", "sortable": True},
@@ -72,8 +97,13 @@ def page_fragments() -> None:
 
     def refresh() -> None:
         q = (search.value or "").strip()
+        filters = {
+            col: sel.value for col, sel in filter_widgets.items() if sel.value
+        }
         with session_scope() as db:
-            res = list_fragments(db, q=q if q else None)
+            res = list_fragments(
+                db, q=q if q else None, filters=filters or None,
+            )
             table.rows = [_row_to_dict(x) for x in res.items]
         table.update()
 
@@ -200,8 +230,7 @@ def page_fragments() -> None:
 
         dialog.open()
 
-    with ui.row().classes("w-full justify-between"):
-        ui.button(t("btn_refresh"), on_click=refresh)
+    with ui.row().classes("w-full justify-end"):
         ui.button(t("btn_new_fragment"), on_click=lambda: open_editor(None))
 
     def on_row_click(e) -> None:
@@ -210,5 +239,7 @@ def page_fragments() -> None:
 
     table.on("rowClick", on_row_click)
     search.on("change", lambda: refresh())
+    for sel in filter_widgets.values():
+        sel.on("change", lambda: refresh())
 
     refresh()
