@@ -187,30 +187,31 @@ def _build_where(
     q: Optional[str],
     frag_filters: Optional[dict[str, Any]] = None,
     layer_filters: Optional[dict[str, Any]] = None,
+    layer_alias: str = "l",
 ) -> tuple[str, dict[str, Any]]:
     """Build a safe WHERE clause using only whitelisted filters."""
     clauses: list[str] = []
     params: dict[str, Any] = {}
 
-    # Layer-scoped filters (always safe; all queries include l alias)
+    # Layer-scoped filters (always safe; all queries include layer_alias)
     if layer_filters:
         _apply_layer_filters(clauses, params, layer_filters)
     else:
         if site:
-            clauses.append("l.site ILIKE :site")
+            clauses.append(f"{layer_alias}.site ILIKE :site")
             params["site"] = f"%{site}%"
         if sector:
-            clauses.append("l.sector ILIKE :sector")
+            clauses.append(f"{layer_alias}.sector ILIKE :sector")
             params["sector"] = f"%{sector}%"
         if square:
-            clauses.append("l.square ILIKE :square")
+            clauses.append(f"{layer_alias}.square ILIKE :square")
             params["square"] = f"%{square}%"
 
     if date_from:
-        clauses.append("l.recordenteredon >= :date_from")
+        clauses.append(f"{layer_alias}.recordenteredon >= :date_from")
         params["date_from"] = date_from
     if date_to:
-        clauses.append("l.recordenteredon <= :date_to")
+        clauses.append(f"{layer_alias}.recordenteredon <= :date_to")
         params["date_to"] = date_to
 
     # Free-text: differs slightly by query (which aliases exist)
@@ -352,15 +353,28 @@ def query_q2_layers_fragments_ornaments(
         q=q,
         frag_filters=frag_filters,
         layer_filters=layer_filters,
+        layer_alias="l",
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC, o.ornamentid DESC"
+    count_where_sql, count_params = _build_where(
+        query_id="q2",
+        site=site,
+        sector=sector,
+        square=square,
+        date_from=date_from,
+        date_to=date_to,
+        q=q,
+        frag_filters=frag_filters,
+        layer_filters=layer_filters,
+        layer_alias="l2",
+    )
     count_sql = f"""SELECT COALESCE((
         SELECT SUM(f2.count) FROM (
             SELECT DISTINCT f2.fragmentid, f2.count
             FROM tblfragments f2
             INNER JOIN tbllayers l2 ON l2.layerid = f2.locationid
-            {where_sql}
+            {count_where_sql}
         ) f2
     ), 0)"""
 
@@ -421,9 +435,22 @@ def query_finds(
         q=q,
         frag_filters=frag_filters,
         layer_filters=layer_filters,
+        layer_alias="l",
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY fi.findid DESC"
+    count_where_sql, count_params = _build_where(
+        query_id="finds",
+        site=site,
+        sector=sector,
+        square=square,
+        date_from=date_from,
+        date_to=date_to,
+        q=q,
+        frag_filters=frag_filters,
+        layer_filters=layer_filters,
+        layer_alias="l2",
+    )
     count_sql = f"""SELECT COALESCE((
         SELECT SUM(f2.count) FROM (
             SELECT DISTINCT f2.fragmentid, f2.count
@@ -431,7 +458,7 @@ def query_finds(
             INNER JOIN tbllayers l2 ON l2.layerid = fi2.layerid
             LEFT JOIN tblfragments f2 ON f2.fragmentid = fi2.fragmentid
             LEFT JOIN tblornaments o2 ON o2.ornamentid = fi2.ornamentid
-            {where_sql}
+            {count_where_sql}
         ) f2
     ), 0)"""
 
