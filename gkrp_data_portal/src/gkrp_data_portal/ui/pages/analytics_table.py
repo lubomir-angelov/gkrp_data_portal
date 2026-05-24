@@ -19,12 +19,12 @@ from gkrp_data_portal.ui.repository.analytics_repo import (
 
 from .analytics_common import (
     DEFAULT_LIMIT,
-    LOCALE,
     QUERY_OPTIONS,
     TABLE_MAX_LIMIT,
     result_for,
     ui_columns,
 )
+from gkrp_data_portal.ui.lang import t
 
 
 def _select_to_list(widget: ui.select) -> list[str] | None:
@@ -53,7 +53,7 @@ def page_analytics_table() -> None:
         - All columns are shown (no column toggles).
         - Layer filters follow a Site->Sector->Square->Layer hierarchy.
     """
-    ui.label(LOCALE["title_analytics_table"]).classes("text-h5 text-blue-600")
+    ui.label(t("title_analytics_table")).classes("text-h5 text-blue-600")
 
     # Mutable state shared across callbacks (kept in-memory for this page instance).
     state: dict[str, Any] = {
@@ -71,16 +71,16 @@ def page_analytics_table() -> None:
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
         # Left panel
         with ui.column().classes("w-[340px] shrink-0"):
-            ui.label(LOCALE["panel_query_filters"]).classes("text-subtitle1 font-medium text-blue-600")
+            ui.label(t("panel_query_filters")).classes("text-subtitle1 font-medium text-blue-600")
 
             sel_query = ui.select(
                 options=list(QUERY_OPTIONS.keys()),
-                value=LOCALE["query_filter2"],
-                label=LOCALE["label_predefined_query"],
+                value=t("query_filter2"),
+                label=t("label_predefined_query"),
             ).classes("w-full")
 
             with ui.row().classes("w-full gap-2 items-center"):
-                btn_run = ui.button(LOCALE["btn_run_query"], icon="play_arrow").classes("flex-1")
+                btn_run = ui.button(t("btn_run_query"), icon="play_arrow").classes("flex-1")
 
             with ui.scroll_area().classes(
                 "w-full h-[420px] border rounded p-2 bg-white"
@@ -88,7 +88,7 @@ def page_analytics_table() -> None:
                 sel_site_t = (
                     ui.select(
                         options=[],
-                        label=LOCALE["label_site"],
+                        label=t("label_site"),
                         multiple=True,
                         clearable=True,
                         with_input=True,
@@ -103,7 +103,7 @@ def page_analytics_table() -> None:
                         multiple=True,
                         clearable=True,
                         with_input=True,
-                        label=LOCALE["label_sector"],
+                        label=t("label_sector"),
                     )
                     .classes("w-full")
                     .props("dense")
@@ -115,7 +115,7 @@ def page_analytics_table() -> None:
                         multiple=True,
                         clearable=True,
                         with_input=True,
-                        label=LOCALE["label_square"],
+                        label=t("label_square"),
                     )
                     .classes("w-full")
                     .props("dense")
@@ -127,7 +127,7 @@ def page_analytics_table() -> None:
                         multiple=True,
                         clearable=True,
                         with_input=True,
-                        label=LOCALE["label_layer"],
+                        label=t("label_layer"),
                     )
                     .classes("w-full")
                     .props("dense")
@@ -137,7 +137,7 @@ def page_analytics_table() -> None:
 
         # Center panel (grid)
         with ui.column().classes("flex-1 min-w-0"):
-            ui.label(LOCALE["panel_table"]).classes("text-subtitle1 font-medium text-blue-600")
+            ui.label(t("panel_table")).classes("text-subtitle1 font-medium text-blue-600")
             status = ui.label("").classes("text-sm text-gray-600")
             dbg = ui.label("").classes("text-xs text-gray-500")
 
@@ -165,7 +165,7 @@ def page_analytics_table() -> None:
                 .style("height: 740px;")
             )
 
-            ui.label(LOCALE["tip_filter_header"]).classes("text-xs text-gray-500 mt-1")
+            ui.label(t("tip_filter_header")).classes("text-xs text-gray-500 mt-1")
 
     def _set_grid(items: list[dict[str, Any]], visible_cols: list[str]) -> None:
         """Populate AG Grid with the given rows and visible columns.
@@ -375,7 +375,7 @@ def page_analytics_table() -> None:
                 state["last_columns"] = []
                 _set_grid([], [])
                 dbg.set_text(f"query={f['query_id']} rows=0 total=0")
-                status.set_text(LOCALE["status_no_results"])
+                status.set_text(t("status_no_results"))
                 return
 
             ui_cols = ui_columns(res.columns) or list(res.columns)
@@ -388,7 +388,7 @@ def page_analytics_table() -> None:
             dbg.set_text(
                 f"query={f['query_id']} table_rows={len(res.items)} total={res.total}"
             )
-            status.set_text(LOCALE["status_returned"].format(count=len(res.items), total=res.total))
+            status.set_text(t("status_returned").format(count=len(res.items), total=res.total))
 
         finally:
             state["_refreshing"] = False

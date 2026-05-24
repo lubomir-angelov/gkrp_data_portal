@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from .analytics_common import LOCALE
 from gkrp_data_portal.auth.deps import require_admin
+from gkrp_data_portal.ui.lang import t
 from gkrp_data_portal.core.email import maybe_send_invite_email
 from gkrp_data_portal.core.invitations import new_invite_token
 from gkrp_data_portal.core.settings import get_app_base_url, get_invite_ttl_hours
@@ -25,24 +25,24 @@ def page_admin() -> None:
     # Guard: raise if not admin. NiceGUI will show error; you can add friendly redirect later.
     require_admin()
 
-    ui.label(LOCALE["title_admin"]).classes("text-h5 text-blue-600")
+    ui.label(t("title_admin")).classes("text-h5 text-blue-600")
 
     invite_link_label = ui.label("").classes("text-sm")
-    invite_link_copy = ui.input(LOCALE["label_invite_link"]).props("readonly").classes("w-full")
+    invite_link_copy = ui.input(t("label_invite_link")).props("readonly").classes("w-full")
     invite_link_copy.set_visibility(False)
 
     ui.separator()
 
-    ui.label(LOCALE["btn_create_invite"]).classes("text-h6 text-blue-600")
+    ui.label(t("btn_create_invite")).classes("text-h6 text-blue-600")
     with ui.row().classes("w-full items-end"):
-        inp_email = ui.input(LOCALE["label_email"]).classes("w-[420px]")
-        sel_role = ui.select(["user", "admin"], value="user", label=LOCALE["label_role"]).classes("w-[180px]")
-        btn_create = ui.button(LOCALE["btn_create_invite"])
+        inp_email = ui.input(t("label_email")).classes("w-[420px]")
+        sel_role = ui.select(["user", "admin"], value="user", label=t("label_role")).classes("w-[180px]")
+        btn_create = ui.button(t("btn_create_invite"))
 
     def do_create_invite() -> None:
         email = (inp_email.value or "").strip()
         if not email:
-            ui.notify(LOCALE["notify_email_required"], type="negative")
+            ui.notify(t("notify_email_required"), type="negative")
             return
 
         token = new_invite_token()
@@ -54,20 +54,20 @@ def page_admin() -> None:
         base = get_app_base_url()
         link = f"{base}/accept-invite?token={token.raw}"
 
-        invite_link_label.text = LOCALE["notify_invite_created"]
+        invite_link_label.text = t("notify_invite_created")
         invite_link_copy.value = link
         invite_link_copy.set_visibility(True)
 
         # optional SMTP (will no-op if not configured)
         sent = maybe_send_invite_email(
             to_email=email,
-            subject=LOCALE["other_invite_created_text"],
-            body=LOCALE["other_invite_body"].format(link=link, ttl=ttl),
+            subject=t("other_invite_created_text"),
+            body=t("other_invite_body").format(link=link, ttl=ttl),
         )
         if sent:
-            ui.notify(LOCALE["notify_invite_email_sent"], type="positive")
+            ui.notify(t("notify_invite_email_sent"), type="positive")
         else:
-            ui.notify(LOCALE["notify_smtp_not_configured"], type="warning")
+            ui.notify(t("notify_smtp_not_configured"), type="warning")
 
         refresh_users()
 
@@ -75,16 +75,16 @@ def page_admin() -> None:
 
     ui.separator()
 
-    ui.label("Потребители").classes("text-h6 text-blue-600")
+    ui.label(t("admin_users")).classes("text-h6 text-blue-600")
     users_table = ui.table(
         columns=[
-            {"name": "id", "label": LOCALE["col_id"], "field": "id", "sortable": True},
-            {"name": "username", "label": LOCALE["col_username"], "field": "username"},
-            {"name": "email", "label": LOCALE["admin_email"], "field": "email"},
-            {"name": "role", "label": LOCALE["admin_role"], "field": "role"},
-            {"name": "is_active", "label": LOCALE["admin_active"], "field": "is_active"},
-            {"name": "invited_at", "label": LOCALE["col_invited"], "field": "invited_at"},
-            {"name": "invite_expires_at", "label": LOCALE["col_invite_expires"], "field": "invite_expires_at"},
+            {"name": "id", "label": t("col_id"), "field": "id", "sortable": True},
+            {"name": "username", "label": t("col_username"), "field": "username"},
+            {"name": "email", "label": t("admin_email"), "field": "email"},
+            {"name": "role", "label": t("admin_role"), "field": "role"},
+            {"name": "is_active", "label": t("admin_active"), "field": "is_active"},
+            {"name": "invited_at", "label": t("col_invited"), "field": "invited_at"},
+            {"name": "invite_expires_at", "label": t("col_invite_expires"), "field": "invite_expires_at"},
         ],
         rows=[],
         row_key="id",
@@ -121,18 +121,18 @@ def page_admin() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[520px]"):
-            ui.label(LOCALE["dialog_user_actions"].format(uid=uid)).classes("text-h6 text-blue-600")
-            ui.label(f"{LOCALE['admin_email']}: {row.get('email')}")
-            ui.label(f"{LOCALE['admin_username']}: {row.get('username')}")
-            ui.label(f"{LOCALE['admin_role']}: {row.get('role')}")
-            ui.label(f"{LOCALE['admin_active']}: {row.get('is_active')}")
+            ui.label(t("dialog_user_actions").format(uid=uid)).classes("text-h6 text-blue-600")
+            ui.label(f"{t('admin_email')}: {row.get('email')}")
+            ui.label(f"{t('admin_username')}: {row.get('username')}")
+            ui.label(f"{t('admin_role')}: {row.get('role')}")
+            ui.label(f"{t('admin_active')}: {row.get('is_active')}")
 
             with ui.row().classes("w-full justify-end"):
-                ui.button(LOCALE["btn_close"], on_click=dialog.close)
+                ui.button(t("btn_close"), on_click=dialog.close)
                 if row.get("is_active"):
-                    ui.button(LOCALE["btn_disable"], on_click=lambda: (toggle_user(int(uid), False), dialog.close()))
+                    ui.button(t("btn_disable"), on_click=lambda: (toggle_user(int(uid), False), dialog.close()))
                 else:
-                    ui.button(LOCALE["btn_activate"], on_click=lambda: (toggle_user(int(uid), True), dialog.close()))
+                    ui.button(t("btn_activate"), on_click=lambda: (toggle_user(int(uid), True), dialog.close()))
 
         dialog.open()
 
