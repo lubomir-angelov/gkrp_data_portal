@@ -24,7 +24,6 @@ LOCALE: dict[str, str] = {
     "nav_analytics": "Анализ",
     "nav_welcome_title": "GKR Портал — Вход на Данни",
     "nav_welcome_text": "Използвайте връзките от лявата навигация. Тази фаза реализира CRUD страници.",
-
     # --- Page titles ---
     "title_layers": "Пластове (tbllayers)",
     "title_fragments": "Фрагменти (tblfragments)",
@@ -32,23 +31,25 @@ LOCALE: dict[str, str] = {
     "title_admin": "Админ",
     "title_analytics": "Анализ",
     "title_analytics_chart": "Анализ — Графика",
+    "title_analytics_chart_fragments": "Анализ — Графика: Фрагменти",
+    "title_analytics_chart_finds": "Анализ — Графика: Находки",
     "title_analytics_table": "Анализ — Таблица",
     "title_accept_invite": "Приемане на покана",
     "title_register": "Регистрацията е забранена",
     "title_register_text": "Достъпът е само по покана. Моля, свържете се с администратора.",
     "title_dev_login": "DEV Вход (задава session user_id)",
     "title_dev_login_text": "След като влезете, отворете **/admin** за тестване.",
-
     # --- Panels ---
     "panel_query_filters": "Запитване и Филтри",
     "panel_chart": "Графика",
     "panel_table": "Таблица (преместване)",
     "panel_fragments": "Фрагменти",
     "panel_ornaments": "Орнаменти",
-
     # --- Buttons ---
     "btn_chart_view": "Изглед Графика",
     "btn_table_view": "Изглед Таблица",
+    "btn_chart_fragments": "Изглед графика — Фрагменти",
+    "btn_chart_finds": "Изглед графика — Находки",
     "btn_run_query": "Изпълни запитване",
     "btn_refresh": "Обнови",
     "btn_new_layer": "Нов Пласт",
@@ -66,7 +67,6 @@ LOCALE: dict[str, str] = {
     "btn_download_png": "Изтегли PNG",
     "btn_download_jpg": "Изтегли JPG",
     "btn_print_pdf": "Печат / Запази като PDF",
-
     # --- Form labels (UI-facing, not internal column names) ---
     "label_predefined_query": "Предварително дефинирано запитване",
     "label_limit": "Лимит",
@@ -86,7 +86,6 @@ LOCALE: dict[str, str] = {
     "label_choose_password": "Изберете парола",
     "label_repeat_password": "Повторете паролата",
     "label_invite_link": "Връзка за покана",
-
     # --- Fragment filter labels (display names — internal keys stay as column names) ---
     "frag_piecetype": "Тип Отломък",
     "frag_technology": "Технология",
@@ -109,7 +108,6 @@ LOCALE: dict[str, str] = {
     "frag_quarternary": "Четвъртично",
     "frag_color_color1": "Цвят / color1",
     "frag_encrust_color": "Цвят на инкрустацията",
-
     # --- Ornament filter labels ---
     "orn_primary": "Основно",
     "orn_secondary": "Вторично",
@@ -117,7 +115,6 @@ LOCALE: dict[str, str] = {
     "orn_quarternary": "Четвъртично",
     "orn_color_color1": "Цвят / color1",
     "orn_encrust_color": "Цвят на инкрустацията",
-
     # --- Table column headers ---
     "col_id": "ИД",
     "col_layer_id": "ИД Пласт",
@@ -139,7 +136,6 @@ LOCALE: dict[str, str] = {
     "col_username": "Потребител",
     "col_invited": "Поканен",
     "col_invite_expires": "Покана изтича",
-
     # --- Dialogs ---
     "dialog_edit_layer": "Редактиране на Пласт",
     "dialog_create_layer": "Създаване на Пласт",
@@ -151,19 +147,16 @@ LOCALE: dict[str, str] = {
     "dialog_layer_hint": "Ако **ИД на Пласт** е празно, ще бъде изведено като **най-новият пласт** (паритет с керамичния работен процес).",
     "dialog_fragment_hint": "Ако **ИД на Пласт** е празно, ще бъде изведено като **най-новият пласт** (паритет с керамичния работен процес).",
     "dialog_ornament_hint": "Ако **ИД на фрагмент** е празно, ще бъде изведено като **най-новият фрагмент** (паритет с керамичния работен процес).",
-
     # --- Queries ---
     "query_filter2": "Филтър #2 (Пластове + Фрагменти + Орнаменти)",
     "query_finds": "Открития (tblfinds)",
     "query_archaeology": "Археологически находки (finds)",
-
     # --- Chart controls ---
     "chart_type_bar": "Стълб",
     "chart_type_pie": "Кръг",
     "chart_type_donut": "Поничка",
     "chart_help_label": "Упътване",
     "chart_help_close": "Затвори",
-
     # --- Help / status messages ---
     "status_no_results": "Няма резултати за текущите филтри.",
     "status_returned": "Върнати {count} реда (общо {total}).",
@@ -174,12 +167,10 @@ LOCALE: dict[str, str] = {
     "enable_all_rows": "Активиране на всички редове за малък поднабор",
     "toggle_on": "Вкл",
     "toggle_off": "Изкл",
-
     # --- Search ---
     "search_layers": "Търсене (обект/сектор/квадрат/пласт)",
     "search_fragments": "Търсене (инвентарен бр./бележка/тип фрагмент/вид фрагмент/технология)",
     "search_ornaments": "Търсене (местоположение/основно/вторично/третично)",
-
     # --- Notifications ---
     "notify_email_required": "Имейлът е задължителен",
     "notify_invite_created": "Поканата е създадена. Копирайте и изпратете тази връзка:",
@@ -200,13 +191,11 @@ LOCALE: dict[str, str] = {
     "notify_invalid_invite": "Невалидна покана",
     "notify_invite_expired_text": "Поканата е изтекла. Моля, поискайте нова от администратора.",
     "notify_username_required": "Потребителското име е задължително",
-
     # --- Admin user dialog ---
     "admin_email": "Имейл",
     "admin_username": "Потребител",
     "admin_role": "Роля",
     "admin_active": "Активен",
-
     # --- Other ---
     "other_invite_created_text": "Поканата е създадена. Копирайте и изпратете тази връзка:",
     "other_invite_body": "Бяхте поканени.\n\nОтворете тази връзка, за да активирате акаунта си:\n{link}\n\nТази връзка изтича след {ttl} часа.",
@@ -216,9 +205,12 @@ LOCALE: dict[str, str] = {
 
 QUERY_OPTIONS: dict[str, str] = {
     LOCALE["query_filter2"]: "q2",
-    LOCALE["query_finds"]: "finds",
     LOCALE["query_archaeology"]: "finds_arch",
 }
+
+# Routes for the split chart pages
+CHART_FRAGMENTS_ROUTE = "/analytics/chart_fragments"
+CHART_FINDS_ROUTE = "/analytics/chart_finds"
 
 DEFAULT_LIMIT = 500
 
@@ -267,6 +259,7 @@ _UI_HIDDEN_COLUMNS = frozenset(
         "f_recordenteredon",
         "f_image",
         "f_count",
+        "f_count_deduped",
         "l_layername",
         "f_fragmenttype",
         "f_fract",
@@ -376,19 +369,25 @@ def build_histogram(
 ) -> tuple[list[str], list[int]]:
     """Build a top-N histogram for a column from dict rows.
 
-    The y-values always sum ``f_count`` instead of counting rows, because each
-    row represents *count* physical fragments.
+    The y-values sum ``f_count_deduped`` if present (de-duplicated fragment
+    counts), then fall back to ``f_count``, otherwise count rows.
     """
     if not rows or not x_key:
         return [], []
 
+    use_count = "f_count_deduped" in rows[0] or "f_count" in rows[0]
     bucket_sum: dict[str, int] = {}
     for r in rows:
         bucket = norm_bucket(r.get(x_key))
-        val = r.get("f_count")
-        bucket_sum[bucket] = bucket_sum.get(bucket, 0) + (
-            val if isinstance(val, (int, float)) else 0
-        )
+        if use_count:
+            val = r.get("f_count_deduped")
+            if val is None:
+                val = r.get("f_count")
+            bucket_sum[bucket] = bucket_sum.get(bucket, 0) + (
+                val if isinstance(val, (int, float)) else 0
+            )
+        else:
+            bucket_sum[bucket] = bucket_sum.get(bucket, 0) + 1
 
     items = sorted(bucket_sum.items(), key=lambda x: x[1], reverse=True)[:top_n]
     xs = [k for k, _ in items]
@@ -404,18 +403,29 @@ def build_histogram_series(
     Returns ``(xs, series_data)`` where ``xs`` are the top-N bucket labels and
     ``series_data`` is ``{series_value: [y1, y2, ...]}`` — one list per series
     value, aligned to ``xs``.
+
+    Uses ``f_count_deduped`` (de-duplicated fragment counts) when available,
+    falling back to ``f_count``, otherwise counts rows.
     """
     if not rows or not x_key or not series_key:
         return [], {}
 
+    use_count = "f_count_deduped" in rows[0] or "f_count" in rows[0]
     bucket_series: dict[tuple[str, str], int] = {}
     for r in rows:
         x_bucket = norm_bucket(r.get(x_key))
         s_bucket = norm_bucket(r.get(series_key))
-        val = r.get("f_count")
-        bucket_series[(x_bucket, s_bucket)] = bucket_series.get(
-            (x_bucket, s_bucket), 0
-        ) + (val if isinstance(val, (int, float)) else 0)
+        if use_count:
+            val = r.get("f_count_deduped")
+            if val is None:
+                val = r.get("f_count")
+            bucket_series[(x_bucket, s_bucket)] = bucket_series.get(
+                (x_bucket, s_bucket), 0
+            ) + (val if isinstance(val, (int, float)) else 0)
+        else:
+            bucket_series[(x_bucket, s_bucket)] = (
+                bucket_series.get((x_bucket, s_bucket), 0) + 1
+            )
 
     # Aggregate per x_bucket (sum across series) to pick top-N
     bucket_total: dict[str, int] = {}
@@ -433,12 +443,12 @@ def build_histogram_series(
                 all_series.add(bs)
 
     # Build aligned series data — trace names are raw values, group title is column label
+    # Filter out series values that are all zeros across the top-N buckets
     series_vals: dict[str, list[int]] = {}
     for sv in all_series:
-        key = sv
-        series_vals[key] = []
-        for xb in xs:
-            series_vals[key].append(bucket_series.get((xb, sv), 0))
+        counts = [bucket_series.get((xb, sv), 0) for xb in xs]
+        if any(c > 0 for c in counts):
+            series_vals[sv] = counts
 
     return xs, series_vals
 
@@ -519,19 +529,24 @@ def plotly_grouped_bar(
 
     data_traces: list[dict] = []
     for series_name, ys in series_data.items():
+        # Hide traces that are all zeros
+        show_trace = any(v > 0 for v in ys)
+        # Use explicit text array: only show label for positive values
+        texts: list[str | None] = [str(y) if y > 0 else None for y in ys]
         data_traces.append(
             {
                 "type": "bar",
                 "name": series_name,
                 "x": xs,
                 "y": ys,
+                "text": texts,
                 "legendgroup": series_label,
-                "showlegend": True,
+                "showlegend": show_trace,
                 "textposition": "outside",
-                "texttemplate": "%{y}",
-                "textfont": {"size": 12},
+                "textfont": {"size": 14},
                 "hovertemplate": f"<b>%{{x}}</b><br>{series_name}: %{{y}}<extra></extra>",
                 "legendgrouptitle_text": series_label,
+                "visible": show_trace,
             }
         )
 

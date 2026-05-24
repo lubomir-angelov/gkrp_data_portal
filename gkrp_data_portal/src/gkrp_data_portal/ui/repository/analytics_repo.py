@@ -273,9 +273,8 @@ def query_q1_layers_fragments(
     layer_filters: Optional[dict[str, Any]] = None,
 ) -> AnalyticsResult:
     """Filter #1: tbllayers INNER JOIN tblfragments (no ornaments)."""
-    select_cols = (
-        _model_select_list("l_", "l", Tbllayer)
-        + _model_select_list("f_", "f", Tblfragment)
+    select_cols = _model_select_list("l_", "l", Tbllayer) + _model_select_list(
+        "f_", "f", Tblfragment
     )
     base = f"""
     SELECT
@@ -323,7 +322,11 @@ def query_q2_layers_fragments_ornaments(
     frag_filters: Optional[dict[str, Any]] = None,
     layer_filters: Optional[dict[str, Any]] = None,
 ) -> AnalyticsResult:
-    """Filter #2: tbllayers INNER JOIN tblfragments INNER JOIN tblornaments."""
+    """Filter #2: tbllayers INNER JOIN tblfragments INNER JOIN tblornaments.
+
+    Uses a window function to de-duplicate f.count across ornament rows,
+    so each fragment's count is summed only once in histograms and totals.
+    """
     select_cols = (
         _model_select_list("l_", "l", Tbllayer)
         + _model_select_list("f_", "f", Tblfragment)
@@ -331,7 +334,8 @@ def query_q2_layers_fragments_ornaments(
     )
     base = f"""
     SELECT
-      {", ".join(select_cols)}
+      {", ".join(select_cols)},
+      MAX(f.count) OVER (PARTITION BY f.fragmentid) AS f_count_deduped
     FROM tbllayers l
     INNER JOIN tblfragments f ON l.layerid = f.locationid
     INNER JOIN tblornaments o ON f.fragmentid = o.fragmentid
@@ -350,14 +354,24 @@ def query_q2_layers_fragments_ornaments(
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC, o.ornamentid DESC"
-    count_sql = f"SELECT COALESCE(SUM(f_count), 0) FROM ({base}\n{where_sql}) x"
+    count_sql = f"""SELECT COALESCE((
+        SELECT SUM(f2.count) FROM (
+            SELECT DISTINCT f2.fragmentid, f2.count
+            FROM tblfragments f2
+            INNER JOIN tbllayers l2 ON l2.layerid = f2.locationid
+            INNER JOIN tblornaments o2 ON f2.fragmentid = o2.fragmentid
+            {where_sql}
+        ) f2
+    ), 0)"""
 
     rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
     total = _count_sql(db, count_sql=count_sql, params=params)
 
     items = [dict(r) for r in rows]
     columns = (
-        list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
+        list(items[0].keys())
+        if items
+        else [c.split(" AS ")[-1] for c in select_cols] + ["f_count_deduped"]
     )
     return AnalyticsResult(items=items, total=total, columns=columns)
 
@@ -376,7 +390,10 @@ def query_finds(
     frag_filters: Optional[dict[str, Any]] = None,
     layer_filters: Optional[dict[str, Any]] = None,
 ) -> AnalyticsResult:
-    """Finds selector: tblfinds tied to layers/fragments/ornaments (left joins)."""
+    """Finds selector: tblfinds tied to layers/fragments/ornaments (left joins).
+
+    Uses a window function to de-duplicate f.count across ornament rows.
+    """
     select_cols = (
         _model_select_list("fi_", "fi", Tblfind)
         + _model_select_list("l_", "l", Tbllayer)
@@ -386,7 +403,8 @@ def query_finds(
 
     base = f"""
     SELECT
-      {", ".join(select_cols)}
+      {", ".join(select_cols)},
+      MAX(f.count) OVER (PARTITION BY f.fragmentid) AS f_count_deduped
     FROM tblfinds fi
     INNER JOIN tbllayers l ON l.layerid = fi.layerid
     LEFT JOIN tblfragments f ON f.fragmentid = fi.fragmentid
@@ -406,14 +424,25 @@ def query_finds(
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY fi.findid DESC"
-    count_sql = f"SELECT COALESCE(SUM(f_count), 0) FROM ({base}\n{where_sql}) x"
+    count_sql = f"""SELECT COALESCE((
+        SELECT SUM(f2.count) FROM (
+            SELECT DISTINCT f2.fragmentid, f2.count
+            FROM tblfinds fi2
+            INNER JOIN tbllayers l2 ON l2.layerid = fi2.layerid
+            LEFT JOIN tblfragments f2 ON f2.fragmentid = fi2.fragmentid
+            LEFT JOIN tblornaments o2 ON o2.ornamentid = fi2.ornamentid
+            {where_sql}
+        ) f2
+    ), 0)"""
 
     rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
     total = _count_sql(db, count_sql=count_sql, params=params)
 
     items = [dict(r) for r in rows]
     columns = (
-        list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
+        list(items[0].keys())
+        if items
+        else [c.split(" AS ")[-1] for c in select_cols] + ["f_count_deduped"]
     )
     return AnalyticsResult(items=items, total=total, columns=columns)
 
@@ -510,10 +539,7 @@ def get_distinct_values(
             "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
         )
     elif query_id == "finds_arch":
-        base = (
-            "FROM finds fi "
-            "LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
-        )
+        base = "FROM finds fi LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
     else:
         return {}
 
@@ -585,10 +611,7 @@ def get_distinct_values_for_field(
             "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
         )
     elif query_id == "finds_arch":
-        base = (
-            "FROM finds fi "
-            "LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
-        )
+        base = "FROM finds fi LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
     else:
         return []
 
@@ -654,10 +677,7 @@ def get_layer_hierarchy(
             "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
         )
     elif query_id == "finds_arch":
-        base = (
-            "FROM finds fi "
-            "LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
-        )
+        base = "FROM finds fi LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
     else:
         return {}
 
@@ -667,7 +687,7 @@ def get_layer_hierarchy(
     else:
         id_col = "l.layerid"
     sql = f"""
-        SELECT DISTINCT l.sector, l.square, l.layer, {id_col}
+        SELECT DISTINCT l.site, l.sector, l.square, l.layer, {id_col}
         {base}
         WHERE l.sector IS NOT NULL AND l.square IS NOT NULL
           AND l.layer IS NOT NULL
@@ -682,26 +702,30 @@ def get_layer_hierarchy(
     all_layers: set[str] = set()
 
     for r in rows:
-        site, sector, square, layer = r["site"], r["sector"], r["square"], r["layer"]
-        all_sites.add(site)
+        site = r.get("site")
+        sector = r["sector"]
+        square = r["square"]
+        layer = r["layer"]
+        if site:
+            all_sites.add(site)
         all_sectors.add(sector)
         all_squares.add(square)
         all_layers.add(layer)
 
-        if site not in hierarchy:
-            hierarchy[site] = {}
-        if sector not in hierarchy[site]:
-            hierarchy[site][sector] = {}
-        if square not in hierarchy[site][sector]:
-            hierarchy[site][sector][square] = set()
-        hierarchy[site][sector][square].add(layer)
+        if site:
+            if site not in hierarchy:
+                hierarchy[site] = {}
+            if sector not in hierarchy[site]:
+                hierarchy[site][sector] = {}
+            if square not in hierarchy[site][sector]:
+                hierarchy[site][sector][square] = set()
+            hierarchy[site][sector][square].add(layer)
 
     # Convert sets to sorted lists
     for site in hierarchy:
         for sector in hierarchy[site]:
             hierarchy[site][sector] = dict(
-                (sq, sorted(layers))
-                for sq, layers in hierarchy[site][sector].items()
+                (sq, sorted(layers)) for sq, layers in hierarchy[site][sector].items()
             )
 
     return {
@@ -728,9 +752,8 @@ def query_finds_archaeology(
     layer_filters: Optional[dict[str, Any]] = None,
 ) -> AnalyticsResult:
     """Archaeological finds: finds table with optional layer join."""
-    select_cols = (
-        _model_select_list("fi_", "fi", Find)
-        + _model_select_list("l_", "l", Tbllayer)
+    select_cols = _model_select_list("fi_", "fi", Find) + _model_select_list(
+        "l_", "l", Tbllayer
     )
 
     base = f"""
@@ -782,16 +805,44 @@ def _build_where_finds(
     params: dict[str, Any] = {}
 
     if layer_filters:
-        _apply_layer_filters(clauses, params, layer_filters)
+        # For finds_arch, map layer filters to finds table columns
+        label_to_col: dict[str, str] = {
+            "Site": "fi.sector",
+            "Sector": "fi.square",
+            "Square": "fi.layer_mechanical",
+            "Layer": "fi.context",
+        }
+        for label, values in layer_filters.items():
+            col = label_to_col.get(label)
+            if not col:
+                continue
+            col_expr = f"{col}::text"
+            safe_label = label.replace(" ", "_")
+            if isinstance(values, list) and values:
+                param_name = f"layer_{safe_label}"
+                params[param_name] = values
+                conditions = " OR ".join(
+                    [
+                        f"{col_expr} ILIKE :{param_name}_{i}"
+                        for i, v in enumerate(values)
+                    ]
+                )
+                clauses.append(f"({conditions})")
+                for i, v in enumerate(values):
+                    params[f"{param_name}_{i}"] = f"%{v}%"
+            elif isinstance(values, str) and values.strip():
+                param_name = f"layer_{safe_label}"
+                params[param_name] = f"%{values.strip()}%"
+                clauses.append(f"{col_expr} ILIKE :{param_name}")
     else:
         if site:
-            clauses.append("l.sector ILIKE :site")
+            clauses.append("fi.sector ILIKE :site")
             params["site"] = f"%{site}%"
         if sector:
-            clauses.append("l.square ILIKE :sector")
+            clauses.append("fi.square ILIKE :sector")
             params["sector"] = f"%{sector}%"
         if square:
-            clauses.append("l.layer ILIKE :square")
+            clauses.append("fi.layer_mechanical ILIKE :square")
             params["square"] = f"%{square}%"
 
     if date_from:
