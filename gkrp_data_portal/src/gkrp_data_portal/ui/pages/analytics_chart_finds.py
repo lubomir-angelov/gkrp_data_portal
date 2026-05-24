@@ -422,16 +422,16 @@ def page_analytics_chart_finds() -> None:
                 "l_site", "l_sector", "l_square", "l_layer",
             ]
 
+            sel_x.options = groupby_cols
+            sel_x.update()
+            sel_series.options = groupby_cols
+            sel_series.update()
+
             if not sel_x.value or sel_x.value not in groupby_cols:
                 default_x = next((c for c in ["fi_find_type", "fi_material", "fi_coin", "fi_denomination", "fi_mint", "fi_year", "fi_depth_m", "fi_context", "l_site", "l_sector", "l_square", "l_layer"] if c in groupby_cols), None) or (groupby_cols[0] if groupby_cols else None)
                 state["_suppress_x_change"] = True
                 sel_x.set_value(default_x)
                 state["_suppress_x_change"] = False
-
-            sel_x.options = groupby_cols
-            sel_x.update()
-            sel_series.options = groupby_cols
-            sel_series.update()
 
             x_key = sel_x.value
             series_key = sel_series.value
