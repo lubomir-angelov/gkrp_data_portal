@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from sqlalchemy import Text, desc, or_, select, text as sqlalchemy_text
+from sqlalchemy import Text, desc, or_, select
 from sqlalchemy.orm import Session
 
 from gkrp_data_portal.models.archaeology import Find, Tbllayer, Tblfragment, Tblornament
@@ -52,11 +52,11 @@ def list_layers(
                 Tbllayer.layername.ilike(like),
                 Tbllayer.layer.ilike(like),
                 Tbllayer.context.ilike(like),
-                Tbllayer.layertype.ilike(like),
+                Tbllayer.layertype.cast(Text).ilike(like),
                 Tbllayer.level.ilike(like),
                 Tbllayer.structure.ilike(like),
-                Tbllayer.color1.ilike(like),
-                Tbllayer.color2.ilike(like),
+               Tbllayer.color1.cast(Text).ilike(like),
+               Tbllayer.color2.cast(Text).ilike(like),
             )
         )
     stmt = _apply_filters(stmt, Tbllayer, filters)
@@ -167,7 +167,7 @@ def list_finds(
                 Find.description.ilike(like),
                 Find.find_type.ilike(like),
                 Find.material.ilike(like),
-                Find.inv_no.cast(sqlalchemy_text).ilike(like),
+                Find.inv_no.cast(Text).ilike(like),
                 Find.coin.ilike(like),
                 Find.mint.ilike(like),
                 Find.denomination.ilike(like),
