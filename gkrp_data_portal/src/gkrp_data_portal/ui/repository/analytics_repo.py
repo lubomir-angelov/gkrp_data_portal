@@ -47,34 +47,36 @@ def _apply_frag_filters(
     clauses: list[str],
     params: dict[str, Any],
     frag_filters: dict[str, Any],
+    frag_alias: str = "f",
+    orn_alias: str = "o",
 ) -> None:
     """Apply fragment field filters from the UI dropdowns.
 
-    Maps UI labels to SQL column references using the 'f' alias.
+    Maps UI labels to SQL column references using the given aliases.
     Multi-select uses ANY/ILIKE; single text inputs use ILIKE.
     """
     label_to_col: dict[str, str] = {
-        "Piecetype": "f.piecetype",
-        "Technology": "f.technology",
-        "Baking": "f.baking",
-        "Color / Primary color": "f.primarycolor",
-        "Covering": "f.covering",
-        "Surface": "f.surface",
-        "Wall thickness": "f.wallthickness",
-        "Handle type": "f.handletype",
-        "Handle size": "f.handlesize",
-        "Bottom type": "f.bottomtype",
-        "Category": "f.category",
-        "Form": "f.form",
-        "Type": "f.type",
-        "Subtype": "f.subtype",
-        "Variant": "f.variant",
-        "Primary": "o.primary_",
-        "Secondary": "o.secondary",
-        "Tertiary": "o.tertiary",
-        "Quarternary": "o.quarternary",
-        "Color / color1": "o.color1",
-        "Encrust color": "o.encrustcolor1",
+        "Piecetype": f"{frag_alias}.piecetype",
+        "Technology": f"{frag_alias}.technology",
+        "Baking": f"{frag_alias}.baking",
+        "Color / Primary color": f"{frag_alias}.primarycolor",
+        "Covering": f"{frag_alias}.covering",
+        "Surface": f"{frag_alias}.surface",
+        "Wall thickness": f"{frag_alias}.wallthickness",
+        "Handle type": f"{frag_alias}.handletype",
+        "Handle size": f"{frag_alias}.handlesize",
+        "Bottom type": f"{frag_alias}.bottomtype",
+        "Category": f"{frag_alias}.category",
+        "Form": f"{frag_alias}.form",
+        "Type": f"{frag_alias}.type",
+        "Subtype": f"{frag_alias}.subtype",
+        "Variant": f"{frag_alias}.variant",
+        "Primary": f"{orn_alias}.primary_",
+        "Secondary": f"{orn_alias}.secondary",
+        "Tertiary": f"{orn_alias}.tertiary",
+        "Quarternary": f"{orn_alias}.quarternary",
+        "Color / color1": f"{orn_alias}.color1",
+        "Encrust color": f"{orn_alias}.encrustcolor1",
     }
     for label, values in frag_filters.items():
         col = label_to_col.get(label)
@@ -189,6 +191,8 @@ def _build_where(
     frag_filters: Optional[dict[str, Any]] = None,
     layer_filters: Optional[dict[str, Any]] = None,
     layer_alias: str = "l",
+    frag_alias: str = "f",
+    orn_alias: str = "o",
 ) -> tuple[str, dict[str, Any]]:
     """Build a safe WHERE clause using only whitelisted filters."""
     clauses: list[str] = []
@@ -229,7 +233,7 @@ def _build_where(
 
     # Fragment field filters (only applied for q2 which has f alias)
     if frag_filters and query_id in ("q2",):
-        _apply_frag_filters(clauses, params, frag_filters)
+        _apply_frag_filters(clauses, params, frag_filters, frag_alias, orn_alias)
 
     # Archaeological finds filters (only applied for finds_arch)
     if frag_filters and query_id == "finds_arch":
@@ -369,6 +373,8 @@ def query_q2_layers_fragments_ornaments(
         frag_filters=frag_filters,
         layer_filters=layer_filters,
         layer_alias="l2",
+        frag_alias="f2",
+        orn_alias="o2",
     )
     count_sql = f"""SELECT COALESCE((
         SELECT SUM(f2.count) FROM (
@@ -451,6 +457,8 @@ def query_finds(
         frag_filters=frag_filters,
         layer_filters=layer_filters,
         layer_alias="l2",
+        frag_alias="f2",
+        orn_alias="o2",
     )
     count_sql = f"""SELECT COALESCE((
         SELECT SUM(f2.count) FROM (
