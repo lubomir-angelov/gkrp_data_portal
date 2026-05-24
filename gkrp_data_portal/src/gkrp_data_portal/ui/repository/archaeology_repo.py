@@ -14,6 +14,7 @@ from gkrp_data_portal.models.archaeology import Find, Tbllayer, Tblfragment, Tbl
 @dataclass(frozen=True)
 class SearchResult:
     """Generic result used by list pages."""
+
     items: list
     total: int
 
@@ -29,12 +30,15 @@ def _apply_filters(stmt, model, filters: dict[str, list[str]] | None):
         return stmt
     for col_name, vals in filters.items():
         if vals:
-            stmt = stmt.where(getattr(model, col_name).in_(vals))
+            col = getattr(model, col_name)
+            stmt = stmt.where(col.cast(Text).in_([str(v) for v in vals]))
     return stmt
 
 
 def list_layers(
-    db: Session, q: str | None = None, limit: int = 200,
+    db: Session,
+    q: str | None = None,
+    limit: int = 200,
     filters: dict[str, list[str]] | None = None,
 ) -> SearchResult:
     stmt = select(Tbllayer)
@@ -48,6 +52,11 @@ def list_layers(
                 Tbllayer.layername.ilike(like),
                 Tbllayer.layer.ilike(like),
                 Tbllayer.context.ilike(like),
+                Tbllayer.layertype.ilike(like),
+                Tbllayer.level.ilike(like),
+                Tbllayer.structure.ilike(like),
+                Tbllayer.color1.ilike(like),
+                Tbllayer.color2.ilike(like),
             )
         )
     stmt = _apply_filters(stmt, Tbllayer, filters)
@@ -57,7 +66,9 @@ def list_layers(
 
 
 def list_fragments(
-    db: Session, q: str | None = None, limit: int = 300,
+    db: Session,
+    q: str | None = None,
+    limit: int = 300,
     filters: dict[str, list[str]] | None = None,
 ) -> SearchResult:
     stmt = select(Tblfragment)
@@ -70,6 +81,10 @@ def list_fragments(
                 Tblfragment.piecetype.cast(Text).ilike(like),
                 Tblfragment.fragmenttype.cast(Text).ilike(like),
                 Tblfragment.technology.cast(Text).ilike(like),
+                Tblfragment.baking.cast(Text).ilike(like),
+                Tblfragment.primarycolor.cast(Text).ilike(like),
+                Tblfragment.secondarycolor.cast(Text).ilike(like),
+                Tblfragment.image_url.ilike(like),
             )
         )
     stmt = _apply_filters(stmt, Tblfragment, filters)
@@ -79,7 +94,9 @@ def list_fragments(
 
 
 def list_ornaments(
-    db: Session, q: str | None = None, limit: int = 400,
+    db: Session,
+    q: str | None = None,
+    limit: int = 400,
     filters: dict[str, list[str]] | None = None,
 ) -> SearchResult:
     stmt = select(Tblornament)
@@ -88,9 +105,13 @@ def list_ornaments(
         stmt = stmt.where(
             or_(
                 Tblornament.location.ilike(like),
-                Tblornament.primary_.ilike(like),
-                Tblornament.secondary.ilike(like),
-                Tblornament.tertiary.ilike(like),
+                Tblornament.primary_.cast(Text).ilike(like),
+                Tblornament.secondary.cast(Text).ilike(like),
+                Tblornament.tertiary.cast(Text).ilike(like),
+                Tblornament.color1.cast(Text).ilike(like),
+                Tblornament.color2.cast(Text).ilike(like),
+                Tblornament.encrustcolor1.cast(Text).ilike(like),
+                Tblornament.encrustcolor2.cast(Text).ilike(like),
             )
         )
     stmt = _apply_filters(stmt, Tblornament, filters)
@@ -105,7 +126,9 @@ def most_recent_layer_id(db: Session) -> Optional[int]:
 
 
 def most_recent_fragment_id(db: Session) -> Optional[int]:
-    stmt = select(Tblfragment.fragmentid).order_by(desc(Tblfragment.fragmentid)).limit(1)
+    stmt = (
+        select(Tblfragment.fragmentid).order_by(desc(Tblfragment.fragmentid)).limit(1)
+    )
     return db.execute(stmt).scalar_one_or_none()
 
 
@@ -131,7 +154,9 @@ def fragment_choices(db: Session, limit: int = 300) -> list[tuple[int, str]]:
 
 
 def list_finds(
-    db: Session, q: str | None = None, limit: int = 300,
+    db: Session,
+    q: str | None = None,
+    limit: int = 300,
     filters: dict[str, list[str]] | None = None,
 ) -> SearchResult:
     stmt = select(Find)
@@ -143,6 +168,15 @@ def list_finds(
                 Find.find_type.ilike(like),
                 Find.material.ilike(like),
                 Find.inv_no.cast(sqlalchemy_text).ilike(like),
+                Find.coin.ilike(like),
+                Find.mint.ilike(like),
+                Find.denomination.ilike(like),
+                Find.context.ilike(like),
+                Find.depth_m.ilike(like),
+                Find.coord_north_m.ilike(like),
+                Find.coord_east_m.ilike(like),
+                Find.photo.ilike(like),
+                Find.drw_link.ilike(like),
             )
         )
     stmt = _apply_filters(stmt, Find, filters)

@@ -84,32 +84,6 @@ def page_layers() -> None:
         "color2": t("label_color2"),
     }
 
-    table = ui.table(
-        columns=[
-            {
-                "name": "layerid",
-                "label": t("col_id"),
-                "field": "layerid",
-                "sortable": True,
-            },
-            {"name": "site", "label": t("label_site"), "field": "site"},
-            {"name": "sector", "label": t("label_sector"), "field": "sector"},
-            {"name": "square", "label": t("label_square"), "field": "square"},
-            {"name": "layer", "label": t("label_layer"), "field": "layer"},
-            {"name": "layertype", "label": t("label_layertype"), "field": "layertype"},
-            {"name": "layername", "label": t("label_layername"), "field": "layername"},
-            {"name": "context", "label": t("label_context"), "field": "context"},
-            {"name": "stratum", "label": t("label_stratum"), "field": "stratum"},
-            {"name": "level", "label": t("label_level"), "field": "level"},
-            {"name": "structure", "label": t("label_structure"), "field": "structure"},
-            {"name": "color1", "label": t("label_color1"), "field": "color1"},
-            {"name": "color2", "label": t("label_color2"), "field": "color2"},
-        ],
-        rows=[],
-        row_key="layerid",
-        pagination=25,
-    ).classes("w-full")
-
     def refresh() -> None:
         q = (search.value or "").strip()
         filters = {col: sel.value for col, sel in filter_widgets.items() if sel.value}
@@ -122,21 +96,58 @@ def page_layers() -> None:
             table.rows = [_row_to_dict(x) for x in res.items]
         table.update()
 
-    with ui.row().classes("gap-2 flex-wrap"):
-        ui.button(t("btn_refresh"), on_click=refresh)
-        with session_scope() as db:
-            for col in filter_cols:
-                opts = column_distinct(db, Tbllayer, col)
-                sel = (
-                    ui.select(
-                        options=opts,
-                        multiple=True,
-                        label=filter_labels[col],
+    table_columns = [
+        {
+            "name": "layerid",
+            "label": t("col_id"),
+            "field": "layerid",
+            "sortable": True,
+        },
+        {"name": "site", "label": t("label_site"), "field": "site"},
+        {"name": "sector", "label": t("label_sector"), "field": "sector"},
+        {"name": "square", "label": t("label_square"), "field": "square"},
+        {"name": "layer", "label": t("label_layer"), "field": "layer"},
+        {"name": "layertype", "label": t("label_layertype"), "field": "layertype"},
+        {"name": "layername", "label": t("label_layername"), "field": "layername"},
+        {"name": "context", "label": t("label_context"), "field": "context"},
+        {"name": "stratum", "label": t("label_stratum"), "field": "stratum"},
+        {"name": "level", "label": t("label_level"), "field": "level"},
+        {"name": "structure", "label": t("label_structure"), "field": "structure"},
+        {"name": "color1", "label": t("label_color1"), "field": "color1"},
+        {"name": "color2", "label": t("label_color2"), "field": "color2"},
+    ]
+
+    # Order filter columns to match their position in table_columns
+    ordered_filter_cols = sorted(
+        filter_cols,
+        key=lambda c: next(
+            (i for i, col in enumerate(table_columns) if col["name"] == c), 99
+        ),
+    )
+
+    with ui.column().classes("w-full"):
+        with ui.row().classes("w-full items-center gap-2 flex-wrap"):
+            ui.button(t("btn_refresh"), on_click=refresh)
+            with session_scope() as db:
+                for col in ordered_filter_cols:
+                    opts = column_distinct(db, Tbllayer, col)
+                    sel = (
+                        ui.select(
+                            options=opts,
+                            multiple=True,
+                            label=filter_labels[col],
+                        )
+                        .props("clearable use-chips dense")
+                        .classes("min-w-[130px] flex-1")
                     )
-                    .props("clearable use-chips")
-                    .classes("min-w-[160px]")
-                )
-                filter_widgets[col] = sel
+                    filter_widgets[col] = sel
+
+        table = ui.table(
+            columns=table_columns,
+            rows=[],
+            row_key="layerid",
+            pagination=25,
+        ).classes("w-full")
 
     def open_editor(layerid: int | None = None) -> None:
         with session_scope() as db:
