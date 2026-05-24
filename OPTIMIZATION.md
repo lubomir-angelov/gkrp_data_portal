@@ -283,3 +283,7 @@ When the user selects "max" (100,000 rows), the SQL aggregation path is still co
 - **Database load**: Significantly reduced (GROUP BY with LIMIT 30 vs. full join + LIMIT 25000)
 - **Memory**: Python process no longer holds 25k x 50-column row dicts for chart rendering
 - **Table view**: No change (uses existing path)
+
+
+### Completed
+1. Is completed
