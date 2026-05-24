@@ -216,3 +216,5 @@ setup.sh
 cache.db*
 tmp/
 scripts/
+.claude/
+.mcp*
