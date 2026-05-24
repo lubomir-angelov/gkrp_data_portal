@@ -9,7 +9,7 @@ PostgreSQL.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -442,4 +442,71 @@ class Tblfind(Base):
         DateTime,
         nullable=False,
         server_default=text("now()"),
+    )
+
+
+class Find(Base):
+    """Archaeological finds table (separate from tblfinds).
+
+    Contains excavation finds such as coins, artefacts with coordinates,
+    dimensions, materials, etc.
+    """
+
+    __tablename__ = "finds"
+
+    findid: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+
+    layerid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    year_inv_no: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    inv_no: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cat_no: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    museum_inv: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    date_found: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    find_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    material: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    coin: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    denomination: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    mint: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    dimensions_cm: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    preservation_grade: Mapped[Optional[float]] = mapped_column(Numeric(6, 2), nullable=True)
+    weight_g: Mapped[Optional[float]] = mapped_column(Numeric(8, 2), nullable=True)
+
+    sector: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    square: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    layer_mechanical: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    depth_m: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reper: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    coord_north_m: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    coord_east_m: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    drawing: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    photo: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    drw_link: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    extra_field: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    reper_n_coord: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    reper_e_coord: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    reper_baltic: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    baltic: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    stratigraphic_level: Mapped[Optional[float]] = mapped_column(Numeric(6, 2), nullable=True)
+
+    recordenteredby: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    recordenteredon: Mapped[object] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    recordcreatedby: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    recordcreatedon: Mapped[object] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
     )

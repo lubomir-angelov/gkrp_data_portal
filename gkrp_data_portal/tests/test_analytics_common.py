@@ -21,7 +21,7 @@ from gkrp_data_portal.ui.pages.analytics_common import (
 class TestQueryOptions:
     def test_contains_expected_queries(self):
         assert "q2" in QUERY_OPTIONS.values()
-        assert "finds" in QUERY_OPTIONS.values()
+        assert "finds_arch" in QUERY_OPTIONS.values()
 
     def test_values_are_strings(self):
         for k, v in QUERY_OPTIONS.items():
@@ -119,9 +119,9 @@ class TestBuildHistogram:
     def test_returns_empty_for_no_key(self):
         xs, ys = build_histogram([{"other": "v"}], "col")
         # When key is missing, r.get("col") returns None, which norm_bucket converts to "(null)"
-        # f_count is absent so the sum defaults to 0
+        # f_count is absent so rows are counted (1 per row)
         assert xs == ["(null)"]
-        assert ys == [0]
+        assert ys == [1]
 
     def test_builds_top_n(self):
         rows = [
@@ -191,10 +191,10 @@ class TestBuildHistogram:
             {"f_piecetype": "бял", "other": 5},
             {"f_piecetype": "червен", "other": 2},
         ]
-        # No f_count column present → defaults to 0 for each bucket
+        # No f_count column present → rows are counted (1 per row)
         xs, ys = build_histogram(rows, "f_piecetype")
         assert xs == ["бял", "червен"]
-        assert ys == [0, 0]
+        assert ys == [2, 1]
 
 
 class TestPlotlyBar:

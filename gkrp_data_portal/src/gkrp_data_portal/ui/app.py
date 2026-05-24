@@ -6,6 +6,9 @@ from nicegui import ui
 
 from gkrp_data_portal.ui.pages.analytics_common import LOCALE
 
+# Import finds page to register route
+from gkrp_data_portal.ui.pages.finds import page_finds  # noqa: F401
+
 # Import pages to register routes
 from gkrp_data_portal.ui.pages.layers import page_layers  # noqa: F401
 from gkrp_data_portal.ui.pages.fragments import page_fragments  # noqa: F401
@@ -13,7 +16,14 @@ from gkrp_data_portal.ui.pages.ornaments import page_ornaments  # noqa: F401
 from gkrp_data_portal.ui.pages.admin import page_admin  # noqa: F401
 from gkrp_data_portal.ui.pages.accept_invite import page_accept_invite  # noqa: F401
 from gkrp_data_portal.ui.pages.dev_login import page_dev_login  # noqa: F401
-from gkrp_data_portal.ui.pages.analytics_chart import page_analytics_index, page_analytics_chart  # noqa: F401
+from gkrp_data_portal.ui.pages.analytics_chart import (
+    page_analytics_index,  # noqa: F401
+    page_analytics_chart,  # noqa: F401
+)
+from gkrp_data_portal.ui.pages.analytics_chart_fragments import (
+    page_analytics_chart_fragments,  # noqa: F401
+)
+from gkrp_data_portal.ui.pages.analytics_chart_finds import page_analytics_chart_finds  # noqa: F401
 from gkrp_data_portal.ui.pages.analytics_table import page_analytics_table  # noqa: F401
 
 
@@ -29,6 +39,7 @@ def index() -> None:
             ui.link(LOCALE["nav_layers"], "/layers")
             ui.link(LOCALE["nav_fragments"], "/fragments")
             ui.link(LOCALE["nav_ornaments"], "/ornaments")
+            ui.link(LOCALE["nav_finds"], "/finds")
             ui.link(LOCALE["nav_admin"], "/admin")
             ui.link(LOCALE["nav_analytics"], "/analytics")
 
@@ -39,9 +50,9 @@ def index() -> None:
 
 def run() -> None:
     ui.run(
-        title="GKR Data Portal", 
+        title="GKR Data Portal",
         reload=False,
         storage_secret=get_storage_secret(),
-        host='0.0.0.0',
+        host="0.0.0.0",
         port=8080,
-        )
+    )
