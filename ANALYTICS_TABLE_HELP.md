@@ -128,11 +128,11 @@
 
 ## Видими и скрити колони
 
-Таблицата показва само колона, които имат стойност за повечето редове. Колоните със ниска покритие, вътрешни идентификатори или служебна информация са скрити.
+Таблицата показва само колони, които имат стойност за повечето редове. Колоните със ниска покритие, вътрешни идентификатори, служебна информация или с ниска потребителска полезност са скрити.
 
 ### q2 (Пластове + Фрагменти + Орнаменти)
 
-**Видими колони (33):**
+**Видими колони (25):**
 
 | Колона | Описание |
 |---|---|
@@ -144,7 +144,6 @@
 | f_technology | Технология |
 | f_baking | Печене |
 | f_primarycolor | Основен цвят |
-| f_secondarycolor | Вторичен цвят |
 | f_covering | Покритие |
 | f_surface | Повърхност |
 | f_wallthickness | Дебелина на стената |
@@ -156,54 +155,32 @@
 | f_type | Тип |
 | f_subtype | Подтип |
 | f_variant | Вариант |
-| f_includestype | Вид включвания |
 | f_note | Бележка |
-| f_inventory | Инвентарен номер |
-| f_image_url | URL на изображение |
 | o_location | Местоположение |
-| o_color1 | Цвят 1 |
-| o_color2 | Цвят 2 |
-| o_encrustcolor1 | Цвят на инкрустация 1 |
-| o_encrustcolor2 | Цвят на инкрустация 2 |
 | o_primary_ | Основен орнамент |
 | o_secondary | Вторичен орнамент |
 | o_tertiary | Третичен орнамент |
 | o_quarternary | Четвъртичен орнамент |
-| o_recordenteredon | Дата на запис |
 
-**Скрити колони (52):**
+**Скрити колони (12):**
 
 | Колона | Причина |
 |---|---|
-| l_layerid, f_fragmentid, o_ornamentid | Вътрешни идентификатори |
-| l_recordenteredon, l_recordenteredby, l_recordcreatedby, l_recordcreatedon | Служебни данни |
-| f_recordenteredon, f_recordenteredby, f_recordcreatedby, f_recordcreatedon | Служебни данни |
-| o_recordenteredon | Служебни данни |
-| l_level, l_structure, l_includes, l_color1, l_color2 | Ниска полезност |
-| l_description, l_akb_num, l_stratum, l_parentid | Ниска полезност |
-| l_photos, l_drawings, l_handfragments, l_wheelfragment | Бинарни/метрични |
-| l_layername, l_context | Дублират се от филтрите |
-| f_fragmentid, f_locationid | Вътрешни FK |
-| f_outline, f_speed, f_recrodenteredby | Вътрешни данни |
-| f_topsize, f_necksize, f_bodysize, f_bottomsize, f_dishheight | Линейни мерки |
-| f_composition, f_parallels, f_decoration | Свободен текст |
-| f_image, f_count | Изображение/брой — използват се в графики |
-| f_fragmenttype, f_fract, f_onepot, f_handlesize | Ниска покритие |
-| f_img_url | Дублира f_image_url |
-| f_includesconc, f_includessize, f_includestype | Вътрешни метрики |
+| l_context | Дублира се от филтрите |
 | f_secondarycolor | Ниска покритие (~10%) |
-| o_ornamentid, o_fragmentid | Вътрешни FK |
-| o_relationship, o_onornament | Вътрешни данни |
+| f_includesconc, f_includessize, f_includestype | Вътрешни метрики |
+| f_image_url, f_inventory | Ниска полезност в таблица |
 | o_color1, o_color2, o_encrustcolor1, o_encrustcolor2 | Ниска покритие |
+| o_recordenteredon | Служебни данни |
 
 ### finds (tblfinds)
 
-**Видими колони (7):** fi_findid, fi_findtype, fi_description, fi_inventory, fi_image_url, fi_recordenteredby, fi_recordenteredon
+**Видими колони (4):** fi_findid, fi_findtype, fi_description, fi_inventory
 
-**Скрити колони (3):** fi_layerid, fi_fragmentid, fi_ornamentid — вътрешни FK
+**Скрити колони (6):** fi_layerid, fi_fragmentid, fi_ornamentid — вътрешни FK; fi_image_url, fi_recordenteredby, fi_recordenteredon — служебни данни
 
 ### finds_arch (Археологически находки)
 
-**Видими колони (20):** fi_findid, fi_year, fi_inv_no, fi_date_found, fi_find_type, fi_material, fi_description, fi_coin, fi_denomination, fi_mint, fi_dimensions_cm, fi_preservation_grade, fi_weight_g, fi_sector, fi_square, fi_context, fi_depth_m, fi_reper_n_coord, fi_reper_e_coord, fi_reper_baltic, fi_baltic
+**Видими колони (17):** fi_findid, fi_year, fi_inv_no, fi_date_found, fi_find_type, fi_material, fi_description, fi_coin, fi_denomination, fi_mint, fi_dimensions_cm, fi_preservation_grade, fi_weight_g, fi_sector, fi_square, fi_context, fi_depth_m
 
-**Скрити колони (18):** fi_layerid, fi_year_inv_no, fi_cat_no, fi_museum_inv, fi_reper, fi_layer_mechanical, fi_drawing, fi_photo, fi_drw_link, fi_extra_field, fi_recordenteredby, fi_recordenteredon, fi_recordcreatedby, fi_recordcreatedon — вътрешни FK, нишови полета, служебни данни; fi_coord_north_m, fi_coord_east_m — координати без връзка с таблица layers; fi_stratigraphic_level — стратиграфско ниво без връзка с таблица layers
+**Скрити колони (21):** fi_layerid, fi_year_inv_no, fi_cat_no, fi_museum_inv, fi_reper, fi_layer_mechanical, fi_drawing, fi_photo, fi_drw_link, fi_extra_field, fi_recordenteredby, fi_recordenteredon, fi_recordcreatedby, fi_recordcreatedon — вътрешни FK, нишови полета, служебни данни; fi_coord_north_m, fi_coord_east_m — координати без връзка с таблица layers; fi_stratigraphic_level — стратиграфско ниво без връзка с таблица layers; fi_baltic, fi_reper_baltic, fi_reper_e_coord, fi_reper_n_coord — референтни координати

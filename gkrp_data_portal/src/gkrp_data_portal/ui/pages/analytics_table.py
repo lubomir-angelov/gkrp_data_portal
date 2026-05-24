@@ -195,7 +195,12 @@ def page_analytics_table() -> None:
                     .props("dense")
                 )
 
-            inp_limit = ui.number("limit", value=DEFAULT_LIMIT).classes("w-full")
+            inp_limit = ui.select(
+                options=[100, 200, 500, 1000, 2500, 5000, "max"],
+                value=DEFAULT_LIMIT,
+                label=t("label_limit"),
+            ).classes("w-full")
+            ui.label(t("limit_max_info")).classes("text-xs text-gray-400 mt-1")
 
         # Center panel (grid)
         with ui.column().classes("flex-1 min-w-0"):
@@ -419,8 +424,12 @@ def page_analytics_table() -> None:
         layer_filters_map["Square"] = _select_to_list(sel_square_t)
         layer_filters_map["Layer"] = _select_to_list(sel_layer_t)
 
-        limit = int(inp_limit.value or DEFAULT_LIMIT)
-        limit = max(1, min(limit, TABLE_MAX_LIMIT))
+        limit_raw = inp_limit.value
+        if limit_raw == "max":
+            limit = TABLE_MAX_LIMIT
+        else:
+            limit = int(limit_raw or DEFAULT_LIMIT)
+            limit = max(1, min(limit, TABLE_MAX_LIMIT))
 
         # Persist and expose selected query id.
         state["query_id"] = query_id

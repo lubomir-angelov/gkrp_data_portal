@@ -548,6 +548,7 @@ _UI_HIDDEN_COLUMNS = frozenset(
         "f_handlesize",
         "f_img_url",
         "f_image_url",
+        "f_inventory",
         "fi_image_url",
         "f_includesconc",
         "f_includessize",
