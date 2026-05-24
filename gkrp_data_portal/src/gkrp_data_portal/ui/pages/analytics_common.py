@@ -28,6 +28,7 @@ LOCALE: dict[str, str] = {
     "title_layers": "Пластове (tbllayers)",
     "title_fragments": "Фрагменти (tblfragments)",
     "title_ornaments": "Орнаменти (tblornaments)",
+    "title_finds": "Находки (finds)",
     "title_admin": "Админ",
     "title_analytics": "Анализ",
     "title_analytics_chart": "Анализ — Графика",
@@ -55,6 +56,7 @@ LOCALE: dict[str, str] = {
     "btn_new_layer": "Нов Пласт",
     "btn_new_fragment": "Нов Фрагмент",
     "btn_new_ornament": "Нов Орнамент",
+    "btn_new_find": "Нова Находка",
     "btn_cancel": "Отказ",
     "btn_save": "Запази",
     "btn_create_invite": "Създай покана",
@@ -86,6 +88,23 @@ LOCALE: dict[str, str] = {
     "label_choose_password": "Изберете парола",
     "label_repeat_password": "Повторете паролата",
     "label_invite_link": "Връзка за покана",
+    "label_year": "Година",
+    "label_inv_no": "Инв. бр.",
+    "label_find_type": "Вид",
+    "label_material": "Материал",
+    "label_description": "Описание",
+    "label_coin": "Монета",
+    "label_denomination": "Деноминация",
+    "label_mint": "Монетня",
+    "label_dimensions_cm": "Размери (см)",
+    "label_weight_g": "Тегло (г)",
+    "label_depth_m": "Дълбочина (м)",
+    "label_context": "Контекст",
+    "label_coord_north_m": "Коорд. север (м)",
+    "label_coord_east_m": "Коорд. изток (м)",
+    "label_photo": "Фото",
+    "label_drw_link": "Връзка чертеж",
+    "label_entered_by": "Записан от",
     # --- Fragment filter labels (display names — internal keys stay as column names) ---
     "frag_piecetype": "Тип Отломък",
     "frag_technology": "Технология",
@@ -136,6 +155,17 @@ LOCALE: dict[str, str] = {
     "col_username": "Потребител",
     "col_invited": "Поканен",
     "col_invite_expires": "Покана изтича",
+    "col_year": "Година",
+    "col_find_type": "Вид",
+    "col_material": "Материал",
+    "col_description": "Описание",
+    "col_coin": "Монета",
+    "col_mint": "Монетня",
+    "col_depth_m": "Дълбочина",
+    "col_context": "Контекст",
+    "col_coord_north_m": "Корд. С",
+    "col_coord_east_m": "Корд. И",
+    "col_photo": "Фото",
     # --- Dialogs ---
     "dialog_edit_layer": "Редактиране на Пласт",
     "dialog_create_layer": "Създаване на Пласт",
@@ -143,6 +173,8 @@ LOCALE: dict[str, str] = {
     "dialog_create_fragment": "Създаване на фрагмент",
     "dialog_edit_ornament": "Редактиране на Орнамент",
     "dialog_create_ornament": "Създаване на Орнамент",
+    "dialog_edit_find": "Редактиране на находка",
+    "dialog_create_find": "Нова находка",
     "dialog_user_actions": "Действия за потребител {uid}",
     "dialog_layer_hint": "Ако **ИД на Пласт** е празно, ще бъде изведено като **най-новият пласт** (паритет с керамичния работен процес).",
     "dialog_fragment_hint": "Ако **ИД на Пласт** е празно, ще бъде изведено като **най-новият пласт** (паритет с керамичния работен процес).",
@@ -157,6 +189,12 @@ LOCALE: dict[str, str] = {
     "chart_type_donut": "Поничка",
     "chart_help_label": "Упътване",
     "chart_help_close": "Затвори",
+    "chart_help_groupby": "Основната размерност, по която графиката е групирана (напр. Обект, Сектор, Квадрат).",
+    "chart_help_series": "По избор: разделя стълбовете на групирани следи по втора размерност (напр. Тип Отломък, Технология, Повърхност).",
+    "chart_help_chart_type": "Стълб показва групирани стълбове, Кръг/Поничка показват пропорции.",
+    "chart_help_groupby_finds": "Основната размерност, по която графиката е групирана.",
+    "chart_help_series_finds": "По избор: разделя стълбовете по втора размерност.",
+    "chart_help_chart_type_finds": "Стълб/Кръг/Поничка.",
     # --- Help / status messages ---
     "status_no_results": "Няма резултати за текущите филтри.",
     "status_returned": "Върнати {count} реда (общо {total}).",
@@ -171,6 +209,7 @@ LOCALE: dict[str, str] = {
     "search_layers": "Търсене (обект/сектор/квадрат/пласт)",
     "search_fragments": "Търсене (инвентарен бр./бележка/тип фрагмент/вид фрагмент/технология)",
     "search_ornaments": "Търсене (местоположение/основно/вторично/третично)",
+    "search_finds": "Търсене (описание/тип/материал/инв. бр.)",
     # --- Notifications ---
     "notify_email_required": "Имейлът е задължителен",
     "notify_invite_created": "Поканата е създадена. Копирайте и изпратете тази връзка:",
@@ -196,6 +235,7 @@ LOCALE: dict[str, str] = {
     "admin_username": "Потребител",
     "admin_role": "Роля",
     "admin_active": "Активен",
+    "admin_users": "Потребители",
     # --- Other ---
     "other_invite_created_text": "Поканата е създадена. Копирайте и изпратете тази връзка:",
     "other_invite_body": "Бяхте поканени.\n\nОтворете тази връзка, за да активирате акаунта си:\n{link}\n\nТази връзка изтича след {ttl} часа.",
@@ -214,6 +254,7 @@ LOCALE: dict[str, str] = {
     "title_layers_en": "Layers (tbllayers)",
     "title_fragments_en": "Fragments (tblfragments)",
     "title_ornaments_en": "Ornaments (tblornaments)",
+    "title_finds_en": "Finds (finds)",
     "title_admin_en": "Admin",
     "title_analytics_en": "Analytics",
     "title_analytics_chart_en": "Analytics — Chart",
@@ -239,6 +280,7 @@ LOCALE: dict[str, str] = {
     "btn_new_layer_en": "New Layer",
     "btn_new_fragment_en": "New Fragment",
     "btn_new_ornament_en": "New Ornament",
+    "btn_new_find_en": "New Find",
     "btn_cancel_en": "Cancel",
     "btn_save_en": "Save",
     "btn_create_invite_en": "Create Invite",
@@ -269,6 +311,23 @@ LOCALE: dict[str, str] = {
     "label_choose_password_en": "Choose password",
     "label_repeat_password_en": "Repeat password",
     "label_invite_link_en": "Invite link",
+    "label_year_en": "Year",
+    "label_inv_no_en": "Inv. No.",
+    "label_find_type_en": "Type",
+    "label_material_en": "Material",
+    "label_description_en": "Description",
+    "label_coin_en": "Coin",
+    "label_denomination_en": "Denomination",
+    "label_mint_en": "Mint",
+    "label_dimensions_cm_en": "Dimensions (cm)",
+    "label_weight_g_en": "Weight (g)",
+    "label_depth_m_en": "Depth (m)",
+    "label_context_en": "Context",
+    "label_coord_north_m_en": "Coord. North (m)",
+    "label_coord_east_m_en": "Coord. East (m)",
+    "label_photo_en": "Photo",
+    "label_drw_link_en": "Drawing link",
+    "label_entered_by_en": "Entered by",
     "frag_piecetype_en": "Piece Type",
     "frag_technology_en": "Technology",
     "frag_baking_en": "Baking",
@@ -316,12 +375,25 @@ LOCALE: dict[str, str] = {
     "col_username_en": "User",
     "col_invited_en": "Invited",
     "col_invite_expires_en": "Invite Expires",
+    "col_year_en": "Year",
+    "col_find_type_en": "Type",
+    "col_material_en": "Material",
+    "col_description_en": "Description",
+    "col_coin_en": "Coin",
+    "col_mint_en": "Mint",
+    "col_depth_m_en": "Depth",
+    "col_context_en": "Context",
+    "col_coord_north_m_en": "Coord. N",
+    "col_coord_east_m_en": "Coord. E",
+    "col_photo_en": "Photo",
     "dialog_edit_layer_en": "Edit Layer",
     "dialog_create_layer_en": "Create Layer",
     "dialog_edit_fragment_en": "Edit Fragment",
     "dialog_create_fragment_en": "Create Fragment",
     "dialog_edit_ornament_en": "Edit Ornament",
     "dialog_create_ornament_en": "Create Ornament",
+    "dialog_edit_find_en": "Edit Find",
+    "dialog_create_find_en": "New Find",
     "dialog_user_actions_en": "Actions for user {uid}",
     "dialog_layer_hint_en": "If **Layer ID** is empty, it will be inferred as the **most recent layer** (parity with ceramic workflow).",
     "dialog_fragment_hint_en": "If **Layer ID** is empty, it will be inferred as the **most recent layer** (parity with ceramic workflow).",
@@ -334,6 +406,12 @@ LOCALE: dict[str, str] = {
     "chart_type_donut_en": "Donut",
     "chart_help_label_en": "Help",
     "chart_help_close_en": "Close",
+    "chart_help_groupby_en": "The main dimension by which the chart is grouped (e.g. Site, Sector, Square).",
+    "chart_help_series_en": "Optional: split bars into grouped traces by a second dimension (e.g. Piece Type, Technology, Surface).",
+    "chart_help_chart_type_en": "Bar shows grouped bars, Pie/Donut show proportions.",
+    "chart_help_groupby_finds_en": "The main dimension by which the chart is grouped.",
+    "chart_help_series_finds_en": "Optional: split bars by a second dimension.",
+    "chart_help_chart_type_finds_en": "Bar/Pie/Donut.",
     "status_no_results_en": "No results for current filters.",
     "status_returned_en": "Returned {count} rows (total {total}).",
     "status_no_results_query_en": "No results ({query_id})",
@@ -346,6 +424,7 @@ LOCALE: dict[str, str] = {
     "search_layers_en": "Search (site/sector/square/layer)",
     "search_fragments_en": "Search (inv. no./note/fragment type/fragment kind/technology)",
     "search_ornaments_en": "Search (location/primary/secondary/tertiary)",
+    "search_finds_en": "Search (description/type/material/inv. no.)",
     "notify_email_required_en": "Email is required",
     "notify_invite_created_en": "Invite created. Copy and send this link:",
     "notify_invite_email_sent_en": "Invite sent via SMTP",
@@ -369,16 +448,24 @@ LOCALE: dict[str, str] = {
     "admin_username_en": "Username",
     "admin_role_en": "Role",
     "admin_active_en": "Active",
+    "admin_users_en": "Users",
     "other_invite_created_text_en": "Invite created. Copy and send this link:",
     "other_invite_body_en": "You have been invited.\n\nOpen this link to activate your account:\n{link}\n\nThis link expires in {ttl} hours.",
     "other_access_by_invite_en": "Access is by invitation only. Please contact the administrator.",
     "other_create_user_first_en": "Create a user (or invite) first, then return.",
 }
 
-QUERY_OPTIONS: dict[str, str] = {
-    LOCALE["query_filter2"]: "q2",
-    LOCALE["query_archaeology"]: "finds_arch",
-}
+def _query_options() -> dict[str, str]:
+    """Build QUERY_OPTIONS respecting the current language."""
+    from gkrp_data_portal.ui.lang import t
+
+    return {
+        t("query_filter2"): "q2",
+        t("query_archaeology"): "finds_arch",
+    }
+
+
+QUERY_OPTIONS: dict[str, str] = _query_options()
 
 # Routes for the split chart pages
 CHART_FRAGMENTS_ROUTE = "/analytics/chart_fragments"
@@ -501,38 +588,43 @@ def norm_bucket(v: Any) -> str:
     return str(v)
 
 
-_COLUMN_LABELS: dict[str, str] = {
-    "f_piecetype": LOCALE["frag_piecetype"],
-    "f_technology": LOCALE["frag_technology"],
-    "f_baking": LOCALE["frag_baking"],
-    "f_primarycolor": LOCALE["frag_color_primary"],
-    "f_covering": LOCALE["frag_covering"],
-    "f_surface": LOCALE["frag_surface"],
-    "f_wallthickness": LOCALE["frag_wall_thickness"],
-    "f_handletype": LOCALE["frag_handle_type"],
-    "f_handlesize": LOCALE["frag_handle_size"],
-    "f_bottomtype": LOCALE["frag_bottom_type"],
-    "f_category": LOCALE["frag_category"],
-    "f_form": LOCALE["frag_form"],
-    "f_type": LOCALE["frag_type"],
-    "f_subtype": LOCALE["frag_subtype"],
-    "f_variant": LOCALE["frag_variant"],
-    "o_primary": LOCALE["frag_primary"],
-    "o_secondary": LOCALE["frag_secondary"],
-    "o_tertiary": LOCALE["frag_tertiary"],
-    "o_quarternary": LOCALE["frag_quarternary"],
-    "o_color1": LOCALE["frag_color_color1"],
-    "o_encrustcolor1": LOCALE["frag_encrust_color"],
-    "l_site": LOCALE["label_site"],
-    "l_sector": LOCALE["label_sector"],
-    "l_square": LOCALE["label_square"],
-    "l_layer": LOCALE["label_layer"],
+_COLUMN_LABEL_KEYS: dict[str, str] = {
+    "f_piecetype": "frag_piecetype",
+    "f_technology": "frag_technology",
+    "f_baking": "frag_baking",
+    "f_primarycolor": "frag_color_primary",
+    "f_covering": "frag_covering",
+    "f_surface": "frag_surface",
+    "f_wallthickness": "frag_wall_thickness",
+    "f_handletype": "frag_handle_type",
+    "f_handlesize": "frag_handle_size",
+    "f_bottomtype": "frag_bottom_type",
+    "f_category": "frag_category",
+    "f_form": "frag_form",
+    "f_type": "frag_type",
+    "f_subtype": "frag_subtype",
+    "f_variant": "frag_variant",
+    "o_primary": "frag_primary",
+    "o_secondary": "frag_secondary",
+    "o_tertiary": "frag_tertiary",
+    "o_quarternary": "frag_quarternary",
+    "o_color1": "frag_color_color1",
+    "o_encrustcolor1": "frag_encrust_color",
+    "l_site": "label_site",
+    "l_sector": "label_sector",
+    "l_square": "label_square",
+    "l_layer": "label_layer",
 }
 
 
 def _column_to_label(col: str) -> str:
     """Convert a prefixed column name to a readable label."""
-    return _COLUMN_LABELS.get(col, col)
+    from gkrp_data_portal.ui.lang import t
+
+    key = _COLUMN_LABEL_KEYS.get(col)
+    if key:
+        return t(key)
+    return col
 
 
 def build_histogram(

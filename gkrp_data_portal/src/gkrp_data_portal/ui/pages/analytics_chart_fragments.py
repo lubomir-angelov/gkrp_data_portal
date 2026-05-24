@@ -22,7 +22,6 @@ from .analytics_common import (
     CHART_FRAGMENTS_ROUTE,
     CHART_MAX_FETCH,
     DEFAULT_LIMIT,
-    LOCALE,
     TABLE_MAX_LIMIT,
     build_histogram,
     build_histogram_series,
@@ -34,6 +33,7 @@ from .analytics_common import (
     ui_columns,
     _column_to_label,
 )
+from gkrp_data_portal.ui.lang import t
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
     get_distinct_values,
@@ -54,7 +54,7 @@ def _load_chart_guide() -> str:
 
 @ui.page(CHART_FRAGMENTS_ROUTE)
 def page_analytics_chart_fragments() -> None:
-    ui.label(LOCALE["title_analytics_chart_fragments"]).classes("text-h5 text-blue-600")
+    ui.label(t("title_analytics_chart_fragments")).classes("text-h5 text-blue-600")
 
     state: dict[str, Any] = {
         "query_id": "q2",
@@ -70,12 +70,12 @@ def page_analytics_chart_fragments() -> None:
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
         # Left panel — layer filters
         with ui.column().classes("w-[340px] shrink-0"):
-            ui.label(LOCALE["panel_query_filters"]).classes(
+            ui.label(t("panel_query_filters")).classes(
                 "text-subtitle1 font-medium text-blue-600"
             )
 
             with ui.row().classes("w-full gap-2 items-center"):
-                btn_run = ui.button(LOCALE["btn_run_query"], icon="play_arrow").classes(
+                btn_run = ui.button(t("btn_run_query"), icon="play_arrow").classes(
                     "flex-1"
                 )
 
@@ -85,7 +85,7 @@ def page_analytics_chart_fragments() -> None:
                 sel_site = (
                     ui.select(
                         options=[],
-                        label=LOCALE["label_site"],
+                        label=t("label_site"),
                         multiple=True,
                         clearable=True,
                         with_input=True,
@@ -99,7 +99,7 @@ def page_analytics_chart_fragments() -> None:
                         multiple=True,
                         clearable=True,
                         with_input=True,
-                        label=LOCALE["label_sector"],
+                        label=t("label_sector"),
                     )
                     .classes("w-full")
                     .props("dense")
@@ -110,7 +110,7 @@ def page_analytics_chart_fragments() -> None:
                         multiple=True,
                         clearable=True,
                         with_input=True,
-                        label=LOCALE["label_square"],
+                        label=t("label_square"),
                     )
                     .classes("w-full")
                     .props("dense")
@@ -121,7 +121,7 @@ def page_analytics_chart_fragments() -> None:
                         multiple=True,
                         clearable=True,
                         with_input=True,
-                        label=LOCALE["label_layer"],
+                        label=t("label_layer"),
                     )
                     .classes("w-full")
                     .props("dense")
@@ -130,18 +130,18 @@ def page_analytics_chart_fragments() -> None:
             sel_limit = ui.select(
                 options=[100, 200, 500, 1000, 2500, 5000, "max"],
                 value=DEFAULT_LIMIT,
-                label=LOCALE["label_limit"],
+                label=t("label_limit"),
             ).classes("w-full")
-            ui.label(LOCALE["limit_max_info"]).classes("text-xs text-gray-400 mt-1")
+            ui.label(t("limit_max_info")).classes("text-xs text-gray-400 mt-1")
 
         # Center panel — chart
         with ui.column().classes("flex-1 min-w-0"):
             with ui.row().classes("w-full items-center justify-between"):
-                ui.label(LOCALE["panel_chart"]).classes(
+                ui.label(t("panel_chart")).classes(
                     "text-subtitle1 font-medium text-blue-600"
                 )
                 with ui.column().classes("items-center gap-0"):
-                    ui.label(LOCALE["chart_help_label"]).classes(
+                    ui.label(t("chart_help_label")).classes(
                         "text-subtitle2 text-blue-600"
                     )
                     help_btn = (
@@ -164,33 +164,33 @@ def page_analytics_chart_fragments() -> None:
             with ui.row().classes("w-full items-center justify-between gap-2"):
                 with ui.column().classes("gap-0"):
                     sel_x = ui.select(
-                        options=[], label=LOCALE["label_group_by"]
+                        options=[], label=t("label_group_by")
                     ).classes("w-[300px]")
                     ui.label(
-                        "Основната размерност, по която графиката е групирана (напр. Обект, Сектор, Квадрат)."
+                        t("chart_help_groupby")
                     ).classes("text-xs text-gray-400")
                 with ui.column().classes("gap-0"):
                     sel_series = ui.select(
                         options=[],
-                        label=LOCALE["label_series"],
+                        label=t("label_series"),
                         clearable=True,
                     ).classes("w-[200px]")
                     ui.label(
-                        "По избор: разделя стълбовете на групирани следи по втора размерност (напр. Тип Отломък, Технология, Повърхност)."
+                        t("chart_help_series")
                     ).classes("text-xs text-gray-400")
                 with ui.column().classes("gap-0"):
                     sel_chart_type = ui.select(
                         options=["Bar", "Pie", "Donut"],
                         value="Pie",
-                        label=LOCALE["label_chart_type"],
+                        label=t("label_chart_type"),
                     ).classes("w-[160px]")
                     ui.label(
-                        "Стълб показва групирани стълбове, Кръг/Поничка показват пропорции."
+                        t("chart_help_chart_type")
                     ).classes("text-xs text-gray-400")
 
                 with ui.row().classes("gap-2"):
                     ui.button(
-                        LOCALE["btn_download_png"],
+                        t("btn_download_png"),
                         on_click=lambda: ui.run_javascript(
                             f"""
                             (function() {{
@@ -205,7 +205,7 @@ def page_analytics_chart_fragments() -> None:
                         ),
                     )
                     ui.button(
-                        LOCALE["btn_download_jpg"],
+                        t("btn_download_jpg"),
                         on_click=lambda: ui.run_javascript(
                             f"""
                             (function() {{
@@ -220,7 +220,7 @@ def page_analytics_chart_fragments() -> None:
                         ),
                     )
                     ui.button(
-                        LOCALE["btn_print_pdf"],
+                        t("btn_print_pdf"),
                         on_click=lambda: ui.run_javascript(
                             "window.open('/api/analytics/chart.html?query_id=' + encodeURIComponent(window.__gkrp_query_id || 'q2'), '_blank');"
                         ),
@@ -228,18 +228,18 @@ def page_analytics_chart_fragments() -> None:
 
             with ui.column().classes("w-full mt-2"):
                 with ui.row().classes("items-center gap-2"):
-                    ui.label(LOCALE["chart_fetch_info"]).classes(
+                    ui.label(t("chart_fetch_info")).classes(
                         "text-sm text-gray-500"
                     )
                     use_all_rows = ui.toggle(
-                        {True: LOCALE["toggle_on"], False: LOCALE["toggle_off"]},
+                        {True: t("toggle_on"), False: t("toggle_off")},
                         value=False,
                     ).classes("text-sm")
-                    ui.label(LOCALE["enable_all_rows"])
+                    ui.label(t("enable_all_rows"))
 
         # Right panel — fragments filters
         with ui.column().classes("w-[320px] shrink-0"):
-            ui.label(LOCALE["panel_fragments"]).classes(
+            ui.label(t("panel_fragments")).classes(
                 "text-subtitle1 font-medium text-blue-600"
             )
             with ui.scroll_area().classes(
@@ -432,7 +432,7 @@ def page_analytics_chart_fragments() -> None:
             # Ornaments section
             orn_section = ui.column().classes("w-full gap-1 mt-4")
             with orn_section:
-                ui.label(LOCALE["panel_ornaments"]).classes(
+                ui.label(t("panel_ornaments")).classes(
                     "text-subtitle1 font-medium text-blue-600"
                 )
                 orn_filters: list[tuple[str, Any]] = [
@@ -778,21 +778,21 @@ def page_analytics_chart_fragments() -> None:
             if total == 0:
                 _set_chart(
                     _build_figure(
-                        [], [], LOCALE["status_no_results_query"].format(query_id="q2")
+                        [], [], t("status_no_results_query").format(query_id="q2")
                     )
                 )
                 dbg.set_text("query=q2 rows=0 total=0")
-                status.set_text(LOCALE["status_no_results"])
+                status.set_text(t("status_no_results"))
                 return
 
             if not res.items:
                 _set_chart(
                     _build_figure(
-                        [], [], LOCALE["status_no_results_query"].format(query_id="q2")
+                        [], [], t("status_no_results_query").format(query_id="q2")
                     )
                 )
                 dbg.set_text(f"query=q2 rows=0 total={res.total}")
-                status.set_text(LOCALE["status_no_results"])
+                status.set_text(t("status_no_results"))
                 return
 
             ui_cols = ui_columns(res.columns) or list(res.columns)
@@ -877,7 +877,7 @@ def page_analytics_chart_fragments() -> None:
                 f"x={x_key} series={series_key or 'none'} buckets={len(xs)}"
             )
 
-            base = LOCALE["status_returned"].format(
+            base = t("status_returned").format(
                 count=len(res.items), total=res.total
             )
             if notes:
@@ -912,6 +912,6 @@ def page_analytics_chart_fragments() -> None:
     # --- Help dialog (outside the 3-column row) ---
     with ui.dialog() as help_dialog, ui.card().classes("w-[1200px] max-h-[80vh]"):
         ui.markdown(_load_chart_guide()).classes("max-w-full").style("max-width: none")
-        ui.button(LOCALE["chart_help_close"], on_click=help_dialog.close).classes(
+        ui.button(t("chart_help_close"), on_click=help_dialog.close).classes(
             "w-full mt-2"
         )

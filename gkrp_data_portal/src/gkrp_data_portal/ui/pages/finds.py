@@ -12,7 +12,7 @@ from gkrp_data_portal.ui.repository.archaeology_repo import (
     list_finds,
     most_recent_layer_id,
 )
-
+from gkrp_data_portal.ui.lang import t
 
 
 def _row_to_dict(r: Find) -> dict:
@@ -52,25 +52,25 @@ def _save_find(db: Session, obj: Find, data: dict) -> Find:
 
 @ui.page("/finds")
 def page_finds() -> None:
-    ui.label("Находки (finds)").classes("text-h5 text-blue-600")
+    ui.label(t("title_finds")).classes("text-h5 text-blue-600")
 
-    search = ui.input("Търсене (описание/тип/материал/инв. бр.)").props("clearable")
+    search = ui.input(t("search_finds")).props("clearable")
 
     table = ui.table(
         columns=[
-            {"name": "findid", "label": "ИД", "field": "findid", "sortable": True},
-            {"name": "year", "label": "Година", "field": "year"},
-            {"name": "inv_no", "label": "Инв. бр.", "field": "inv_no"},
-            {"name": "find_type", "label": "Вид", "field": "find_type"},
-            {"name": "material", "label": "Материал", "field": "material"},
-            {"name": "description", "label": "Описание", "field": "description"},
-            {"name": "coin", "label": "Монета", "field": "coin"},
-            {"name": "mint", "label": "Монетня", "field": "mint"},
-            {"name": "depth_m", "label": "Дълбочина", "field": "depth_m"},
-            {"name": "context", "label": "Контекст", "field": "context"},
-            {"name": "coord_north_m", "label": "Корд. С", "field": "coord_north_m"},
-            {"name": "coord_east_m", "label": "Корд. И", "field": "coord_east_m"},
-            {"name": "photo", "label": "Фото", "field": "photo"},
+            {"name": "findid", "label": t("col_id"), "field": "findid", "sortable": True},
+            {"name": "year", "label": t("col_year"), "field": "year"},
+            {"name": "inv_no", "label": t("col_inventory"), "field": "inv_no"},
+            {"name": "find_type", "label": t("col_find_type"), "field": "find_type"},
+            {"name": "material", "label": t("col_material"), "field": "material"},
+            {"name": "description", "label": t("col_description"), "field": "description"},
+            {"name": "coin", "label": t("col_coin"), "field": "coin"},
+            {"name": "mint", "label": t("col_mint"), "field": "mint"},
+            {"name": "depth_m", "label": t("col_depth_m"), "field": "depth_m"},
+            {"name": "context", "label": t("col_context"), "field": "context"},
+            {"name": "coord_north_m", "label": t("col_coord_north_m"), "field": "coord_north_m"},
+            {"name": "coord_east_m", "label": t("col_coord_east_m"), "field": "coord_east_m"},
+            {"name": "photo", "label": t("col_photo"), "field": "photo"},
         ],
         rows=[],
         row_key="findid",
@@ -92,7 +92,7 @@ def page_finds() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[1100px]"):
-            ui.label("Редактиране на находка" if findid else "Нова находка").classes("text-h6 text-blue-600")
+            ui.label(t("dialog_edit_find") if findid else t("dialog_create_find")).classes("text-h6 text-blue-600")
 
             with ui.grid(columns=4).classes("w-full gap-4"):
                 layer_map = {label: lid for (lid, label) in layer_opts}
@@ -106,29 +106,29 @@ def page_finds() -> None:
                 sel_layer = ui.select(
                     options=list(layer_map.keys()),
                     value=layer_label_default,
-                    label="Пласт (по избор)",
+                    label=t("label_layer_optional"),
                 ).props("clearable")
 
-                inp_year = ui.number("година", value=obj.year or None)
-                inp_inv_no = ui.number("инв. бр.", value=obj.inv_no or None)
-                inp_find_type = ui.input("вид", value=obj.find_type or "")
-                inp_material = ui.input("материал", value=obj.material or "")
-                inp_description = ui.textarea("описание", value=obj.description or "").classes("col-span-2")
-                inp_coin = ui.input("монета", value=obj.coin or "")
-                inp_denomination = ui.input("деноминация", value=obj.denomination or "")
-                inp_mint = ui.input("монетня", value=obj.mint or "")
-                inp_dimensions_cm = ui.input("размери (см)", value=obj.dimensions_cm or "")
-                inp_weight_g = ui.number("тегло (г)", value=obj.weight_g or None)
-                inp_depth_m = ui.input("дълбочина (м)", value=obj.depth_m or "")
-                inp_context = ui.input("контекст", value=obj.context or "")
-                inp_coord_north = ui.input("коорд. север (м)", value=obj.coord_north_m or "")
-                inp_coord_east = ui.input("коорд. изток (м)", value=obj.coord_east_m or "")
-                inp_photo = ui.input("фото", value=obj.photo or "")
-                inp_drw_link = ui.input("връзка чертеж", value=obj.drw_link or "")
-                inp_entered_by = ui.input("записан от", value=obj.recordenteredby or "")
+                inp_year = ui.number(t("label_year"), value=obj.year or None)
+                inp_inv_no = ui.number(t("label_inv_no"), value=obj.inv_no or None)
+                inp_find_type = ui.input(t("label_find_type"), value=obj.find_type or "")
+                inp_material = ui.input(t("label_material"), value=obj.material or "")
+                inp_description = ui.textarea(t("label_description"), value=obj.description or "").classes("col-span-2")
+                inp_coin = ui.input(t("label_coin"), value=obj.coin or "")
+                inp_denomination = ui.input(t("label_denomination"), value=obj.denomination or "")
+                inp_mint = ui.input(t("label_mint"), value=obj.mint or "")
+                inp_dimensions_cm = ui.input(t("label_dimensions_cm"), value=obj.dimensions_cm or "")
+                inp_weight_g = ui.number(t("label_weight_g"), value=obj.weight_g or None)
+                inp_depth_m = ui.input(t("label_depth_m"), value=obj.depth_m or "")
+                inp_context = ui.input(t("label_context"), value=obj.context or "")
+                inp_coord_north = ui.input(t("label_coord_north_m"), value=obj.coord_north_m or "")
+                inp_coord_east = ui.input(t("label_coord_east_m"), value=obj.coord_east_m or "")
+                inp_photo = ui.input(t("label_photo"), value=obj.photo or "")
+                inp_drw_link = ui.input(t("label_drw_link"), value=obj.drw_link or "")
+                inp_entered_by = ui.input(t("label_entered_by"), value=obj.recordenteredby or "")
 
             with ui.row().classes("w-full justify-end"):
-                ui.button("Отказ", on_click=dialog.close)
+                ui.button(t("btn_cancel"), on_click=dialog.close)
 
                 def do_save() -> None:
                     chosen_layer_id = layer_map.get(sel_layer.value) if sel_layer.value else None
@@ -162,13 +162,13 @@ def page_finds() -> None:
                     dialog.close()
                     refresh()
 
-                ui.button("Запази", on_click=do_save)
+                ui.button(t("btn_save"), on_click=do_save)
 
         dialog.open()
 
     with ui.row().classes("w-full justify-between"):
-        ui.button("Обнови", on_click=refresh)
-        ui.button("Нова Находка", on_click=lambda: open_editor(None))
+        ui.button(t("btn_refresh"), on_click=refresh)
+        ui.button(t("btn_new_find"), on_click=lambda: open_editor(None))
 
     def on_row_click(e) -> None:
         row = e.args.get("row") or {}

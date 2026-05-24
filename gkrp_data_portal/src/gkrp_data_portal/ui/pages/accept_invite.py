@@ -8,7 +8,7 @@ from sqlalchemy import select
 from gkrp_data_portal.core.invitations import is_expired, verify_token
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.models.auth import User
-from .analytics_common import LOCALE
+from gkrp_data_portal.ui.lang import t
 
 
 def _hash_password(pw: str) -> str:
@@ -21,11 +21,11 @@ def page_accept_invite() -> None:
     token_raw = ui.query.get("token", "")
     token_raw = (token_raw or "").strip()
 
-    ui.label(LOCALE["title_accept_invite"]).classes("text-h5")
+    ui.label(t("title_accept_invite")).classes("text-h5")
 
     if not token_raw:
-        ui.notify(LOCALE["notify_missing_token"], type="negative")
-        ui.label(LOCALE["notify_invalid_invite_link"])
+        ui.notify(t("notify_missing_token"), type="negative")
+        ui.label(t("notify_invalid_invite_link"))
         return
 
     with session_scope() as db:
@@ -35,34 +35,34 @@ def page_accept_invite() -> None:
         user = db.execute(select(User).where(User.invite_token_hash == token_hash)).scalar_one_or_none()
 
         if user is None:
-            ui.notify(LOCALE["notify_invalid_token"], type="negative")
-            ui.label(LOCALE["notify_invalid_invite"])
+            ui.notify(t("notify_invalid_token"), type="negative")
+            ui.label(t("notify_invalid_invite"))
             return
 
         if is_expired(user.invite_expires_at):
-            ui.notify(LOCALE["notify_invite_expired"], type="negative")
-            ui.label(LOCALE["notify_invite_expired_text"])
+            ui.notify(t("notify_invite_expired"), type="negative")
+            ui.label(t("notify_invite_expired_text"))
             return
 
         # token matches already by lookup; verify constant-time anyway
         if not verify_token(token_raw, user.invite_token_hash):
-            ui.notify(LOCALE["notify_invalid_token"], type="negative")
-            ui.label(LOCALE["notify_invalid_invite"])
+            ui.notify(t("notify_invalid_token"), type="negative")
+            ui.label(t("notify_invalid_invite"))
             return
 
-    inp_username = ui.input(LOCALE["label_choose_username"]).props("autocomplete=off").classes("w-[420px]")
-    inp_password = ui.input(LOCALE["label_choose_password"], password=True).props("autocomplete=new-password").classes("w-[420px]")
-    inp_password2 = ui.input(LOCALE["label_repeat_password"], password=True).props("autocomplete=new-password").classes("w-[420px]")
+    inp_username = ui.input(t("label_choose_username")).props("autocomplete=off").classes("w-[420px]")
+    inp_password = ui.input(t("label_choose_password"), password=True).props("autocomplete=new-password").classes("w-[420px]")
+    inp_password2 = ui.input(t("label_repeat_password"), password=True).props("autocomplete=new-password").classes("w-[420px]")
 
     def do_accept() -> None:
         username = (inp_username.value or "").strip()
         pw1 = inp_password.value or ""
         pw2 = inp_password2.value or ""
         if not username:
-            ui.notify(LOCALE["notify_username_required"], type="negative")
+            ui.notify(t("notify_username_required"), type="negative")
             return
         if not pw1 or pw1 != pw2:
-            ui.notify(LOCALE["notify_passwords_no_match"], type="negative")
+            ui.notify(t("notify_passwords_no_match"), type="negative")
             return
 
         token_hash = hashlib.sha256(token_raw.encode("utf-8")).hexdigest()
@@ -84,7 +84,7 @@ def page_accept_invite() -> None:
             db.add(user2)
             db.flush()
 
-        ui.notify(LOCALE["notify_account_activated"], type="positive")
+        ui.notify(t("notify_account_activated"), type="positive")
         ui.navigate.to("/")
 
-    ui.button(LOCALE["btn_activate_account"], on_click=do_accept).classes("mt-4")
+    ui.button(t("btn_activate_account"), on_click=do_accept).classes("mt-4")

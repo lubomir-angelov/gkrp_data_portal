@@ -12,7 +12,7 @@ from gkrp_data_portal.ui.repository.archaeology_repo import (
     list_ornaments,
     most_recent_fragment_id,
 )
-from .analytics_common import LOCALE
+from gkrp_data_portal.ui.lang import t
 
 
 def _row_to_dict(r: Tblornament) -> dict:
@@ -44,20 +44,20 @@ def _save_ornament(db: Session, obj: Tblornament, data: dict) -> Tblornament:
 
 @ui.page("/ornaments")
 def page_ornaments() -> None:
-    ui.label(LOCALE["title_ornaments"]).classes("text-h5 text-blue-600")
+    ui.label(t("title_ornaments")).classes("text-h5 text-blue-600")
 
-    search = ui.input(LOCALE["search_ornaments"]).props("clearable")
+    search = ui.input(t("search_ornaments")).props("clearable")
 
     table = ui.table(
         columns=[
-            {"name": "ornamentid", "label": LOCALE["col_id"], "field": "ornamentid", "sortable": True},
-            {"name": "fragmentid", "label": LOCALE["col_fragment_id"], "field": "fragmentid", "sortable": True},
-            {"name": "location", "label": LOCALE["col_location"], "field": "location"},
-            {"name": "primary_", "label": LOCALE["col_primary_"], "field": "primary_"},
-            {"name": "secondary", "label": LOCALE["col_secondary"], "field": "secondary"},
-            {"name": "tertiary", "label": LOCALE["col_tertiary"], "field": "tertiary"},
-            {"name": "color1", "label": LOCALE["col_color1"], "field": "color1"},
-            {"name": "color2", "label": LOCALE["col_color2"], "field": "color2"},
+            {"name": "ornamentid", "label": t("col_id"), "field": "ornamentid", "sortable": True},
+            {"name": "fragmentid", "label": t("col_fragment_id"), "field": "fragmentid", "sortable": True},
+            {"name": "location", "label": t("col_location"), "field": "location"},
+            {"name": "primary_", "label": t("col_primary_"), "field": "primary_"},
+            {"name": "secondary", "label": t("col_secondary"), "field": "secondary"},
+            {"name": "tertiary", "label": t("col_tertiary"), "field": "tertiary"},
+            {"name": "color1", "label": t("col_color1"), "field": "color1"},
+            {"name": "color2", "label": t("col_color2"), "field": "color2"},
         ],
         rows=[],
         row_key="ornamentid",
@@ -79,9 +79,9 @@ def page_ornaments() -> None:
 
         dialog = ui.dialog()
         with dialog, ui.card().classes("w-[1000px]"):
-            ui.label(LOCALE["dialog_edit_ornament"] if ornamentid else LOCALE["dialog_create_ornament"]).classes("text-h6 text-blue-600")
+            ui.label(t("dialog_edit_ornament") if ornamentid else t("dialog_create_ornament")).classes("text-h6 text-blue-600")
 
-            ui.markdown(LOCALE["dialog_ornament_hint"]).classes("text-sm")
+            ui.markdown(t("dialog_ornament_hint")).classes("text-sm")
 
             with ui.grid(columns=4).classes("w-full gap-4"):
                 frag_map = {label: fid for (fid, label) in frag_opts}
@@ -95,7 +95,7 @@ def page_ornaments() -> None:
                 sel_fragment = ui.select(
                     options=list(frag_map.keys()),
                     value=frag_label_default,
-                    label=LOCALE["label_fragment_optional"],
+                    label=t("label_fragment_optional"),
                 ).props("clearable")
 
                 inp_location = ui.input("location", value=obj.location or "")
@@ -116,7 +116,7 @@ def page_ornaments() -> None:
                 inp_quarter = ui.number("quarternary", value=obj.quarternary or 0)
 
             with ui.row().classes("w-full justify-end"):
-                ui.button(LOCALE["btn_cancel"], on_click=dialog.close)
+                ui.button(t("btn_cancel"), on_click=dialog.close)
 
                 def do_save() -> None:
                     chosen_fragment_id = frag_map.get(sel_fragment.value) if sel_fragment.value else None
@@ -149,13 +149,13 @@ def page_ornaments() -> None:
                     dialog.close()
                     refresh()
 
-                ui.button(LOCALE["btn_save"], on_click=do_save)
+                ui.button(t("btn_save"), on_click=do_save)
 
         dialog.open()
 
     with ui.row().classes("w-full justify-between"):
-        ui.button(LOCALE["btn_refresh"], on_click=refresh)
-        ui.button(LOCALE["btn_new_ornament"], on_click=lambda: open_editor(None))
+        ui.button(t("btn_refresh"), on_click=refresh)
+        ui.button(t("btn_new_ornament"), on_click=lambda: open_editor(None))
 
     def on_row_click(e) -> None:
         row = e.args.get("row") or {}

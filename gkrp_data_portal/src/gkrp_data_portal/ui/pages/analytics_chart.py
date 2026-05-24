@@ -23,7 +23,6 @@ from .analytics_common import (
     CHART_FRAGMENTS_ROUTE,
     CHART_MAX_FETCH,
     DEFAULT_LIMIT,
-    LOCALE,
     TABLE_MAX_LIMIT,
     build_histogram,
     build_histogram_series,
@@ -36,6 +35,7 @@ from .analytics_common import (
     ui_columns,
     _column_to_label,
 )
+from gkrp_data_portal.ui.lang import t
 
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
 _CHART_GUIDE_PATH = _PROJECT_ROOT / "CHART.md"
@@ -51,20 +51,20 @@ def _load_chart_guide() -> str:
 
 @ui.page("/analytics")
 def page_analytics_index() -> None:
-    ui.label(LOCALE["title_analytics"]).classes("text-h5 text-blue-600")
+    ui.label(t("title_analytics")).classes("text-h5 text-blue-600")
     with ui.row().classes("gap-2"):
         ui.button(
-            LOCALE["btn_chart_fragments"],
+            t("btn_chart_fragments"),
             on_click=lambda: ui.navigate.to(CHART_FRAGMENTS_ROUTE),
             icon="bar_chart",
         )
         ui.button(
-            LOCALE["btn_chart_finds"],
+            t("btn_chart_finds"),
             on_click=lambda: ui.navigate.to(CHART_FINDS_ROUTE),
             icon="show_chart",
         )
         ui.button(
-            LOCALE["btn_table_view"],
+            t("btn_table_view"),
             on_click=lambda: ui.navigate.to("/analytics/table"),
             icon="table_chart",
         )
