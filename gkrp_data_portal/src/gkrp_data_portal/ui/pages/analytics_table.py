@@ -8,8 +8,10 @@ Layout:
 from __future__ import annotations
 
 import json
+import pathlib
 from typing import Any
 
+import markdown
 from nicegui import app, ui
 
 from gkrp_data_portal.db.session import session_scope
@@ -25,6 +27,62 @@ from .analytics_common import (
     ui_columns,
 )
 from gkrp_data_portal.ui.lang import t
+
+_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
+_TABLE_GUIDE_PATH = _PROJECT_ROOT / "ANALYTICS_TABLE_HELP.md"
+
+
+def _load_table_guide() -> str:
+    """Load and render ANALYTICS_TABLE_HELP.md as HTML."""
+    if _TABLE_GUIDE_PATH.exists():
+        md = _TABLE_GUIDE_PATH.read_text(encoding="utf-8")
+        return markdown.markdown(md, extensions=["tables", "fenced_code"])
+    return "<p>Table guide not found.</p>"
+
+
+# Default sort direction per column (sensible defaults).
+# IDs and dates default to descending (newest first); everything else ascending.
+_SORT_DIR: dict[str, str] = {
+    # Layer IDs
+    "l_layerid": "desc",
+    # Fragment IDs
+    "f_fragmentid": "desc",
+    # Ornament IDs
+    "o_ornamentid": "desc",
+    # Find IDs (tblfinds)
+    "fi_findid": "desc",
+    # Archaeological find IDs (finds table)
+    "fi_findid_": "desc",
+    # Dates/timestamps — descending (newest first)
+    "l_recordenteredon": "desc",
+    "l_recordcreatedon": "desc",
+    "f_recordenteredon": "desc",
+    "o_recordenteredon": "desc",
+    "fi_recordenteredon": "desc",
+    "fi_date_found": "desc",
+    # Numeric measures — descending (highest first)
+    "f_count": "desc",
+    "f_topsize": "desc",
+    "f_necksize": "desc",
+    "f_bodysize": "desc",
+    "f_bottomsize": "desc",
+    "f_dishheight": "desc",
+    "fi_depth_m": "desc",
+    "fi_weight_g": "desc",
+    "fi_year": "desc",
+    "fi_year_inv_no": "desc",
+    "fi_cat_no": "desc",
+    "fi_museum_inv": "desc",
+    "fi_preservation_grade": "desc",
+    "fi_reper_n_coord": "desc",
+    "fi_reper_e_coord": "desc",
+    "fi_reper_baltic": "desc",
+    "fi_baltic": "desc",
+    "fi_stratigraphic_level": "desc",
+    "f_type": "desc",
+    "f_variant": "desc",
+    "o_quarternary": "desc",
+}
 
 
 def _select_to_list(widget: ui.select) -> list[str] | None:
@@ -71,7 +129,9 @@ def page_analytics_table() -> None:
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
         # Left panel
         with ui.column().classes("w-[340px] shrink-0"):
-            ui.label(t("panel_query_filters")).classes("text-subtitle1 font-medium text-blue-600")
+            ui.label(t("panel_query_filters")).classes(
+                "text-subtitle1 font-medium text-blue-600"
+            )
 
             sel_query = ui.select(
                 options=list(QUERY_OPTIONS.keys()),
@@ -80,11 +140,13 @@ def page_analytics_table() -> None:
             ).classes("w-full")
 
             with ui.row().classes("w-full gap-2 items-center"):
-                btn_run = ui.button(t("btn_run_query"), icon="play_arrow").classes("flex-1")
+                btn_run = ui.button(t("btn_run_query"), icon="play_arrow").classes(
+                    "flex-1"
+                )
 
             with ui.scroll_area().classes(
                 "w-full h-[420px] border rounded p-2 bg-white"
-            ):
+            ) as layer_filters_area:
                 sel_site_t = (
                     ui.select(
                         options=[],
@@ -137,7 +199,19 @@ def page_analytics_table() -> None:
 
         # Center panel (grid)
         with ui.column().classes("flex-1 min-w-0"):
-            ui.label(t("panel_table")).classes("text-subtitle1 font-medium text-blue-600")
+            with ui.row().classes("w-full items-center justify-between"):
+                ui.label(t("panel_table")).classes(
+                    "text-subtitle1 font-medium text-blue-600"
+                )
+                with ui.column().classes("items-center gap-0"):
+                    ui.label(t("chart_help_label")).classes(
+                        "text-subtitle2 text-blue-600"
+                    )
+                    help_btn = (
+                        ui.button(icon="help")
+                        .classes("p-1")
+                        .style("font-size: 1.2rem;")
+                    )
             status = ui.label("").classes("text-sm text-gray-600")
             dbg = ui.label("").classes("text-xs text-gray-500")
 
@@ -151,8 +225,6 @@ def page_analytics_table() -> None:
                             "resizable": True,
                             "sortable": True,
                             "filter": True,
-                            "floatingFilter": True,
-                            "menuTabs": ["filterMenuTab"],
                         },
                         "animateRows": True,
                         "pagination": True,
@@ -167,10 +239,15 @@ def page_analytics_table() -> None:
 
             ui.label(t("tip_filter_header")).classes("text-xs text-gray-500 mt-1")
 
-    def _set_grid(items: list[dict[str, Any]], visible_cols: list[str]) -> None:
+    def _set_grid(
+        items: list[dict[str, Any]],
+        visible_cols: list[str],
+        query_id: str = "q2",
+    ) -> None:
         """Populate AG Grid with the given rows and visible columns.
 
         Uses the AG Grid Set Filter for each column to provide value dropdowns.
+        Applies sensible default sort direction per column.
         """
         col_defs = [
             {
@@ -178,8 +255,9 @@ def page_analytics_table() -> None:
                 "field": c,
                 "width": 200,
                 "minWidth": 150,
-                "filter": "agSetColumnFilter",
-                "filterParams": {"buttons": ["reset", "apply"], "closeOnApply": True},
+                "filter": "agTextColumnFilter",
+                "filterParams": {"closeOnApply": True},
+                "sort": _SORT_DIR.get(c, "asc"),
             }
             for c in visible_cols
         ]
@@ -199,8 +277,13 @@ def page_analytics_table() -> None:
         """Apply all columns to the grid."""
         items: list[dict[str, Any]] = state.get("last_items", [])
         ui_cols: list[str] = state.get("last_columns", [])
+        query_id: str = state.get("query_id", "q2")
 
-        _set_grid(items, ui_cols)
+        # Hide l_* columns for finds_arch (no layer relationship)
+        if query_id == "finds_arch":
+            ui_cols = [c for c in ui_cols if not c.startswith("l_")]
+
+        _set_grid(items, ui_cols, query_id)
 
         dbg.set_text(
             f"query={state.get('query_id')} table_rows={len(items)} cols={len(ui_cols)}"
@@ -357,6 +440,11 @@ def page_analytics_table() -> None:
             return
         state["_refreshing"] = True
         try:
+            # Sync layer filter visibility with selected query
+            qid = QUERY_OPTIONS.get(sel_query.value, "q2")
+            layer_filters_area.visible = qid != "finds_arch"
+            layer_filters_area.update()
+
             _fetch_layer_cache()
             _populate_layer_options_hierarchical()
 
@@ -388,7 +476,9 @@ def page_analytics_table() -> None:
             dbg.set_text(
                 f"query={f['query_id']} table_rows={len(res.items)} total={res.total}"
             )
-            status.set_text(t("status_returned").format(count=len(res.items), total=res.total))
+            status.set_text(
+                t("status_returned").format(count=len(res.items), total=res.total)
+            )
 
         finally:
             state["_refreshing"] = False
@@ -396,16 +486,6 @@ def page_analytics_table() -> None:
     btn_run.on("click", lambda e: refresh())
 
     def _on_query_change(e) -> None:
-        qid = QUERY_OPTIONS.get(sel_query.value, "q2")
-        is_arch = qid == "finds_arch"
-        sel_site_t.visible = not is_arch
-        sel_sector_t.visible = not is_arch
-        sel_square_t.visible = not is_arch
-        sel_layer_t.visible = not is_arch
-        sel_site_t.update()
-        sel_sector_t.update()
-        sel_square_t.update()
-        sel_layer_t.update()
         refresh()
 
     sel_query.on("change", _on_query_change)
@@ -431,3 +511,12 @@ def page_analytics_table() -> None:
 
     # Initial load
     refresh()
+
+    # --- Help dialog (outside the row) ---
+    with ui.dialog() as help_dialog, ui.card().classes("w-[1200px] max-h-[80vh]"):
+        ui.markdown(_load_table_guide()).classes("max-w-full").style("max-width: none")
+        ui.button(t("chart_help_close"), on_click=help_dialog.close).classes(
+            "w-full mt-2"
+        )
+
+    help_btn.on("click", lambda: help_dialog.open())
