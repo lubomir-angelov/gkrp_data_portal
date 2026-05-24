@@ -273,7 +273,8 @@ class TestQueryQ2LayersFragmentsOrnaments:
 
         calls = mock_db.execute.call_args_list
         count_sql = str(calls[1][0][0])
-        assert "f_count_deduped" in count_sql or "DISTINCT f2.count" in count_sql
+        assert "SUM(f2.count)" in count_sql
+        assert "DISTINCT f2.fragmentid" in count_sql
         assert "COUNT(*)" not in count_sql
 
     def test_includes_f_count_deduped_column(self):
@@ -323,7 +324,8 @@ class TestQueryFinds:
 
         calls = mock_db.execute.call_args_list
         count_sql = str(calls[1][0][0])
-        assert "DISTINCT f2.count" in count_sql
+        assert "SUM(f2.count)" in count_sql
+        assert "DISTINCT f2.fragmentid" in count_sql
         assert "COUNT(*)" not in count_sql
 
     def test_includes_f_count_deduped_column(self):

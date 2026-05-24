@@ -910,8 +910,8 @@ def page_analytics_chart_fragments() -> None:
     refresh()
 
     # --- Help dialog (outside the 3-column row) ---
-    with ui.dialog() as help_dialog, ui.card().classes("w-[750px] max-h-[80vh]"):
-        ui.markdown(_load_chart_guide())
+    with ui.dialog() as help_dialog, ui.card().classes("w-[1200px] max-h-[80vh]"):
+        ui.markdown(_load_chart_guide()).classes("max-w-full").style("max-width: none")
         ui.button(LOCALE["chart_help_close"], on_click=help_dialog.close).classes(
             "w-full mt-2"
         )

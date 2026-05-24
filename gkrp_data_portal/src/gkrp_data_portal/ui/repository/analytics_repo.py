@@ -47,34 +47,36 @@ def _apply_frag_filters(
     clauses: list[str],
     params: dict[str, Any],
     frag_filters: dict[str, Any],
+    frag_alias: str = "f",
+    orn_alias: str = "o",
 ) -> None:
     """Apply fragment field filters from the UI dropdowns.
 
-    Maps UI labels to SQL column references using the 'f' alias.
+    Maps UI labels to SQL column references using the given aliases.
     Multi-select uses ANY/ILIKE; single text inputs use ILIKE.
     """
     label_to_col: dict[str, str] = {
-        "Piecetype": "f.piecetype",
-        "Technology": "f.technology",
-        "Baking": "f.baking",
-        "Color / Primary color": "f.primarycolor",
-        "Covering": "f.covering",
-        "Surface": "f.surface",
-        "Wall thickness": "f.wallthickness",
-        "Handle type": "f.handletype",
-        "Handle size": "f.handlesize",
-        "Bottom type": "f.bottomtype",
-        "Category": "f.category",
-        "Form": "f.form",
-        "Type": "f.type",
-        "Subtype": "f.subtype",
-        "Variant": "f.variant",
-        "Primary": "o.primary_",
-        "Secondary": "o.secondary",
-        "Tertiary": "o.tertiary",
-        "Quarternary": "o.quarternary",
-        "Color / color1": "o.color1",
-        "Encrust color": "o.encrustcolor1",
+        "Piecetype": f"{frag_alias}.piecetype",
+        "Technology": f"{frag_alias}.technology",
+        "Baking": f"{frag_alias}.baking",
+        "Color / Primary color": f"{frag_alias}.primarycolor",
+        "Covering": f"{frag_alias}.covering",
+        "Surface": f"{frag_alias}.surface",
+        "Wall thickness": f"{frag_alias}.wallthickness",
+        "Handle type": f"{frag_alias}.handletype",
+        "Handle size": f"{frag_alias}.handlesize",
+        "Bottom type": f"{frag_alias}.bottomtype",
+        "Category": f"{frag_alias}.category",
+        "Form": f"{frag_alias}.form",
+        "Type": f"{frag_alias}.type",
+        "Subtype": f"{frag_alias}.subtype",
+        "Variant": f"{frag_alias}.variant",
+        "Primary": f"{orn_alias}.primary_",
+        "Secondary": f"{orn_alias}.secondary",
+        "Tertiary": f"{orn_alias}.tertiary",
+        "Quarternary": f"{orn_alias}.quarternary",
+        "Color / color1": f"{orn_alias}.color1",
+        "Encrust color": f"{orn_alias}.encrustcolor1",
     }
     for label, values in frag_filters.items():
         col = label_to_col.get(label)
@@ -143,17 +145,18 @@ def _apply_layer_filters(
     clauses: list[str],
     params: dict[str, Any],
     layer_filters: dict[str, Any],
+    layer_alias: str = "l",
 ) -> None:
     """Apply layer field filters from the UI dropdowns.
 
-    Maps UI labels to SQL column references using the 'l' alias.
+    Maps UI labels to SQL column references using the given alias.
     Multi-select uses ANY/ILIKE; single text inputs use ILIKE.
     """
     label_to_col: dict[str, str] = {
-        "Site": "l.site",
-        "Sector": "l.sector",
-        "Square": "l.square",
-        "Layer": "l.layer",
+        "Site": f"{layer_alias}.site",
+        "Sector": f"{layer_alias}.sector",
+        "Square": f"{layer_alias}.square",
+        "Layer": f"{layer_alias}.layer",
     }
     for label, values in layer_filters.items():
         col = label_to_col.get(label)
@@ -187,30 +190,33 @@ def _build_where(
     q: Optional[str],
     frag_filters: Optional[dict[str, Any]] = None,
     layer_filters: Optional[dict[str, Any]] = None,
+    layer_alias: str = "l",
+    frag_alias: str = "f",
+    orn_alias: str = "o",
 ) -> tuple[str, dict[str, Any]]:
     """Build a safe WHERE clause using only whitelisted filters."""
     clauses: list[str] = []
     params: dict[str, Any] = {}
 
-    # Layer-scoped filters (always safe; all queries include l alias)
+    # Layer-scoped filters (always safe; all queries include layer_alias)
     if layer_filters:
-        _apply_layer_filters(clauses, params, layer_filters)
+        _apply_layer_filters(clauses, params, layer_filters, layer_alias)
     else:
         if site:
-            clauses.append("l.site ILIKE :site")
+            clauses.append(f"{layer_alias}.site ILIKE :site")
             params["site"] = f"%{site}%"
         if sector:
-            clauses.append("l.sector ILIKE :sector")
+            clauses.append(f"{layer_alias}.sector ILIKE :sector")
             params["sector"] = f"%{sector}%"
         if square:
-            clauses.append("l.square ILIKE :square")
+            clauses.append(f"{layer_alias}.square ILIKE :square")
             params["square"] = f"%{square}%"
 
     if date_from:
-        clauses.append("l.recordenteredon >= :date_from")
+        clauses.append(f"{layer_alias}.recordenteredon >= :date_from")
         params["date_from"] = date_from
     if date_to:
-        clauses.append("l.recordenteredon <= :date_to")
+        clauses.append(f"{layer_alias}.recordenteredon <= :date_to")
         params["date_to"] = date_to
 
     # Free-text: differs slightly by query (which aliases exist)
@@ -227,7 +233,7 @@ def _build_where(
 
     # Fragment field filters (only applied for q2 which has f alias)
     if frag_filters and query_id in ("q2",):
-        _apply_frag_filters(clauses, params, frag_filters)
+        _apply_frag_filters(clauses, params, frag_filters, frag_alias, orn_alias)
 
     # Archaeological finds filters (only applied for finds_arch)
     if frag_filters and query_id == "finds_arch":
@@ -352,20 +358,35 @@ def query_q2_layers_fragments_ornaments(
         q=q,
         frag_filters=frag_filters,
         layer_filters=layer_filters,
+        layer_alias="l",
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC, o.ornamentid DESC"
+    count_where_sql, count_params = _build_where(
+        query_id="q2",
+        site=site,
+        sector=sector,
+        square=square,
+        date_from=date_from,
+        date_to=date_to,
+        q=q,
+        frag_filters=frag_filters,
+        layer_filters=layer_filters,
+        layer_alias="l2",
+        frag_alias="f2",
+        orn_alias="o2",
+    )
     count_sql = f"""SELECT COALESCE((
         SELECT SUM(f2.count) FROM (
             SELECT DISTINCT f2.fragmentid, f2.count
             FROM tblfragments f2
             INNER JOIN tbllayers l2 ON l2.layerid = f2.locationid
-            {where_sql}
+            {count_where_sql}
         ) f2
     ), 0)"""
 
     rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
-    total = _count_sql(db, count_sql=count_sql, params=params)
+    total = _count_sql(db, count_sql=count_sql, params=count_params)
 
     items = [dict(r) for r in rows]
     columns = (
@@ -421,9 +442,24 @@ def query_finds(
         q=q,
         frag_filters=frag_filters,
         layer_filters=layer_filters,
+        layer_alias="l",
     )
 
     sql = f"{base}\n{where_sql}\nORDER BY fi.findid DESC"
+    count_where_sql, count_params = _build_where(
+        query_id="finds",
+        site=site,
+        sector=sector,
+        square=square,
+        date_from=date_from,
+        date_to=date_to,
+        q=q,
+        frag_filters=frag_filters,
+        layer_filters=layer_filters,
+        layer_alias="l2",
+        frag_alias="f2",
+        orn_alias="o2",
+    )
     count_sql = f"""SELECT COALESCE((
         SELECT SUM(f2.count) FROM (
             SELECT DISTINCT f2.fragmentid, f2.count
@@ -431,12 +467,12 @@ def query_finds(
             INNER JOIN tbllayers l2 ON l2.layerid = fi2.layerid
             LEFT JOIN tblfragments f2 ON f2.fragmentid = fi2.fragmentid
             LEFT JOIN tblornaments o2 ON o2.ornamentid = fi2.ornamentid
-            {where_sql}
+            {count_where_sql}
         ) f2
     ), 0)"""
 
     rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
-    total = _count_sql(db, count_sql=count_sql, params=params)
+    total = _count_sql(db, count_sql=count_sql, params=count_params)
 
     items = [dict(r) for r in rows]
     columns = (
