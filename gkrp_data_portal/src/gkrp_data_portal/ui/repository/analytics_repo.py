@@ -322,10 +322,11 @@ def query_q2_layers_fragments_ornaments(
     frag_filters: Optional[dict[str, Any]] = None,
     layer_filters: Optional[dict[str, Any]] = None,
 ) -> AnalyticsResult:
-    """Filter #2: tbllayers INNER JOIN tblfragments INNER JOIN tblornaments.
+    """Filter #2: tbllayers LEFT JOIN tblfragments LEFT JOIN tblornaments.
 
     Uses a window function to de-duplicate f.count across ornament rows,
     so each fragment's count is summed only once in histograms and totals.
+    Fragments without ornaments are included via LEFT JOIN.
     """
     select_cols = (
         _model_select_list("l_", "l", Tbllayer)
@@ -338,7 +339,7 @@ def query_q2_layers_fragments_ornaments(
       MAX(f.count) OVER (PARTITION BY f.fragmentid) AS f_count_deduped
     FROM tbllayers l
     INNER JOIN tblfragments f ON l.layerid = f.locationid
-    INNER JOIN tblornaments o ON f.fragmentid = o.fragmentid
+    LEFT JOIN tblornaments o ON f.fragmentid = o.fragmentid
     """
 
     where_sql, params = _build_where(
@@ -359,7 +360,6 @@ def query_q2_layers_fragments_ornaments(
             SELECT DISTINCT f2.fragmentid, f2.count
             FROM tblfragments f2
             INNER JOIN tbllayers l2 ON l2.layerid = f2.locationid
-            INNER JOIN tblornaments o2 ON f2.fragmentid = o2.fragmentid
             {where_sql}
         ) f2
     ), 0)"""

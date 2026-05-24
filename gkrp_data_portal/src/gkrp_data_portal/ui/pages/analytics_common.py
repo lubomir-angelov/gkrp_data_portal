@@ -376,15 +376,21 @@ def build_histogram(
 
     use_count = "f_count_deduped" in rows[0] or "f_count" in rows[0]
     bucket_sum: dict[str, int] = {}
+    seen_frags: set = set()
     for r in rows:
         bucket = norm_bucket(r.get(x_key))
         if use_count:
+            frag_id = r.get("f_fragmentid")
+            if frag_id is not None and frag_id in seen_frags:
+                continue
             val = r.get("f_count_deduped")
             if val is None:
                 val = r.get("f_count")
             bucket_sum[bucket] = bucket_sum.get(bucket, 0) + (
                 val if isinstance(val, (int, float)) else 0
             )
+            if frag_id is not None:
+                seen_frags.add(frag_id)
         else:
             bucket_sum[bucket] = bucket_sum.get(bucket, 0) + 1
 
@@ -411,16 +417,22 @@ def build_histogram_series(
 
     use_count = "f_count_deduped" in rows[0] or "f_count" in rows[0]
     bucket_series: dict[tuple[str, str], int] = {}
+    seen_frags: set = set()
     for r in rows:
         x_bucket = norm_bucket(r.get(x_key))
         s_bucket = norm_bucket(r.get(series_key))
         if use_count:
+            frag_id = r.get("f_fragmentid")
+            if frag_id is not None and frag_id in seen_frags:
+                continue
             val = r.get("f_count_deduped")
             if val is None:
                 val = r.get("f_count")
             bucket_series[(x_bucket, s_bucket)] = bucket_series.get(
                 (x_bucket, s_bucket), 0
             ) + (val if isinstance(val, (int, float)) else 0)
+            if frag_id is not None:
+                seen_frags.add(frag_id)
         else:
             bucket_series[(x_bucket, s_bucket)] = (
                 bucket_series.get((x_bucket, s_bucket), 0) + 1
