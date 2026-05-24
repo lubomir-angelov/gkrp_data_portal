@@ -49,7 +49,7 @@ def _save_fragment(db: Session, obj: Tblfragment, data: dict) -> Tblfragment:
 def page_fragments() -> None:
     ui.label(t("title_fragments")).classes("text-h5 text-blue-600")
 
-    search = ui.input(t("search_fragments")).props("clearable")
+    search = ui.input(t("search_fragments")).props("clearable").classes("w-[500px]")
 
     table = ui.table(
         columns=[

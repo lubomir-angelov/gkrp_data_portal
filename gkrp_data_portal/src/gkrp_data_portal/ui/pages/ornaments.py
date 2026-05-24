@@ -46,7 +46,7 @@ def _save_ornament(db: Session, obj: Tblornament, data: dict) -> Tblornament:
 def page_ornaments() -> None:
     ui.label(t("title_ornaments")).classes("text-h5 text-blue-600")
 
-    search = ui.input(t("search_ornaments")).props("clearable")
+    search = ui.input(t("search_ornaments")).props("clearable").classes("w-[500px]")
 
     table = ui.table(
         columns=[

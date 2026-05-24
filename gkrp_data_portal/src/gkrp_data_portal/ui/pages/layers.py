@@ -43,7 +43,7 @@ def _save_layer(db: Session, obj: Tbllayer, data: dict) -> Tbllayer:
 def page_layers() -> None:
     ui.label(t("title_layers")).classes("text-h5 text-blue-600")
 
-    search = ui.input(t("search_layers")).props("clearable")
+    search = ui.input(t("search_layers")).props("clearable").classes("w-[500px]")
 
     table = ui.table(
         columns=[

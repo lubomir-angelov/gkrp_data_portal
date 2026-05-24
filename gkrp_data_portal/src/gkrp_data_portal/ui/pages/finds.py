@@ -54,7 +54,7 @@ def _save_find(db: Session, obj: Find, data: dict) -> Find:
 def page_finds() -> None:
     ui.label(t("title_finds")).classes("text-h5 text-blue-600")
 
-    search = ui.input(t("search_finds")).props("clearable")
+    search = ui.input(t("search_finds")).props("clearable").classes("w-[500px]")
 
     table = ui.table(
         columns=[
