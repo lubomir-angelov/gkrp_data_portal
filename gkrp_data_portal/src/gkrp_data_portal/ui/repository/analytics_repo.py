@@ -143,17 +143,18 @@ def _apply_layer_filters(
     clauses: list[str],
     params: dict[str, Any],
     layer_filters: dict[str, Any],
+    layer_alias: str = "l",
 ) -> None:
     """Apply layer field filters from the UI dropdowns.
 
-    Maps UI labels to SQL column references using the 'l' alias.
+    Maps UI labels to SQL column references using the given alias.
     Multi-select uses ANY/ILIKE; single text inputs use ILIKE.
     """
     label_to_col: dict[str, str] = {
-        "Site": "l.site",
-        "Sector": "l.sector",
-        "Square": "l.square",
-        "Layer": "l.layer",
+        "Site": f"{layer_alias}.site",
+        "Sector": f"{layer_alias}.sector",
+        "Square": f"{layer_alias}.square",
+        "Layer": f"{layer_alias}.layer",
     }
     for label, values in layer_filters.items():
         col = label_to_col.get(label)
@@ -195,7 +196,7 @@ def _build_where(
 
     # Layer-scoped filters (always safe; all queries include layer_alias)
     if layer_filters:
-        _apply_layer_filters(clauses, params, layer_filters)
+        _apply_layer_filters(clauses, params, layer_filters, layer_alias)
     else:
         if site:
             clauses.append(f"{layer_alias}.site ILIKE :site")
@@ -379,7 +380,7 @@ def query_q2_layers_fragments_ornaments(
     ), 0)"""
 
     rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
-    total = _count_sql(db, count_sql=count_sql, params=params)
+    total = _count_sql(db, count_sql=count_sql, params=count_params)
 
     items = [dict(r) for r in rows]
     columns = (
@@ -463,7 +464,7 @@ def query_finds(
     ), 0)"""
 
     rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
-    total = _count_sql(db, count_sql=count_sql, params=params)
+    total = _count_sql(db, count_sql=count_sql, params=count_params)
 
     items = [dict(r) for r in rows]
     columns = (
