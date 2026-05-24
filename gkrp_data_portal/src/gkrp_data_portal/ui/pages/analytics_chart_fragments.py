@@ -20,7 +20,6 @@ from nicegui import ui
 
 from .analytics_common import (
     CHART_FRAGMENTS_ROUTE,
-    CHART_MAX_FETCH,
     DEFAULT_LIMIT,
     TABLE_MAX_LIMIT,
     build_histogram,
@@ -29,14 +28,14 @@ from .analytics_common import (
     plotly_donut,
     plotly_grouped_bar,
     plotly_pie,
-    result_for,
-    ui_columns,
     _column_to_label,
 )
 from gkrp_data_portal.ui.lang import t
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
+    build_chart_histogram,
     get_distinct_values,
+    get_groupby_columns,
     get_layer_hierarchy,
 )
 
@@ -155,9 +154,9 @@ def page_analytics_chart_fragments() -> None:
             chart_type_debug = ui.label("").classes("text-xs text-blue-600")
 
             chart = (
-                ui.plotly({"data": [], "layout": {"height": 520}})
+                ui.plotly({"data": [], "layout": {"height": 800}})
                 .classes("w-full border rounded bg-white")
-                .style("height: 520px;")
+                .style("height: 800px;")
             )
             chart_id = chart.id
 
@@ -712,7 +711,131 @@ def page_analytics_chart_fragments() -> None:
         sel_layer.options = layer_vals
         sel_layer.update()
 
-    def _populate_frag_filter_options(items: list[dict[str, Any]]) -> None:
+    def refresh() -> None:
+        _fetch_layer_cache()
+        _populate_layer_options_hierarchical()
+
+        if state.get("_refreshing"):
+            return
+        state["_refreshing"] = True
+        try:
+            f = _read_filters()
+
+            # --- Build group-by column options from known definitions ---
+            _GROUPBY_EXCLUDE = frozenset(
+                {
+                    "l_layername",
+                    "l_context",
+                    "f_fragmenttype",
+                    "f_fract",
+                    "f_secondarycolor",
+                    "f_includesconc",
+                    "f_includessize",
+                    "f_onepot",
+                    "f_includestype",
+                    "f_han",
+                    "f_note",
+                    "f_inventory",
+                    "f_imageurl",
+                    "p_ornamentid",
+                    "o_fragmentid",
+                    "o_relationship",
+                    "o_ornament",
+                    "o_color1",
+                    "o_color2",
+                    "encrustcolor",
+                    "o_encrustcolor1",
+                    "o_encrustcolor2",
+                    "o_recordenteredon",
+                }
+            )
+            all_cols = get_groupby_columns("q2")
+            groupby_cols = [c for c in all_cols if c.lower() not in _GROUPBY_EXCLUDE]
+            sel_x.options = groupby_cols
+            sel_x.update()
+            sel_series.options = groupby_cols
+            sel_series.update()
+
+            # Default X if not set or invalid
+            preferred = [
+                "l_site",
+                "l_sector",
+                "l_square",
+                "f_piecetype",
+                "f_category",
+                "f_form",
+                "f_technology",
+            ]
+            if not sel_x.value or sel_x.value not in groupby_cols:
+                default_x = next((c for c in preferred if c in groupby_cols), None) or (
+                    groupby_cols[0] if groupby_cols else None
+                )
+                state["_suppress_x_change"] = True
+                sel_x.set_value(default_x)
+                state["_suppress_x_change"] = False
+
+            # --- Chart: SQL-side aggregation (no raw row fetch needed) ---
+            x_key = sel_x.value or "l_site"
+            series_key = sel_series.value
+
+            with session_scope() as db:
+                chart_agg = build_chart_histogram(
+                    db,
+                    query_id="q2",
+                    x_key=x_key,
+                    series_key=series_key,
+                    layer_filters=f.get("layer_filters"),
+                    frag_filters=f.get("frag_filters"),
+                    top_n=30,
+                )
+
+            if not chart_agg:
+                _set_chart(
+                    _build_figure(
+                        [], [], t("status_no_results_query").format(query_id="q2")
+                    )
+                )
+                dbg.set_text("query=q2 rows=0 total=0")
+                status.set_text(t("status_no_results"))
+                return
+
+            if series_key and series_key in (sel_x.options or []):
+                series_label = _column_to_label(series_key)
+                xs, series_data = build_histogram_series(
+                    [], x_key, series_key, top_n=30,
+                    pre_aggregated=chart_agg,
+                )
+                _set_chart(
+                    _build_figure(
+                        xs,
+                        [],
+                        f"Count by {x_key} grouped by {series_key} (q2)",
+                        series_data=series_data,
+                        series_label=series_label,
+                    )
+                )
+            else:
+                xs, ys = build_histogram(
+                    [], x_key, top_n=30, pre_aggregated=chart_agg
+                )
+                _set_chart(_build_figure(xs, ys, f"Count by {x_key} (q2)"))
+
+            dbg.set_text(
+                f"query=q2 chart_buckets={len(xs)} "
+                f"x={x_key} series={series_key or 'none'}"
+            )
+
+            # --- Filter dropdowns: still need distinct-value queries ---
+            _populate_frag_filter_options_for_dropdowns()
+
+        finally:
+            state["_refreshing"] = False
+
+    def _populate_frag_filter_options_for_dropdowns() -> None:
+        """Populate filter dropdown options using SQL DISTINCT queries.
+
+        Separate from chart rendering so dropdowns can refresh independently.
+        """
         needed: set[str] = set()
         for label in ["Site", "Sector", "Square", "Layer"]:
             needed.add(label)
@@ -747,145 +870,6 @@ def page_analytics_chart_fragments() -> None:
                 continue
             widget.options = distinct.get(label, [])
             widget.update()
-
-    def refresh() -> None:
-        _fetch_layer_cache()
-        _populate_layer_options_hierarchical()
-
-        if state.get("_refreshing"):
-            return
-        state["_refreshing"] = True
-        try:
-            f = _read_filters()
-            notes: list[str] = []
-
-            if f["limit"] >= TABLE_MAX_LIMIT:
-                chart_fetch = f["limit"]
-            elif use_all_rows.value:
-                chart_fetch = TABLE_MAX_LIMIT
-            else:
-                chart_fetch = min(max(f["limit"], 0), CHART_MAX_FETCH)
-
-            res = result_for(
-                f["query_id"],
-                layer_filters=f.get("layer_filters"),
-                limit=chart_fetch,
-                offset=f["offset"],
-                frag_filters=f.get("frag_filters"),
-            )
-
-            total = int(res.total or 0)
-            if total == 0:
-                _set_chart(
-                    _build_figure(
-                        [], [], t("status_no_results_query").format(query_id="q2")
-                    )
-                )
-                dbg.set_text("query=q2 rows=0 total=0")
-                status.set_text(t("status_no_results"))
-                return
-
-            if not res.items:
-                _set_chart(
-                    _build_figure(
-                        [], [], t("status_no_results_query").format(query_id="q2")
-                    )
-                )
-                dbg.set_text(f"query=q2 rows=0 total={res.total}")
-                status.set_text(t("status_no_results"))
-                return
-
-            ui_cols = ui_columns(res.columns) or list(res.columns)
-
-            _GROUPBY_EXCLUDE = frozenset(
-                {
-                    "l_layername",
-                    "l_context",
-                    "f_fragmenttype",
-                    "f_fract",
-                    "f_secondarycolor",
-                    "f_includesconc",
-                    "f_includessize",
-                    "f_onepot",
-                    "f_includestype",
-                    "f_han",
-                    "f_note",
-                    "f_inventory",
-                    "f_imageurl",
-                    "p_ornamentid",
-                    "o_fragmentid",
-                    "o_relationship",
-                    "o_ornament",
-                    "o_color1",
-                    "o_color2",
-                    "encrustcolor",
-                    "o_encrustcolor1",
-                    "o_encrustcolor2",
-                    "o_recordenteredon",
-                }
-            )
-            groupby_cols = [c for c in ui_cols if c.lower() not in _GROUPBY_EXCLUDE]
-            sel_x.options = groupby_cols
-            sel_x.update()
-            sel_series.options = groupby_cols
-            sel_series.update()
-
-            preferred = [
-                "l_site",
-                "l_sector",
-                "l_square",
-                "f_piecetype",
-                "f_category",
-                "f_form",
-                "f_technology",
-            ]
-
-            if not sel_x.value or sel_x.value not in groupby_cols:
-                default_x = next((c for c in preferred if c in groupby_cols), None) or (
-                    groupby_cols[0] if groupby_cols else None
-                )
-                state["_suppress_x_change"] = True
-                sel_x.set_value(default_x)
-                state["_suppress_x_change"] = False
-                if default_x:
-                    notes.append(f"group-by defaulted to {default_x}")
-
-            x_key = sel_x.value
-            series_key = sel_series.value
-            if series_key and series_key in groupby_cols:
-                series_label = _column_to_label(series_key)
-                xs, series_data = build_histogram_series(
-                    res.items, x_key, series_key, top_n=30
-                )
-                _set_chart(
-                    _build_figure(
-                        xs,
-                        [],
-                        f"Count by {x_key} grouped by {series_key} (q2)",
-                        series_data=series_data,
-                        series_label=series_label,
-                    )
-                )
-            else:
-                xs, ys = build_histogram(res.items, x_key, top_n=30)
-                _set_chart(_build_figure(xs, ys, f"Count by {x_key} (q2)"))
-
-            _populate_frag_filter_options(res.items)
-
-            dbg.set_text(
-                f"query=q2 rows={len(res.items)} total={res.total} "
-                f"x={x_key} series={series_key or 'none'} buckets={len(xs)}"
-            )
-
-            base = t("status_returned").format(
-                count=len(res.items), total=res.total
-            )
-            if notes:
-                base += "  " + " \u2022 ".join(notes)
-            status.set_text(base)
-
-        finally:
-            state["_refreshing"] = False
 
     def _on_layer_change() -> None:
         _populate_layer_options_hierarchical()

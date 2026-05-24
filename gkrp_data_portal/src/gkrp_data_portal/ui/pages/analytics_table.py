@@ -135,7 +135,7 @@ def page_analytics_table() -> None:
 
             sel_query = ui.select(
                 options=list(QUERY_OPTIONS.keys()),
-                value=t("query_filter2"),
+                value=list(QUERY_OPTIONS.keys())[0],
                 label=t("label_predefined_query"),
             ).classes("w-full")
 

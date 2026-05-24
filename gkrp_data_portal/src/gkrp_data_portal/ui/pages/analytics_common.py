@@ -686,13 +686,19 @@ def _column_to_label(col: str) -> str:
 
 
 def build_histogram(
-    rows: list[dict], x_key: str, top_n: int = 30
+    rows: list[dict], x_key: str, top_n: int = 30,
+    pre_aggregated: list[dict[str, Any]] | None = None,
 ) -> tuple[list[str], list[int]]:
-    """Build a top-N histogram for a column from dict rows.
+    """Build a top-N histogram for a column.
 
-    The y-values sum ``f_count_deduped`` if present (de-duplicated fragment
-    counts), then fall back to ``f_count``, otherwise count rows.
+    If *pre_aggregated* is provided (from SQL aggregation), use it directly.
+    Each item should be ``{"bucket": str, "count": int}``.
+    Otherwise, fall back to Python-side aggregation from raw rows.
     """
+    if pre_aggregated:
+        items = sorted(pre_aggregated, key=lambda x: x.get("count", 0), reverse=True)[:top_n]
+        return [i["bucket"] for i in items], [i["count"] for i in items]
+
     if not rows or not x_key:
         return [], []
 
@@ -723,17 +729,44 @@ def build_histogram(
 
 
 def build_histogram_series(
-    rows: list[dict], x_key: str, series_key: str, top_n: int = 30
+    rows: list[dict], x_key: str, series_key: str, top_n: int = 30,
+    pre_aggregated: list[dict[str, Any]] | None = None,
 ) -> tuple[list[str], dict[str, list[int]]]:
     """Build a top-N histogram grouped by a series dimension.
+
+    If *pre_aggregated* is provided (from SQL aggregation), use it directly.
+    Each item should be ``{"x_bucket": str, "series_bucket": str, "count": int}``.
+    Otherwise, fall back to Python-side aggregation from raw rows.
 
     Returns ``(xs, series_data)`` where ``xs`` are the top-N bucket labels and
     ``series_data`` is ``{series_value: [y1, y2, ...]}`` — one list per series
     value, aligned to ``xs``.
-
-    Uses ``f_count_deduped`` (de-duplicated fragment counts) when available,
-    falling back to ``f_count``, otherwise counts rows.
     """
+    if pre_aggregated:
+        # Pivot SQL results: collect all x_buckets and series_values
+        x_total: dict[str, int] = {}
+        series_vals: dict[str, dict[str, int]] = {}
+        for item in pre_aggregated:
+            xb = item.get("x_bucket", "")
+            sb = item.get("series_bucket", "")
+            cnt = int(item.get("count", 0))
+            x_total[xb] = x_total.get(xb, 0) + cnt
+            if sb not in series_vals:
+                series_vals[sb] = {}
+            series_vals[sb][xb] = cnt
+
+        # Top-N x_buckets by total
+        top_x = sorted(x_total.items(), key=lambda x: x[1], reverse=True)[:top_n]
+        xs = [k for k, _ in top_x]
+
+        # Build aligned series data
+        result_series: dict[str, list[int]] = {}
+        for sv, xb_map in series_vals.items():
+            counts = [xb_map.get(xb, 0) for xb in xs]
+            if any(c > 0 for c in counts):
+                result_series[sv] = counts
+        return xs, result_series
+
     if not rows or not x_key or not series_key:
         return [], {}
 

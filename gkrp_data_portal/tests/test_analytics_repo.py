@@ -10,6 +10,7 @@ from gkrp_data_portal.ui.repository.analytics_repo import (
     AnalyticsResult,
     _build_where,
     _model_select_list,
+    build_chart_histogram,
     extract_image_urls,
     query_finds,
     query_q1_layers_fragments,
@@ -313,7 +314,7 @@ class TestQueryFinds:
         call_str = str(mock_db.execute.call_args_list[0][0][0])
         assert "tblfinds" in call_str.lower()
 
-    def test_count_uses_deduped_fragment_count(self):
+    def test_count_uses_count_star(self):
         mock_db = MagicMock()
         mock_row = MagicMock()
         mock_row.mappings.return_value.all.return_value = []
@@ -324,11 +325,10 @@ class TestQueryFinds:
 
         calls = mock_db.execute.call_args_list
         count_sql = str(calls[1][0][0])
-        assert "SUM(f2.count)" in count_sql
-        assert "DISTINCT f2.fragmentid" in count_sql
-        assert "COUNT(*)" not in count_sql
+        assert "COUNT(*)" in count_sql
+        assert "SUM(f2.count)" not in count_sql
 
-    def test_includes_f_count_deduped_column(self):
+    def test_no_f_count_deduped_column(self):
         mock_db = MagicMock()
         mock_row = MagicMock()
         mock_row.mappings.return_value.all.return_value = []
@@ -339,4 +339,122 @@ class TestQueryFinds:
 
         calls = mock_db.execute.call_args_list
         data_sql = str(calls[0][0][0])
-        assert "f_count_deduped" in data_sql
+        assert "f_count_deduped" not in data_sql
+
+
+class TestBuildChartHistogram:
+    def test_returns_empty_for_unknown_query_id(self):
+        mock_db = MagicMock()
+        result = build_chart_histogram(mock_db, query_id="nonexistent", x_key="l_site")
+        assert result == []
+
+    def test_returns_empty_for_unknown_x_key(self):
+        mock_db = MagicMock()
+        result = build_chart_histogram(mock_db, query_id="q2", x_key="unknown_col")
+        assert result == []
+
+    def test_q2_single_axis_returns_buckets(self):
+        mock_db = MagicMock()
+        mock_row = MagicMock()
+        mock_row.mappings.return_value.all.return_value = [
+            {"bucket": "Sofia", "cnt": 150},
+            {"bucket": "Plovdiv", "cnt": 80},
+            {"bucket": "Varna", "cnt": 45},
+        ]
+        mock_db.execute.return_value = mock_row
+
+        result = build_chart_histogram(
+            mock_db, query_id="q2", x_key="l_site", top_n=30
+        )
+        assert len(result) == 3
+        assert result[0]["bucket"] == "Sofia"
+        assert result[0]["count"] == 150
+        assert result[1]["bucket"] == "Plovdiv"
+        assert result[1]["count"] == 80
+
+    def test_q2_series_returns_pivoted_data(self):
+        mock_db = MagicMock()
+        mock_row = MagicMock()
+        mock_row.mappings.return_value.all.return_value = [
+            {"x_bucket": "Sofia", "series_bucket": "Body", "cnt": 100},
+            {"x_bucket": "Sofia", "series_bucket": "Rim", "cnt": 50},
+            {"x_bucket": "Plovdiv", "series_bucket": "Body", "cnt": 30},
+        ]
+        mock_db.execute.return_value = mock_row
+
+        result = build_chart_histogram(
+            mock_db, query_id="q2", x_key="l_site", series_key="f_piecetype", top_n=30
+        )
+        # Should return one row per (x_bucket, series_bucket) combo for top-N x_buckets
+        assert len(result) == 3
+        buckets = {r["x_bucket"] for r in result}
+        assert "Sofia" in buckets
+        assert "Plovdiv" in buckets
+
+    def test_finds_arch_counts_rows(self):
+        mock_db = MagicMock()
+        mock_row = MagicMock()
+        mock_row.mappings.return_value.all.return_value = [
+            {"bucket": "Metal", "cnt": 25},
+            {"bucket": "Glass", "cnt": 12},
+        ]
+        mock_db.execute.return_value = mock_row
+
+        result = build_chart_histogram(
+            mock_db, query_id="finds_arch", x_key="fi_find_type", top_n=30
+        )
+        assert len(result) == 2
+        assert result[0]["bucket"] == "Metal"
+        assert result[0]["count"] == 25
+
+    def test_finds_counts_rows(self):
+        mock_db = MagicMock()
+        mock_row = MagicMock()
+        mock_row.mappings.return_value.all.return_value = [
+            {"bucket": "Sofia", "cnt": 10},
+        ]
+        mock_db.execute.return_value = mock_row
+
+        result = build_chart_histogram(
+            mock_db, query_id="finds", x_key="l_site", top_n=30
+        )
+        assert len(result) == 1
+        assert result[0]["bucket"] == "Sofia"
+        assert result[0]["count"] == 10
+
+    def test_applies_site_filter(self):
+        mock_db = MagicMock()
+        mock_row = MagicMock()
+        mock_row.mappings.return_value.all.return_value = [
+            {"bucket": "TypeA", "cnt": 5},
+        ]
+        mock_db.execute.return_value = mock_row
+
+        build_chart_histogram(
+            mock_db, query_id="q2", x_key="f_piecetype", site="Sofia", top_n=30
+        )
+
+        calls = mock_db.execute.call_args_list
+        sql = str(calls[0][0][0])
+        params = calls[0][0][1]
+        assert "site ILIKE" in sql
+        assert params["site"] == "%Sofia%"
+
+    def test_applies_frag_filter(self):
+        mock_db = MagicMock()
+        mock_row = MagicMock()
+        mock_row.mappings.return_value.all.return_value = [{"bucket": "X", "cnt": 1}]
+        mock_db.execute.return_value = mock_row
+
+        build_chart_histogram(
+            mock_db,
+            query_id="q2",
+            x_key="l_site",
+            frag_filters={"Piecetype": ["Body"]},
+            top_n=30,
+        )
+
+        calls = mock_db.execute.call_args_list
+        sql = str(calls[0][0][0])
+        params = calls[0][0][1]
+        assert "piecetype::text ILIKE" in sql

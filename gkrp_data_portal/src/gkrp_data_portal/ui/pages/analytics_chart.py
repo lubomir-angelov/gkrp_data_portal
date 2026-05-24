@@ -21,7 +21,6 @@ from starlette.responses import HTMLResponse, PlainTextResponse, Response
 from .analytics_common import (
     CHART_FINDS_ROUTE,
     CHART_FRAGMENTS_ROUTE,
-    CHART_MAX_FETCH,
     DEFAULT_LIMIT,
     TABLE_MAX_LIMIT,
     build_histogram,
@@ -34,6 +33,10 @@ from .analytics_common import (
     result_for,
     ui_columns,
     _column_to_label,
+)
+from gkrp_data_portal.db.session import session_scope
+from gkrp_data_portal.ui.repository.analytics_repo import (
+    build_chart_histogram,
 )
 from gkrp_data_portal.ui.lang import t
 
@@ -145,42 +148,38 @@ def analytics_chart_json(
     df = parse_date(date_from)
     dt = parse_date(date_to)
 
-    meta = result_for(
-        query_id,
-        site=site or None,
-        sector=sector or None,
-        square=square or None,
-        date_from=df,
-        date_to=dt,
-        q=q or None,
-        limit=1,
-        offset=0,
-    )
-
-    total = int(meta.total or 0)
-    chart_fetch = min(max(total, 0), CHART_MAX_FETCH)
-
-    res = result_for(
-        query_id,
-        site=site or None,
-        sector=sector or None,
-        square=square or None,
-        date_from=df,
-        date_to=dt,
-        q=q or None,
-        limit=chart_fetch,
-        offset=0,
-    )
-
-    cols = ui_columns(res.columns) or list(res.columns)
-    if x and (x not in cols):
-        x = None
     if not x:
-        x = "f_piecetype" if "f_piecetype" in cols else (cols[0] if cols else "")
+        x = "f_piecetype" if query_id in ("q2", "finds") else "fi_find_type"
 
-    if series and series in cols:
+    with session_scope() as db:
+        chart_agg = build_chart_histogram(
+            db,
+            query_id=query_id,
+            x_key=x,
+            series_key=series,
+            site=site or None,
+            sector=sector or None,
+            square=square or None,
+            date_from=df,
+            date_to=dt,
+            q=q or None,
+            top_n=30,
+        )
+
+    if not chart_agg:
+        if chart_type == "pie":
+            fig = plotly_pie([], [], title=f"Count by {x} ({query_id})")
+        elif chart_type == "donut":
+            fig = plotly_donut([], [], title=f"Count by {x} ({query_id})")
+        else:
+            fig = plotly_bar([], [], title=f"Count by {x} ({query_id})")
+        return Response(content=json.dumps(fig), media_type="application/json")
+
+    if series:
+        xs, series_data = build_histogram_series(
+            [], x, series, top_n=30, pre_aggregated=chart_agg
+        )
         series_label = _column_to_label(series)
-        xs, series_data = build_histogram_series(res.items, x, series)
         fig = plotly_grouped_bar(
             xs,
             series_data,
@@ -188,7 +187,9 @@ def analytics_chart_json(
             series_label=series_label,
         )
     else:
-        xs, ys = build_histogram(res.items, x)
+        xs, ys = build_histogram(
+            [], x, top_n=30, pre_aggregated=chart_agg
+        )
         if chart_type == "pie":
             fig = plotly_pie(xs, ys, title=f"Count by {x} ({query_id})")
         elif chart_type == "donut":

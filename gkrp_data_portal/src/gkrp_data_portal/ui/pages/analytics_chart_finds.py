@@ -19,7 +19,6 @@ from nicegui import ui
 
 from .analytics_common import (
     CHART_FINDS_ROUTE,
-    CHART_MAX_FETCH,
     DEFAULT_LIMIT,
     TABLE_MAX_LIMIT,
     build_histogram,
@@ -28,13 +27,14 @@ from .analytics_common import (
     plotly_donut,
     plotly_grouped_bar,
     plotly_pie,
-    result_for,
-    ui_columns,
     _column_to_label,
 )
 from gkrp_data_portal.ui.lang import t
 from gkrp_data_portal.db.session import session_scope
-from gkrp_data_portal.ui.repository.analytics_repo import get_distinct_values
+from gkrp_data_portal.ui.repository.analytics_repo import (
+    build_chart_histogram,
+    get_distinct_values,
+)
 
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
 _CHART_GUIDE_PATH = _PROJECT_ROOT / "CHART.md"
@@ -205,9 +205,9 @@ def page_analytics_chart_finds() -> None:
             chart_type_debug = ui.label("").classes("text-xs text-blue-600")
 
             chart = (
-                ui.plotly({"data": [], "layout": {"height": 520}})
+                ui.plotly({"data": [], "layout": {"height": 800}})
                 .classes("w-full border rounded bg-white")
-                .style("height: 520px;")
+                .style("height: 800px;")
             )
             chart_id = chart.id
 
@@ -382,7 +382,7 @@ def page_analytics_chart_finds() -> None:
             "frag_filters": frag_filters_map,
         }
 
-    def _populate_frag_filter_options(items: list[dict[str, Any]]) -> None:
+    def _populate_frag_filter_options_for_dropdowns() -> None:
         needed: set[str] = set()
         for label, widget in finds_filters:
             if isinstance(widget, ui.select):
@@ -413,25 +413,42 @@ def page_analytics_chart_finds() -> None:
         state["_refreshing"] = True
         try:
             f = _read_filters()
-            notes: list[str] = []
 
-            if f["limit"] >= TABLE_MAX_LIMIT:
-                chart_fetch = f["limit"]
-            elif use_all_rows.value:
-                chart_fetch = TABLE_MAX_LIMIT
-            else:
-                chart_fetch = min(max(f["limit"], 0), CHART_MAX_FETCH)
+            # Determine group-by columns from available data
+            # For finds_arch, use the column definitions to build the options
+            groupby_cols = [
+                "fi_find_type", "fi_material", "fi_coin", "fi_denomination",
+                "fi_mint", "fi_year", "fi_depth_m", "fi_context",
+                "l_site", "l_sector", "l_square", "l_layer",
+            ]
 
-            res = result_for(
-                f["query_id"],
-                layer_filters=f.get("layer_filters"),
-                limit=chart_fetch,
-                offset=f["offset"],
-                frag_filters=f.get("frag_filters"),
-            )
+            sel_x.options = groupby_cols
+            sel_x.update()
+            sel_series.options = groupby_cols
+            sel_series.update()
 
-            total = int(res.total or 0)
-            if total == 0:
+            if not sel_x.value or sel_x.value not in groupby_cols:
+                default_x = next((c for c in ["fi_find_type", "fi_material", "fi_coin", "fi_denomination", "fi_mint", "fi_year", "fi_depth_m", "fi_context", "l_site", "l_sector", "l_square", "l_layer"] if c in groupby_cols), None) or (groupby_cols[0] if groupby_cols else None)
+                state["_suppress_x_change"] = True
+                sel_x.set_value(default_x)
+                state["_suppress_x_change"] = False
+
+            x_key = sel_x.value
+            series_key = sel_series.value
+
+            # --- Chart: SQL-side aggregation ---
+            with session_scope() as db:
+                chart_agg = build_chart_histogram(
+                    db,
+                    query_id="finds_arch",
+                    x_key=x_key,
+                    series_key=series_key,
+                    layer_filters=f.get("layer_filters"),
+                    frag_filters=f.get("frag_filters"),
+                    top_n=30,
+                )
+
+            if not chart_agg:
                 _set_chart(
                     _build_figure(
                         [],
@@ -443,141 +460,11 @@ def page_analytics_chart_finds() -> None:
                 status.set_text(t("status_no_results"))
                 return
 
-            if not res.items:
-                _set_chart(
-                    _build_figure(
-                        [],
-                        [],
-                        t("status_no_results_query").format(query_id="finds_arch"),
-                    )
-                )
-                dbg.set_text(f"query=finds_arch rows=0 total={res.total}")
-                status.set_text(t("status_no_results"))
-                return
-
-            ui_cols = ui_columns(res.columns) or list(res.columns)
-
-            # For finds_arch, exclude columns that don't make sense for grouping
-            _GROUPBY_EXCLUDE = frozenset(
-                {
-                    "l_layername",
-                    "l_context",
-                    "f_fragmenttype",
-                    "f_fract",
-                    "f_secondarycolor",
-                    "f_includesconc",
-                    "f_includessize",
-                    "f_onepot",
-                    "f_includestype",
-                    "f_han",
-                    "f_note",
-                    "f_inventory",
-                    "f_imageurl",
-                    "p_ornamentid",
-                    "o_fragmentid",
-                    "o_relationship",
-                    "o_ornament",
-                    "o_color1",
-                    "o_color2",
-                    "encrustcolor",
-                    "o_encrustcolor1",
-                    "o_encrustcolor2",
-                    "o_recordenteredon",
-                    "l_recordenteredon",
-                    "l_recordenteredby",
-                    "l_recordcreatedby",
-                    "l_recordcreatedon",
-                    "l_level",
-                    "l_structure",
-                    "l_includes",
-                    "l_color1",
-                    "l_color2",
-                    "l_description",
-                    "l_akb_num",
-                    "l_layerid",
-                    "l_layertype",
-                    "l_stratum",
-                    "l_parentid",
-                    "l_photos",
-                    "l_drawings",
-                    "l_handfragments",
-                    "l_wheelfragment",
-                    "f_fragmentid",
-                    "f_locationid",
-                    "f_outline",
-                    "f_speed",
-                    "f_recrodenteredby",
-                    "f_recrodenteredon",
-                    "f_topsize",
-                    "f_necksize",
-                    "f_bodysize",
-                    "f_bottomsize",
-                    "f_dishheight",
-                    "f_composition",
-                    "f_parallels",
-                    "f_decoration",
-                    "f_recordcreatedby",
-                    "f_recordcreatedon",
-                    "f_recordenteredby",
-                    "f_recordenteredon",
-                    "f_image",
-                    "f_count",
-                    "l_layername",
-                    "f_fragmenttype",
-                    "f_fract",
-                    "f_onepot",
-                    "f_handlesize",
-                    "f_img_url",
-                    "o_ornamentid",
-                    "o_fragmentid",
-                    "o_relationship",
-                    "o_onornament",
-                    "fi_recordenteredon",
-                    "fi_recordenteredby",
-                    "fi_recordcreatedby",
-                    "fi_recordcreatedon",
-                    "fi_imageurl",
-                    "fi_image",
-                    "fi_notes",
-                }
-            )
-            groupby_cols = [c for c in ui_cols if c.lower() not in _GROUPBY_EXCLUDE]
-            sel_x.options = groupby_cols
-            sel_x.update()
-            sel_series.options = groupby_cols
-            sel_series.update()
-
-            preferred = [
-                "fi_find_type",
-                "fi_material",
-                "fi_coin",
-                "fi_denomination",
-                "fi_mint",
-                "fi_year",
-                "fi_depth_m",
-                "fi_context",
-                "l_site",
-                "l_sector",
-                "l_square",
-                "l_layer",
-            ]
-
-            if not sel_x.value or sel_x.value not in groupby_cols:
-                default_x = next((c for c in preferred if c in groupby_cols), None) or (
-                    groupby_cols[0] if groupby_cols else None
-                )
-                state["_suppress_x_change"] = True
-                sel_x.set_value(default_x)
-                state["_suppress_x_change"] = False
-                if default_x:
-                    notes.append(f"group-by defaulted to {default_x}")
-
-            x_key = sel_x.value
-            series_key = sel_series.value
             if series_key and series_key in groupby_cols:
                 series_label = _column_to_label(series_key)
                 xs, series_data = build_histogram_series(
-                    res.items, x_key, series_key, top_n=30
+                    [], x_key, series_key, top_n=30,
+                    pre_aggregated=chart_agg,
                 )
                 _set_chart(
                     _build_figure(
@@ -589,22 +476,18 @@ def page_analytics_chart_finds() -> None:
                     )
                 )
             else:
-                xs, ys = build_histogram(res.items, x_key, top_n=30)
+                xs, ys = build_histogram(
+                    [], x_key, top_n=30, pre_aggregated=chart_agg
+                )
                 _set_chart(_build_figure(xs, ys, f"Count by {x_key} (finds_arch)"))
 
-            _populate_frag_filter_options(res.items)
-
             dbg.set_text(
-                f"query=finds_arch rows={len(res.items)} total={res.total} "
-                f"x={x_key} series={series_key or 'none'} buckets={len(xs)}"
+                f"query=finds_arch chart_buckets={len(xs)} "
+                f"x={x_key} series={series_key or 'none'}"
             )
 
-            base = t("status_returned").format(
-                count=len(res.items), total=res.total
-            )
-            if notes:
-                base += "  " + " \u2022 ".join(notes)
-            status.set_text(base)
+            # --- Filter dropdowns: SQL DISTINCT queries ---
+            _populate_frag_filter_options_for_dropdowns()
 
         finally:
             state["_refreshing"] = False
