@@ -222,7 +222,7 @@ def page_ornaments() -> None:
         ui.button(t("btn_new_ornament"), on_click=lambda: open_editor(None))
 
     def on_row_click(e) -> None:
-        row = e.args.get("row") or {}
+        row = e.args or {}
         open_editor(row.get("ornamentid"))
 
     table.on("rowClick", on_row_click)
