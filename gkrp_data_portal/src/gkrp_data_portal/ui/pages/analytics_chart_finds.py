@@ -28,6 +28,7 @@ from .analytics_common import (
     plotly_grouped_bar,
     plotly_pie,
     _column_to_label,
+    register_plotly_export_js,
 )
 from gkrp_data_portal.ui.lang import t
 from gkrp_data_portal.db.session import session_scope
@@ -210,6 +211,7 @@ def page_analytics_chart_finds() -> None:
                 .style("height: 800px;")
             )
             chart_id = chart.id
+            register_plotly_export_js()
 
             with ui.row().classes("w-full items-center justify-between gap-2"):
                 with ui.column().classes("gap-0"):
@@ -240,31 +242,13 @@ def page_analytics_chart_finds() -> None:
                     ui.button(
                         t("btn_download_png"),
                         on_click=lambda: ui.run_javascript(
-                            f"""
-                            (function() {{
-                              const el = document.getElementById('{chart_id}');
-                              if (!el) return;
-                              const gd = el.querySelector('.js-plotly-plot') || el;
-                              if (window.Plotly && gd) {{
-                                Plotly.downloadImage(gd, {{format:'png', filename:'analytics_chart_finds', height:650, width:1100}});
-                              }}
-                            }})();
-                            """
+                            f"window.__gkrpPlotlyDownload && window.__gkrpPlotlyDownload({chart_id}, 'png', 'analytics_chart_finds');"
                         ),
                     )
                     ui.button(
                         t("btn_download_jpg"),
                         on_click=lambda: ui.run_javascript(
-                            f"""
-                            (function() {{
-                              const el = document.getElementById('{chart_id}');
-                              if (!el) return;
-                              const gd = el.querySelector('.js-plotly-plot') || el;
-                              if (window.Plotly && gd) {{
-                                Plotly.downloadImage(gd, {{format:'jpeg', filename:'analytics_chart_finds', height:650, width:1100}});
-                              }}
-                            }})();
-                            """
+                            f"window.__gkrpPlotlyDownload && window.__gkrpPlotlyDownload({chart_id}, 'jpeg', 'analytics_chart_finds');"
                         ),
                     )
                     ui.button(
@@ -307,17 +291,7 @@ def page_analytics_chart_finds() -> None:
                     )
 
         ui.run_javascript(
-            f"""
-            setTimeout(() => {{
-              const el = document.getElementById({json.dumps(chart_id)});
-              if (!el) return;
-              const gd = el.querySelector('.js-plotly-plot') || el;
-              if (window.Plotly && gd) {{
-                Plotly.Plots.resize(gd);
-                Plotly.redraw(gd);
-              }}
-            }}, 50);
-            """
+            f"setTimeout(() => window.__gkrpPlotlyResize({chart_id}), 50);"
         )
 
     def _build_figure(

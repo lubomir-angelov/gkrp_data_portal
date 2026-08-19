@@ -6,6 +6,7 @@ from datetime import date
 
 
 from gkrp_data_portal.ui.pages.analytics_common import (
+    PLOTLY_EXPORT_JS,
     QUERY_OPTIONS,
     build_histogram,
     build_histogram_series,
@@ -293,6 +294,27 @@ class TestBuildHistogramSeries:
         assert _column_to_label("o_primary") == LOCALE["frag_primary"]
         assert _column_to_label("l_site") == LOCALE["label_site"]
         assert _column_to_label("unknown_col") == "unknown_col"
+
+
+class TestPlotlyExportJs:
+    """Regression: chart download buttons silently no-op unless the JS
+    targets the "c"-prefixed element DOM id and loads Plotly from the
+    "nicegui-plotly" ES module (window.Plotly is never set by NiceGUI)."""
+
+    def test_uses_c_prefixed_dom_id(self):
+        assert "getElementById('c' + id)" in PLOTLY_EXPORT_JS
+
+    def test_resolves_plotly_via_esm_module(self):
+        assert "import('nicegui-plotly')" in PLOTLY_EXPORT_JS
+
+    def test_exposes_helper_functions(self):
+        for name in (
+            "window.__gkrpPlotly",
+            "window.__gkrpPlotlyEl",
+            "window.__gkrpPlotlyDownload",
+            "window.__gkrpPlotlyResize",
+        ):
+            assert name in PLOTLY_EXPORT_JS
 
 
 class TestPlotlyGroupedBar:
