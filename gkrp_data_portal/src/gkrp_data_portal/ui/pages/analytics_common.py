@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Optional
 
+from nicegui import ui
+
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
     AnalyticsResult,
@@ -490,6 +492,37 @@ DEFAULT_LIMIT = 500
 
 TABLE_MAX_LIMIT = 100000  # table UI cap
 CHART_MAX_FETCH = 25000  # chart safety cap (top-N buckets don't benefit from >25k rows)
+
+# Client-side helpers for Plotly image export / resize.
+# NiceGUI loads plotly.js as an ES module ("nicegui-plotly") that is never
+# attached to window, and element DOM ids are prefixed with "c".
+PLOTLY_EXPORT_JS = """
+window.__gkrpPlotly = () =>
+  import('nicegui-plotly').then((m) => (window.Plotly = m.Plotly));
+window.__gkrpPlotlyEl = (id) => {
+  const el = document.getElementById('c' + id);
+  return el ? (el.querySelector('.js-plotly-plot') || el) : null;
+};
+window.__gkrpPlotlyDownload = (id, format, filename) =>
+  window.__gkrpPlotly().then((P) => {
+    const gd = window.__gkrpPlotlyEl(id);
+    if (gd) P.downloadImage(gd, { format, filename, height: 650, width: 1100 });
+  }).catch(() => {});
+window.__gkrpPlotlyResize = (id) =>
+  window.__gkrpPlotly().then((P) => {
+    const gd = window.__gkrpPlotlyEl(id);
+    if (gd) { P.Plots.resize(gd); P.redraw(gd); }
+  }).catch(() => {});
+"""
+
+
+def register_plotly_export_js() -> None:
+    """Expose client-side helpers for Plotly chart image export and resize.
+
+    Must run on the same client before the download/resize callbacks fire.
+    The module import is cached by the browser, so repeat calls are cheap.
+    """
+    ui.run_javascript(PLOTLY_EXPORT_JS)
 
 
 _UI_HIDDEN_COLUMNS = frozenset(
