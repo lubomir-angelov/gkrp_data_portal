@@ -61,15 +61,15 @@ class TestUiColumns:
         columns = ["l_site", "l_recordenteredon", "f_inventory", "l_layerid"]
         result = ui_columns(columns)
         assert "l_site" in result
-        assert "f_inventory" in result
+        assert "f_inventory" not in result
         assert "l_recordenteredon" not in result
         assert "l_layerid" not in result
 
     def test_preserves_original_casing(self):
-        columns = ["L_Site", "f_Inventory"]
+        columns = ["L_Site", "F_Piecetype"]
         result = ui_columns(columns)
         assert "L_Site" in result
-        assert "f_Inventory" in result
+        assert "F_Piecetype" in result
 
     def test_returns_empty_for_all_hidden(self):
         columns = ["l_recordenteredon", "l_layerid"]

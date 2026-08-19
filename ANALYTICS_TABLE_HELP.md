@@ -12,7 +12,7 @@
 1. Изберете **Predefined Query** от падащото меню:
    - **Филтър #2 (Пластове + Фрагменти + Орнаменти)** — основен запитване с пълна информация за слоеве, фрагменти и орнаменти
    - **Археологически находки (finds)** — за археологически обекти (монети, предмети)
-2. Приложете филтри от лявата панел (Site, Sector, Square, Layer)
+2. Приложете филтри от лявата панел (Site, Sector, Square, Layer) — само за **Филтър #2**; за археологически находки местоположението се филтрира по колоните `fi_sector`, `fi_square`, `fi_layer_mechanical` в самата таблица
 3. При необходимост променете **Limit** (по подразбиране: 500, макс: 100,000)
 4. Натиснете **Run query**
 
@@ -123,6 +123,9 @@
 | fi_depth_m | Дълбочина (м) |
 | fi_inv_no | Инв. бр. |
 | fi_context | Контекст |
+| fi_sector | Сектор (от таблица finds) |
+| fi_square | Квадрат (от таблица finds) |
+| fi_layer_mechanical | Пласт (от таблица finds) |
 
 ---
 
@@ -181,6 +184,8 @@
 
 ### finds_arch (Археологически находки)
 
-**Видими колони (17):** fi_findid, fi_year, fi_inv_no, fi_date_found, fi_find_type, fi_material, fi_description, fi_coin, fi_denomination, fi_mint, fi_dimensions_cm, fi_preservation_grade, fi_weight_g, fi_sector, fi_square, fi_context, fi_depth_m
+Местоположението идва от самата таблица finds (koloni `sector`, `square`, `layer_mechanical`) — няма връзка с tbllayers.
 
-**Скрити колони (21):** fi_layerid, fi_year_inv_no, fi_cat_no, fi_museum_inv, fi_reper, fi_layer_mechanical, fi_drawing, fi_photo, fi_drw_link, fi_extra_field, fi_recordenteredby, fi_recordenteredon, fi_recordcreatedby, fi_recordcreatedon — вътрешни FK, нишови полета, служебни данни; fi_coord_north_m, fi_coord_east_m — координати без връзка с таблица layers; fi_stratigraphic_level — стратиграфско ниво без връзка с таблица layers; fi_baltic, fi_reper_baltic, fi_reper_e_coord, fi_reper_n_coord — референтни координати
+**Видими колони (18):** fi_findid, fi_year, fi_inv_no, fi_date_found, fi_find_type, fi_material, fi_description, fi_coin, fi_denomination, fi_mint, fi_dimensions_cm, fi_preservation_grade, fi_weight_g, fi_sector, fi_square, fi_layer_mechanical, fi_context, fi_depth_m
+
+**Скрити колони (20):** fi_layerid, fi_year_inv_no, fi_cat_no, fi_museum_inv, fi_reper, fi_drawing, fi_photo, fi_drw_link, fi_extra_field, fi_recordenteredby, fi_recordenteredon, fi_recordcreatedby, fi_recordcreatedon — вътрешни FK, нишови полета, служебни данни; fi_coord_north_m, fi_coord_east_m — координати; fi_stratigraphic_level — стратиграфско ниво; fi_baltic, fi_reper_baltic, fi_reper_e_coord, fi_reper_n_coord — референтни координати

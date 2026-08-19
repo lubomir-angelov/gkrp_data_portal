@@ -284,10 +284,6 @@ def page_analytics_table() -> None:
         ui_cols: list[str] = state.get("last_columns", [])
         query_id: str = state.get("query_id", "q2")
 
-        # Hide l_* columns for finds_arch (no layer relationship)
-        if query_id == "finds_arch":
-            ui_cols = [c for c in ui_cols if not c.startswith("l_")]
-
         _set_grid(items, ui_cols, query_id)
 
         dbg.set_text(
@@ -418,11 +414,14 @@ def page_analytics_table() -> None:
         """Read current filter widgets and normalize the filter payload."""
         query_id = QUERY_OPTIONS.get(sel_query.value, "q2")
 
-        layer_filters_map: dict[str, list[str] | None] = {}
-        layer_filters_map["Site"] = _select_to_list(sel_site_t)
-        layer_filters_map["Sector"] = _select_to_list(sel_sector_t)
-        layer_filters_map["Square"] = _select_to_list(sel_square_t)
-        layer_filters_map["Layer"] = _select_to_list(sel_layer_t)
+        if query_id == "finds_arch":
+            layer_filters_map: dict[str, list[str] | None] | None = None
+        else:
+            layer_filters_map = {}
+            layer_filters_map["Site"] = _select_to_list(sel_site_t)
+            layer_filters_map["Sector"] = _select_to_list(sel_sector_t)
+            layer_filters_map["Square"] = _select_to_list(sel_square_t)
+            layer_filters_map["Layer"] = _select_to_list(sel_layer_t)
 
         limit_raw = inp_limit.value
         if limit_raw == "max":
@@ -454,8 +453,11 @@ def page_analytics_table() -> None:
             layer_filters_area.visible = qid != "finds_arch"
             layer_filters_area.update()
 
-            _fetch_layer_cache()
-            _populate_layer_options_hierarchical()
+            # finds location filters come from finds columns (fi_sector/fi_square/
+            # fi_layer_mechanical in the grid), not the layers table
+            if qid != "finds_arch":
+                _fetch_layer_cache()
+                _populate_layer_options_hierarchical()
 
             f = _read_filters()
 
