@@ -535,6 +535,10 @@ _DISTINCT_COL_DEFS: list[tuple[str, str, tuple[str, ...]]] = [
     ("Inv No", "fi.inv_no", ("finds_arch",)),
     ("Depth", "fi.depth_m", ("finds_arch",)),
     ("Context", "fi.context", ("finds_arch",)),
+    # finds table location columns
+    ("Sector", "fi.sector", ("finds_arch",)),
+    ("Square", "fi.square", ("finds_arch",)),
+    ("Layer", "fi.layer_mechanical", ("finds_arch",)),
 ]
 
 
@@ -603,7 +607,7 @@ def get_distinct_values(
             "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
         )
     elif query_id == "finds_arch":
-        base = "FROM finds fi LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
+        base = "FROM finds fi"
     else:
         return {}
 
@@ -647,67 +651,6 @@ def get_distinct_values(
     return result
 
 
-def get_distinct_values_for_field(
-    db: Session,
-    *,
-    query_id: str,
-    field: str,
-    site: Optional[str] = None,
-    sector: Optional[str] = None,
-    square: Optional[str] = None,
-) -> list[str]:
-    """Return DISTINCT values for a single layer field, filtered by parent selections.
-
-    Hierarchy: Site -> Sector -> Square -> Layer
-    Each level is filtered by the values selected above it.
-    """
-    if query_id == "q2":
-        base = (
-            "FROM tbllayers l "
-            "INNER JOIN tblfragments f ON l.layerid = f.locationid "
-            "INNER JOIN tblornaments o ON f.fragmentid = o.fragmentid"
-        )
-    elif query_id == "finds":
-        base = (
-            "FROM tblfinds fi "
-            "INNER JOIN tbllayers l ON l.layerid = fi.layerid "
-            "LEFT JOIN tblfragments f ON f.fragmentid = fi.fragmentid "
-            "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
-        )
-    elif query_id == "finds_arch":
-        base = "FROM finds fi LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
-    else:
-        return []
-
-    clauses: list[str] = []
-    params: dict[str, Any] = {}
-
-    if site:
-        clauses.append("l.sector ILIKE :site")
-        params["site"] = f"%{site}%"
-    if sector:
-        clauses.append("l.square ILIKE :sector")
-        params["sector"] = f"%{sector}%"
-    if square:
-        clauses.append("l.layer ILIKE :square")
-        params["square"] = f"%{square}%"
-
-    col_map = {
-        "Site": "l.sector",
-        "Sector": "l.square",
-        "Square": "l.layer",
-        "Layer": "l.layer",
-    }
-    col_expr = col_map.get(field)
-    if not col_expr:
-        return []
-
-    where = "WHERE " + " AND ".join(clauses) if clauses else "WHERE 1=1"
-    sql = f"SELECT DISTINCT {col_expr}::text AS v {base} {where} AND {col_expr} IS NOT NULL ORDER BY v"
-    rows = db.execute(text(sql), params).mappings().all()
-    return [r["v"] for r in rows if r["v"]]
-
-
 def get_layer_hierarchy(
     db: Session,
     *,
@@ -740,16 +683,11 @@ def get_layer_hierarchy(
             "LEFT JOIN tblfragments f ON f.fragmentid = fi.fragmentid "
             "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
         )
-    elif query_id == "finds_arch":
-        base = "FROM finds fi LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
     else:
         return {}
 
     # Fetch all combinations in one query
-    if query_id == "finds_arch":
-        id_col = "fi.findid"
-    else:
-        id_col = "l.layerid"
+    id_col = "l.layerid"
     sql = f"""
         SELECT DISTINCT l.site, l.sector, l.square, l.layer, {id_col}
         {base}
@@ -815,16 +753,13 @@ def query_finds_archaeology(
     frag_filters: Optional[dict[str, Any]] = None,
     layer_filters: Optional[dict[str, Any]] = None,
 ) -> AnalyticsResult:
-    """Archaeological finds: finds table with optional layer join."""
-    select_cols = _model_select_list("fi_", "fi", Find) + _model_select_list(
-        "l_", "l", Tbllayer
-    )
+    """Archaeological finds: finds table only (location = fi.sector/square/layer_mechanical)."""
+    select_cols = _model_select_list("fi_", "fi", Find)
 
     base = f"""
     SELECT
       {", ".join(select_cols)}
     FROM finds fi
-    LEFT JOIN tbllayers l ON l.layerid = fi.layerid
     """
 
     where_sql, params = _build_where_finds(
@@ -869,12 +804,11 @@ def _build_where_finds(
     params: dict[str, Any] = {}
 
     if layer_filters:
-        # For finds_arch, map layer filters to finds table columns
+        # finds table location columns (finds has no site column)
         label_to_col: dict[str, str] = {
-            "Site": "fi.sector",
-            "Sector": "fi.square",
-            "Square": "fi.layer_mechanical",
-            "Layer": "fi.context",
+            "Sector": "fi.sector",
+            "Square": "fi.square",
+            "Layer": "fi.layer_mechanical",
         }
         for label, values in layer_filters.items():
             col = label_to_col.get(label)
@@ -899,14 +833,12 @@ def _build_where_finds(
                 params[param_name] = f"%{values.strip()}%"
                 clauses.append(f"{col_expr} ILIKE :{param_name}")
     else:
-        if site:
-            clauses.append("fi.sector ILIKE :site")
-            params["site"] = f"%{site}%"
+        # legacy site param has no finds column; ignore it
         if sector:
-            clauses.append("fi.square ILIKE :sector")
+            clauses.append("fi.sector ILIKE :sector")
             params["sector"] = f"%{sector}%"
         if square:
-            clauses.append("fi.layer_mechanical ILIKE :square")
+            clauses.append("fi.square ILIKE :square")
             params["square"] = f"%{square}%"
 
     if date_from:
@@ -972,12 +904,11 @@ _CHART_SUBQUERIES: dict[str, str] = {
     ),
     "finds_arch": (
         "SELECT "
-        "  l.site, l.sector, l.square, l.layer, "
+        "  fi.sector, fi.square, fi.layer_mechanical, "
         "  fi.find_type, fi.material, fi.coin, fi.denomination, fi.mint, "
         "  fi.year, fi.inv_no, fi.depth_m, fi.context, "
         "  fi.findid, fi.description "
-        "FROM finds fi "
-        "LEFT JOIN tbllayers l ON l.layerid = fi.layerid"
+        "FROM finds fi"
     ),
 }
 
@@ -1030,12 +961,21 @@ def build_chart_histogram(
     params: dict[str, Any] = {}
 
     # Layer filters: map label -> subquery column name
-    _LAYER_COL_MAP: dict[str, str] = {
-        "Site": "site",
-        "Sector": "sector",
-        "Square": "square",
-        "Layer": "layer",
-    }
+    # finds has no site column; its layer column is layer_mechanical
+    _LAYER_COL_MAP: dict[str, str] = (
+        {
+            "Sector": "sector",
+            "Square": "square",
+            "Layer": "layer_mechanical",
+        }
+        if query_id == "finds_arch"
+        else {
+            "Site": "site",
+            "Sector": "sector",
+            "Square": "square",
+            "Layer": "layer",
+        }
+    )
     if layer_filters:
         for label, values in layer_filters.items():
             col = _LAYER_COL_MAP.get(label)
@@ -1057,15 +997,17 @@ def build_chart_histogram(
                 params[param_name] = f"%{values.strip()}%"
                 clauses.append(f"{col_expr} ILIKE :{param_name}")
     else:
-        if site:
-            clauses.append("site ILIKE :site")
-            params["site"] = f"%{site}%"
-        if sector:
-            clauses.append("sector ILIKE :sector")
-            params["sector"] = f"%{sector}%"
-        if square:
-            clauses.append("square ILIKE :square")
-            params["square"] = f"%{square}%"
+        # finds has no site column in the subquery; ignore legacy site param
+        legacy_cols: dict[str, str | None] = {
+            "site": None if query_id == "finds_arch" else "site",
+            "sector": "sector",
+            "square": "square",
+        }
+        for name, value in (("site", site), ("sector", sector), ("square", square)):
+            col = legacy_cols[name]
+            if value and col:
+                clauses.append(f"{col} ILIKE :{name}")
+                params[name] = f"%{value}%"
 
     if date_from:
         clauses.append("recordenteredon >= :date_from")

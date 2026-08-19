@@ -57,11 +57,6 @@ def page_analytics_chart_finds() -> None:
         "query_id": "finds_arch",
         "_refreshing": False,
         "_suppress_x_change": False,
-        "_hierarchy": {},
-        "_all_sites": [],
-        "_all_sectors": [],
-        "_all_squares": [],
-        "_all_layers": [],
     }
 
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
@@ -345,12 +340,9 @@ def page_analytics_chart_finds() -> None:
 
         return {
             "query_id": "finds_arch",
-            "layer_filters": {
-                "Site": None,
-                "Sector": None,
-                "Square": None,
-                "Layer": None,
-            },
+            # location comes from finds columns (fi_sector/fi_square/fi_layer_mechanical),
+            # no layers-table filters on this page
+            "layer_filters": None,
             "limit": limit,
             "offset": 0,
             "frag_filters": frag_filters_map,
@@ -393,7 +385,7 @@ def page_analytics_chart_finds() -> None:
             groupby_cols = [
                 "fi_find_type", "fi_material", "fi_coin", "fi_denomination",
                 "fi_mint", "fi_year", "fi_depth_m", "fi_context",
-                "l_site", "l_sector", "l_square", "l_layer",
+                "fi_sector", "fi_square", "fi_layer_mechanical",
             ]
 
             sel_x.options = groupby_cols
@@ -402,9 +394,8 @@ def page_analytics_chart_finds() -> None:
             sel_series.update()
 
             if not sel_x.value or sel_x.value not in groupby_cols:
-                default_x = next((c for c in ["fi_find_type", "fi_material", "fi_coin", "fi_denomination", "fi_mint", "fi_year", "fi_depth_m", "fi_context", "l_site", "l_sector", "l_square", "l_layer"] if c in groupby_cols), None) or (groupby_cols[0] if groupby_cols else None)
                 state["_suppress_x_change"] = True
-                sel_x.set_value(default_x)
+                sel_x.set_value(groupby_cols[0] if groupby_cols else None)
                 state["_suppress_x_change"] = False
 
             x_key = sel_x.value

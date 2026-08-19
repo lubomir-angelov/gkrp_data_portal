@@ -605,7 +605,6 @@ _UI_HIDDEN_COLUMNS = frozenset(
         "fi_cat_no",
         "fi_museum_inv",
         "fi_reper",
-        "fi_layer_mechanical",
         "fi_drawing",
         "fi_photo",
         "fi_drw_link",
@@ -705,6 +704,10 @@ _COLUMN_LABEL_KEYS: dict[str, str] = {
     "l_sector": "label_sector",
     "l_square": "label_square",
     "l_layer": "label_layer",
+    # finds table location columns
+    "fi_sector": "label_sector",
+    "fi_square": "label_square",
+    "fi_layer_mechanical": "label_layer",
 }
 
 
