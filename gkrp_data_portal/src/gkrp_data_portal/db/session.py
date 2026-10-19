@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import logging
 from contextlib import contextmanager
 from typing import Iterator, Optional
 
+from loguru import logger
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from gkrp_data_portal.core.settings import get_database_url
-
-logger = logging.getLogger(__name__)
 
 
 def create_engine_from_env() -> Engine:
@@ -31,19 +29,9 @@ def init_db() -> None:
     if ENGINE is not None and SessionLocal is not None:
         return
     ENGINE = create_engine_from_env()
-    SessionLocal = sessionmaker(bind=ENGINE, autocommit=False, autoflush=False, expire_on_commit=False)
-
-
-def get_session() -> Iterator[Session]:
-    """Yield a database session (FastAPI dependency style)."""
-    if SessionLocal is None:
-        init_db()
-    assert SessionLocal is not None
-    db: Session = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    SessionLocal = sessionmaker(
+        bind=ENGINE, autocommit=False, autoflush=False, expire_on_commit=False
+    )
 
 
 @contextmanager

@@ -1,7 +1,7 @@
 """Analytics repository: predefined queries + safe filtering.
 
-Implements the two predefined queries (layers+fragments; layers+fragments+ornaments)
-and a third selector for finds (tblfinds).
+Implements the predefined queries: layers+fragments+ornaments (q2), tblfinds
+(finds) and the archaeological finds table (finds_arch).
 
 All result columns are prefixed to avoid collisions:
 - l_<col> for tbllayers
@@ -12,6 +12,7 @@ All result columns are prefixed to avoid collisions:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Optional
@@ -43,6 +44,93 @@ def _model_select_list(prefix: str, alias: str, model) -> list[str]:
     return cols
 
 
+# Canonical UI-label -> bare column-name maps. Filter widgets on the pages,
+# DISTINCT dropdowns, group-by columns and the chart WHERE clause all derive
+# from these keys; tests/test_analytics_columns.py checks that every chart
+# subquery projects every mapped column. Dict order is the UI/DISTINCT order.
+LAYER_FILTER_COLS: dict[str, str] = {
+    "Site": "site",
+    "Sector": "sector",
+    "Square": "square",
+    "Layer": "layer",
+}
+# finds has no site column; its location columns live on the finds table itself
+FINDS_LOCATION_FILTER_COLS: dict[str, str] = {
+    "Sector": "sector",
+    "Square": "square",
+    "Layer": "layer_mechanical",
+}
+FRAGMENT_FILTER_COLS: dict[str, str] = {
+    "Piecetype": "piecetype",
+    "Technology": "technology",
+    "Baking": "baking",
+    "Color / Primary color": "primarycolor",
+    "Covering": "covering",
+    "Surface": "surface",
+    "Wall thickness": "wallthickness",
+    "Handle type": "handletype",
+    "Handle size": "handlesize",
+    "Bottom type": "bottomtype",
+    "Category": "category",
+    "Form": "form",
+    "Type": "type",
+    "Subtype": "subtype",
+    "Variant": "variant",
+}
+ORNAMENT_FILTER_COLS: dict[str, str] = {
+    "Primary": "primary_",
+    "Secondary": "secondary",
+    "Tertiary": "tertiary",
+    "Quarternary": "quarternary",
+    "Color / color1": "color1",
+    "Encrust color": "encrustcolor1",
+}
+ARCH_FILTER_COLS: dict[str, str] = {
+    "Find Type": "find_type",
+    "Material": "material",
+    "Coin": "coin",
+    "Denomination": "denomination",
+    "Mint": "mint",
+    "Year": "year",
+    "Inv No": "inv_no",
+    "Depth": "depth_m",
+    "Context": "context",
+}
+
+
+def _qualified(alias: str, cols: Mapping[str, str]) -> dict[str, str]:
+    """Prefix every bare column in *cols* with the SQL table alias."""
+    return {label: f"{alias}.{col}" for label, col in cols.items()}
+
+
+def _add_ilike_filters(
+    clauses: list[str],
+    params: dict[str, Any],
+    *,
+    param_prefix: str,
+    label_to_col: Mapping[str, str],
+    filters: Mapping[str, Any],
+) -> None:
+    """Append one ILIKE clause per non-empty filter; list values are OR-ed.
+
+    Bind names derive from the bare column name (always a valid SQL bind
+    identifier). An unknown label raises ``KeyError``.
+    """
+    for label, values in filters.items():
+        col = label_to_col[label]
+        col_expr = f"{col}::text"
+        param_name = f"{param_prefix}_{col.rsplit('.', 1)[-1]}"
+        if isinstance(values, list) and values:
+            names = [f"{param_name}_{i}" for i in range(len(values))]
+            clauses.append(
+                "(" + " OR ".join(f"{col_expr} ILIKE :{n}" for n in names) + ")"
+            )
+            params.update({n: f"%{v}%" for n, v in zip(names, values)})
+        elif isinstance(values, str) and values.strip():
+            params[param_name] = f"%{values.strip()}%"
+            clauses.append(f"{col_expr} ILIKE :{param_name}")
+
+
 def _apply_frag_filters(
     clauses: list[str],
     params: dict[str, Any],
@@ -50,53 +138,17 @@ def _apply_frag_filters(
     frag_alias: str = "f",
     orn_alias: str = "o",
 ) -> None:
-    """Apply fragment field filters from the UI dropdowns.
-
-    Maps UI labels to SQL column references using the given aliases.
-    Multi-select uses ANY/ILIKE; single text inputs use ILIKE.
-    """
-    label_to_col: dict[str, str] = {
-        "Piecetype": f"{frag_alias}.piecetype",
-        "Technology": f"{frag_alias}.technology",
-        "Baking": f"{frag_alias}.baking",
-        "Color / Primary color": f"{frag_alias}.primarycolor",
-        "Covering": f"{frag_alias}.covering",
-        "Surface": f"{frag_alias}.surface",
-        "Wall thickness": f"{frag_alias}.wallthickness",
-        "Handle type": f"{frag_alias}.handletype",
-        "Handle size": f"{frag_alias}.handlesize",
-        "Bottom type": f"{frag_alias}.bottomtype",
-        "Category": f"{frag_alias}.category",
-        "Form": f"{frag_alias}.form",
-        "Type": f"{frag_alias}.type",
-        "Subtype": f"{frag_alias}.subtype",
-        "Variant": f"{frag_alias}.variant",
-        "Primary": f"{orn_alias}.primary_",
-        "Secondary": f"{orn_alias}.secondary",
-        "Tertiary": f"{orn_alias}.tertiary",
-        "Quarternary": f"{orn_alias}.quarternary",
-        "Color / color1": f"{orn_alias}.color1",
-        "Encrust color": f"{orn_alias}.encrustcolor1",
-    }
-    for label, values in frag_filters.items():
-        col = label_to_col.get(label)
-        if not col:
-            continue
-        col_expr = f"{col}::text"
-        safe_label = label.replace(" ", "_")
-        if isinstance(values, list) and values:
-            param_name = f"frag_{safe_label}"
-            params[param_name] = values
-            conditions = " OR ".join(
-                [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
-            )
-            clauses.append(f"({conditions})")
-            for i, v in enumerate(values):
-                params[f"{param_name}_{i}"] = f"%{v}%"
-        elif isinstance(values, str) and values.strip():
-            param_name = f"frag_{safe_label}"
-            params[param_name] = f"%{values.strip()}%"
-            clauses.append(f"{col_expr} ILIKE :{param_name}")
+    """Apply fragment + ornament field filters from the UI dropdowns."""
+    _add_ilike_filters(
+        clauses,
+        params,
+        param_prefix="frag",
+        label_to_col={
+            **_qualified(frag_alias, FRAGMENT_FILTER_COLS),
+            **_qualified(orn_alias, ORNAMENT_FILTER_COLS),
+        },
+        filters=frag_filters,
+    )
 
 
 def _apply_arch_filters(
@@ -104,41 +156,14 @@ def _apply_arch_filters(
     params: dict[str, Any],
     arch_filters: dict[str, Any],
 ) -> None:
-    """Apply archaeological finds field filters from the UI dropdowns.
-
-    Maps UI labels to SQL column references using the 'fi' alias.
-    Multi-select uses ILIKE with OR; single text inputs use ILIKE.
-    """
-    label_to_col: dict[str, str] = {
-        "Find Type": "fi.find_type",
-        "Material": "fi.material",
-        "Coin": "fi.coin",
-        "Denomination": "fi.denomination",
-        "Mint": "fi.mint",
-        "Year": "fi.year",
-        "Inv No": "fi.inv_no",
-        "Depth": "fi.depth_m",
-        "Context": "fi.context",
-    }
-    for label, values in arch_filters.items():
-        col = label_to_col.get(label)
-        if not col:
-            continue
-        col_expr = f"{col}::text"
-        safe_label = label.replace(" ", "_")
-        if isinstance(values, list) and values:
-            param_name = f"arch_{safe_label}"
-            params[param_name] = values
-            conditions = " OR ".join(
-                [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
-            )
-            clauses.append(f"({conditions})")
-            for i, v in enumerate(values):
-                params[f"{param_name}_{i}"] = f"%{v}%"
-        elif isinstance(values, str) and values.strip():
-            param_name = f"arch_{safe_label}"
-            params[param_name] = f"%{values.strip()}%"
-            clauses.append(f"{col_expr} ILIKE :{param_name}")
+    """Apply archaeological finds field filters (``fi`` alias)."""
+    _add_ilike_filters(
+        clauses,
+        params,
+        param_prefix="arch",
+        label_to_col=_qualified("fi", ARCH_FILTER_COLS),
+        filters=arch_filters,
+    )
 
 
 def _apply_layer_filters(
@@ -147,36 +172,14 @@ def _apply_layer_filters(
     layer_filters: dict[str, Any],
     layer_alias: str = "l",
 ) -> None:
-    """Apply layer field filters from the UI dropdowns.
-
-    Maps UI labels to SQL column references using the given alias.
-    Multi-select uses ANY/ILIKE; single text inputs use ILIKE.
-    """
-    label_to_col: dict[str, str] = {
-        "Site": f"{layer_alias}.site",
-        "Sector": f"{layer_alias}.sector",
-        "Square": f"{layer_alias}.square",
-        "Layer": f"{layer_alias}.layer",
-    }
-    for label, values in layer_filters.items():
-        col = label_to_col.get(label)
-        if not col:
-            continue
-        col_expr = f"{col}::text"
-        safe_label = label.replace(" ", "_")
-        if isinstance(values, list) and values:
-            param_name = f"layer_{safe_label}"
-            params[param_name] = values
-            conditions = " OR ".join(
-                [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
-            )
-            clauses.append(f"({conditions})")
-            for i, v in enumerate(values):
-                params[f"{param_name}_{i}"] = f"%{v}%"
-        elif isinstance(values, str) and values.strip():
-            param_name = f"layer_{safe_label}"
-            params[param_name] = f"%{values.strip()}%"
-            clauses.append(f"{col_expr} ILIKE :{param_name}")
+    """Apply layer field filters from the UI dropdowns."""
+    _add_ilike_filters(
+        clauses,
+        params,
+        param_prefix="layer",
+        label_to_col=_qualified(layer_alias, LAYER_FILTER_COLS),
+        filters=layer_filters,
+    )
 
 
 def _build_where(
@@ -222,7 +225,7 @@ def _build_where(
     # Free-text: differs slightly by query (which aliases exist)
     if q:
         params["q"] = f"%{q}%"
-        if query_id in ("q1", "q2"):
+        if query_id == "q2":
             clauses.append(
                 "(COALESCE(f.inventory,'') ILIKE :q OR COALESCE(f.note,'') ILIKE :q OR COALESCE(f.piecetype::text,'') ILIKE :q)"
             )
@@ -262,56 +265,6 @@ def _run_sql(
 def _count_sql(db: Session, *, count_sql: str, params: dict[str, Any]) -> int:
     row = db.execute(text(count_sql), params).scalar_one()
     return int(row)
-
-
-def query_q1_layers_fragments(
-    db: Session,
-    *,
-    site: Optional[str] = None,
-    sector: Optional[str] = None,
-    square: Optional[str] = None,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
-    q: Optional[str] = None,
-    limit: int = 500,
-    offset: int = 0,
-    frag_filters: Optional[dict[str, Any]] = None,
-    layer_filters: Optional[dict[str, Any]] = None,
-) -> AnalyticsResult:
-    """Filter #1: tbllayers INNER JOIN tblfragments (no ornaments)."""
-    select_cols = _model_select_list("l_", "l", Tbllayer) + _model_select_list(
-        "f_", "f", Tblfragment
-    )
-    base = f"""
-    SELECT
-      {", ".join(select_cols)}
-    FROM tbllayers l
-    INNER JOIN tblfragments f ON l.layerid = f.locationid
-    """
-
-    where_sql, params = _build_where(
-        query_id="q1",
-        site=site,
-        sector=sector,
-        square=square,
-        date_from=date_from,
-        date_to=date_to,
-        q=q,
-        frag_filters=frag_filters,
-        layer_filters=layer_filters,
-    )
-
-    sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC"
-    count_sql = f"SELECT COALESCE(SUM(f_count), 0) FROM ({base}\n{where_sql}) x"
-
-    rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
-    total = _count_sql(db, count_sql=count_sql, params=params)
-
-    items = [dict(r) for r in rows]
-    columns = (
-        list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
-    )
-    return AnalyticsResult(items=items, total=total, columns=columns)
 
 
 def query_q2_layers_fragments_ornaments(
@@ -473,83 +426,33 @@ def query_finds(
 
     items = [dict(r) for r in rows]
     columns = (
-        list(items[0].keys())
-        if items
-        else [c.split(" AS ")[-1] for c in select_cols]
+        list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
     )
     return AnalyticsResult(items=items, total=total, columns=columns)
 
 
-def extract_image_urls(items: list[dict[str, Any]]) -> list[str]:
-    """Collect unique image URLs from fragments/finds columns if present."""
-    urls: list[str] = []
-    seen: set[str] = set()
-
-    for r in items:
-        for key in ("f_image_url", "fi_image_url"):
-            v = r.get(key)
-            if isinstance(v, str) and v.strip():
-                if v not in seen:
-                    seen.add(v)
-                    urls.append(v)
-
-    return urls
-
-
 # Column definitions for DISTINCT queries: (label, sql_col_expr, query_ids)
-_DISTINCT_COL_DEFS: list[tuple[str, str, tuple[str, ...]]] = [
-    ("Site", "l.site", ("q2", "finds")),
-    ("Sector", "l.sector", ("q2", "finds")),
-    ("Square", "l.square", ("q2", "finds")),
-    ("Layer", "l.layer", ("q2", "finds")),
-    ("Piecetype", "f.piecetype", ("q2",)),
-    ("Technology", "f.technology", ("q2",)),
-    ("Baking", "f.baking", ("q2",)),
-    ("Color / Primary color", "f.primarycolor", ("q2",)),
-    ("Covering", "f.covering", ("q2",)),
-    ("Surface", "f.surface", ("q2",)),
-    ("Wall thickness", "f.wallthickness", ("q2",)),
-    ("Handle type", "f.handletype", ("q2",)),
-    ("Handle size", "f.handlesize", ("q2",)),
-    ("Bottom type", "f.bottomtype", ("q2",)),
-    ("Category", "f.category", ("q2",)),
-    ("Form", "f.form", ("q2",)),
-    ("Type", "f.type", ("q2",)),
-    ("Subtype", "f.subtype", ("q2",)),
-    ("Variant", "f.variant", ("q2",)),
-    ("Note", "f.note", ("q2",)),
-    ("Inventory", "f.inventory", ("q2",)),
-    ("Primary", "o.primary_", ("q2",)),
-    ("Secondary", "o.secondary", ("q2",)),
-    ("Tertiary", "o.tertiary", ("q2",)),
-    ("Quarternary", "o.quarternary", ("q2",)),
-    ("Color / color1", "o.color1", ("q2",)),
-    ("Encrust color", "o.encrustcolor1", ("q2",)),
-    # Archaeological finds columns
-    ("Find Type", "fi.find_type", ("finds_arch",)),
-    ("Material", "fi.material", ("finds_arch",)),
-    ("Coin", "fi.coin", ("finds_arch",)),
-    ("Denomination", "fi.denomination", ("finds_arch",)),
-    ("Mint", "fi.mint", ("finds_arch",)),
-    ("Year", "fi.year", ("finds_arch",)),
-    ("Inv No", "fi.inv_no", ("finds_arch",)),
-    ("Depth", "fi.depth_m", ("finds_arch",)),
-    ("Context", "fi.context", ("finds_arch",)),
-    # finds table location columns
-    ("Sector", "fi.sector", ("finds_arch",)),
-    ("Square", "fi.square", ("finds_arch",)),
-    ("Layer", "fi.layer_mechanical", ("finds_arch",)),
-]
+_DISTINCT_COL_DEFS: list[tuple[str, str, tuple[str, ...]]] = (
+    [(lbl, f"l.{c}", ("q2", "finds")) for lbl, c in LAYER_FILTER_COLS.items()]
+    + [(lbl, f"f.{c}", ("q2",)) for lbl, c in FRAGMENT_FILTER_COLS.items()]
+    + [("Note", "f.note", ("q2",)), ("Inventory", "f.inventory", ("q2",))]
+    + [(lbl, f"o.{c}", ("q2",)) for lbl, c in ORNAMENT_FILTER_COLS.items()]
+    + [(lbl, f"fi.{c}", ("finds_arch",)) for lbl, c in ARCH_FILTER_COLS.items()]
+    + [
+        (lbl, f"fi.{c}", ("finds_arch",))
+        for lbl, c in FINDS_LOCATION_FILTER_COLS.items()
+    ]
+)
 
 
 # Reverse mapping: prefixed result column name -> SQL col expression
-# e.g. "l_site" -> "l.site", "f_piecetype" -> "f.piecetype", "o_primary" -> "o.primary_"
+# e.g. "l_site" -> "l.site", "f_piecetype" -> "f.piecetype", "o_primary_" -> "o.primary_"
 def _build_col_expr_lookup() -> dict[str, str]:
     """Build {prefixed_col_name: sql_expr} from _DISTINCT_COL_DEFS."""
     lookup: dict[str, str] = {}
     for _label, sql_expr, _qids in _DISTINCT_COL_DEFS:
         # sql_expr is like "l.site" -> prefixed is "l_site"
-        # sql_expr is like "o.primary_" -> prefixed is "o_primary"
+        # sql_expr is like "o.primary_" -> prefixed is "o_primary_"
         parts = sql_expr.split(".", 1)
         if len(parts) == 2:
             alias, col = parts
@@ -804,34 +707,13 @@ def _build_where_finds(
     params: dict[str, Any] = {}
 
     if layer_filters:
-        # finds table location columns (finds has no site column)
-        label_to_col: dict[str, str] = {
-            "Sector": "fi.sector",
-            "Square": "fi.square",
-            "Layer": "fi.layer_mechanical",
-        }
-        for label, values in layer_filters.items():
-            col = label_to_col.get(label)
-            if not col:
-                continue
-            col_expr = f"{col}::text"
-            safe_label = label.replace(" ", "_")
-            if isinstance(values, list) and values:
-                param_name = f"layer_{safe_label}"
-                params[param_name] = values
-                conditions = " OR ".join(
-                    [
-                        f"{col_expr} ILIKE :{param_name}_{i}"
-                        for i, v in enumerate(values)
-                    ]
-                )
-                clauses.append(f"({conditions})")
-                for i, v in enumerate(values):
-                    params[f"{param_name}_{i}"] = f"%{v}%"
-            elif isinstance(values, str) and values.strip():
-                param_name = f"layer_{safe_label}"
-                params[param_name] = f"%{values.strip()}%"
-                clauses.append(f"{col_expr} ILIKE :{param_name}")
+        _add_ilike_filters(
+            clauses,
+            params,
+            param_prefix="layer",
+            label_to_col=_qualified("fi", FINDS_LOCATION_FILTER_COLS),
+            filters=layer_filters,
+        )
     else:
         # legacy site param has no finds column; ignore it
         if sector:
@@ -880,7 +762,7 @@ _CHART_SUBQUERIES: dict[str, str] = {
         "  f.surface, f.wallthickness, f.handletype, f.handlesize, "
         "  f.bottomtype, f.category, f.form, f.type, f.subtype, f.variant, "
         "  f.note, f.inventory, f.fragmentid, f.count, "
-        "  o.primary_ AS o_primary, o.secondary, o.tertiary, o.quarternary, "
+        "  o.primary_, o.secondary, o.tertiary, o.quarternary, "
         "  o.color1, o.encrustcolor1, "
         "  MAX(f.count) OVER (PARTITION BY f.fragmentid) AS f_count_deduped "
         "FROM tbllayers l "
@@ -894,7 +776,7 @@ _CHART_SUBQUERIES: dict[str, str] = {
         "  f.surface, f.wallthickness, f.handletype, f.handlesize, "
         "  f.bottomtype, f.category, f.form, f.type, f.subtype, f.variant, "
         "  f.note, f.inventory, f.fragmentid, "
-        "  o.primary_ AS o_primary, o.secondary, o.tertiary, o.quarternary, "
+        "  o.primary_, o.secondary, o.tertiary, o.quarternary, "
         "  o.color1, o.encrustcolor1, "
         "  fi.findid, fi.findtype, fi.description, fi.inventory AS fi_inventory "
         "FROM tblfinds fi "
@@ -960,42 +842,19 @@ def build_chart_histogram(
     clauses: list[str] = []
     params: dict[str, Any] = {}
 
-    # Layer filters: map label -> subquery column name
-    # finds has no site column; its layer column is layer_mechanical
-    _LAYER_COL_MAP: dict[str, str] = (
-        {
-            "Sector": "sector",
-            "Square": "square",
-            "Layer": "layer_mechanical",
-        }
-        if query_id == "finds_arch"
-        else {
-            "Site": "site",
-            "Sector": "sector",
-            "Square": "square",
-            "Layer": "layer",
-        }
-    )
+    # Layer filters: bare subquery column names
     if layer_filters:
-        for label, values in layer_filters.items():
-            col = _LAYER_COL_MAP.get(label)
-            if not col:
-                continue
-            col_expr = f"{col}::text"
-            safe_label = label.replace(" ", "_")
-            if isinstance(values, list) and values:
-                param_name = f"layer_{safe_label}"
-                params[param_name] = values
-                conditions = " OR ".join(
-                    [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
-                )
-                clauses.append(f"({conditions})")
-                for i, v in enumerate(values):
-                    params[f"{param_name}_{i}"] = f"%{v}%"
-            elif isinstance(values, str) and values.strip():
-                param_name = f"layer_{safe_label}"
-                params[param_name] = f"%{values.strip()}%"
-                clauses.append(f"{col_expr} ILIKE :{param_name}")
+        _add_ilike_filters(
+            clauses,
+            params,
+            param_prefix="layer",
+            label_to_col=(
+                FINDS_LOCATION_FILTER_COLS
+                if query_id == "finds_arch"
+                else LAYER_FILTER_COLS
+            ),
+            filters=layer_filters,
+        )
     else:
         # finds has no site column in the subquery; ignore legacy site param
         legacy_cols: dict[str, str | None] = {
@@ -1034,83 +893,25 @@ def build_chart_histogram(
                 "OR COALESCE(inv_no::text,'') ILIKE :q)"
             )
 
-    # Fragment field filters (q2 only)
+    # Fragment + ornament field filters (q2 only)
     if frag_filters and query_id == "q2":
-        _FRAG_COL_MAP: dict[str, str] = {
-            "Piecetype": "piecetype",
-            "Technology": "technology",
-            "Baking": "baking",
-            "Color / Primary color": "primarycolor",
-            "Covering": "covering",
-            "Surface": "surface",
-            "Wall thickness": "wallthickness",
-            "Handle type": "handletype",
-            "Handle size": "handlesize",
-            "Bottom type": "bottomtype",
-            "Category": "category",
-            "Form": "form",
-            "Type": "type",
-            "Subtype": "subtype",
-            "Variant": "variant",
-            "Primary": "o_primary",
-            "Secondary": "secondary",
-            "Tertiary": "tertiary",
-            "Quarternary": "quarternary",
-            "Color / color1": "color1",
-            "Encrust color": "encrustcolor1",
-        }
-        for label, values in frag_filters.items():
-            col = _FRAG_COL_MAP.get(label)
-            if not col:
-                continue
-            col_expr = f"{col}::text"
-            safe_label = label.replace(" ", "_")
-            if isinstance(values, list) and values:
-                param_name = f"frag_{safe_label}"
-                params[param_name] = values
-                conditions = " OR ".join(
-                    [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
-                )
-                clauses.append(f"({conditions})")
-                for i, v in enumerate(values):
-                    params[f"{param_name}_{i}"] = f"%{v}%"
-            elif isinstance(values, str) and values.strip():
-                param_name = f"frag_{safe_label}"
-                params[param_name] = f"%{values.strip()}%"
-                clauses.append(f"{col_expr} ILIKE :{param_name}")
+        _add_ilike_filters(
+            clauses,
+            params,
+            param_prefix="frag",
+            label_to_col={**FRAGMENT_FILTER_COLS, **ORNAMENT_FILTER_COLS},
+            filters=frag_filters,
+        )
 
     # Archaeological finds filters
     if frag_filters and query_id == "finds_arch":
-        _ARCH_COL_MAP: dict[str, str] = {
-            "Find Type": "find_type",
-            "Material": "material",
-            "Coin": "coin",
-            "Denomination": "denomination",
-            "Mint": "mint",
-            "Year": "year",
-            "Inv No": "inv_no",
-            "Depth": "depth_m",
-            "Context": "context",
-        }
-        for label, values in frag_filters.items():
-            col = _ARCH_COL_MAP.get(label)
-            if not col:
-                continue
-            col_expr = f"{col}::text"
-            safe_label = label.replace(" ", "_")
-            if isinstance(values, list) and values:
-                param_name = f"arch_{safe_label}"
-                params[param_name] = values
-                conditions = " OR ".join(
-                    [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
-                )
-                clauses.append(f"({conditions})")
-                for i, v in enumerate(values):
-                    params[f"{param_name}_{i}"] = f"%{v}%"
-            elif isinstance(values, str) and values.strip():
-                param_name = f"arch_{safe_label}"
-                params[param_name] = f"%{values.strip()}%"
-                clauses.append(f"{col_expr} ILIKE :{param_name}")
+        _add_ilike_filters(
+            clauses,
+            params,
+            param_prefix="arch",
+            label_to_col=ARCH_FILTER_COLS,
+            filters=frag_filters,
+        )
 
     where_sql = ""
     if clauses:
@@ -1162,7 +963,9 @@ def build_chart_histogram(
             x_buckets[xb][sb] = cnt
 
         # Pick top-N x_buckets by total count
-        x_totals = sorted(x_buckets.items(), key=lambda x: sum(x[1].values()), reverse=True)[:top_n]
+        x_totals = sorted(
+            x_buckets.items(), key=lambda x: sum(x[1].values()), reverse=True
+        )[:top_n]
         result: list[dict[str, Any]] = []
         for xb, series_map in x_totals:
             for sb, cnt in series_map.items():

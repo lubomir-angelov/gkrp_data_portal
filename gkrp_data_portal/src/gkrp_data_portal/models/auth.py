@@ -19,12 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
 from gkrp_data_portal.db.base import Base
-from gkrp_data_portal.models.constants import USER_ROLE_VALUES
-
-
-def _in_list(values: tuple[str, ...]) -> str:
-    """Return a SQL IN-list with quoted literals."""
-    return ", ".join(f"'{v}'" for v in values)
+from gkrp_data_portal.models.constants import USER_ROLE_VALUES, sql_in_list
 
 
 class User(Base):
@@ -37,7 +32,7 @@ class User(Base):
     __tablename__ = "tblregistered"
     __table_args__ = (
         CheckConstraint(
-            f"role IN ({_in_list(USER_ROLE_VALUES)})",
+            f"role IN ({sql_in_list(USER_ROLE_VALUES)})",
             name="role_allowed",
         ),
     )
@@ -45,7 +40,9 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
 
     # Backup-aligned base columns
-    username: Mapped[Optional[str]] = mapped_column(CHAR(25), unique=True, nullable=True)
+    username: Mapped[Optional[str]] = mapped_column(
+        CHAR(25), unique=True, nullable=True
+    )
     email: Mapped[Optional[str]] = mapped_column(Text, unique=True, nullable=True)
     password_hash: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
@@ -63,5 +60,7 @@ class User(Base):
 
     invited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     invite_token_hash: Mapped[Optional[str]] = mapped_column(String(128))
-    invite_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    invite_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

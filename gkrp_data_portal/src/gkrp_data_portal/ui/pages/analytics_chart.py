@@ -12,11 +12,8 @@ from __future__ import annotations
 import csv
 import io
 import json
-import pathlib
-import markdown
-from loguru import logger
 from nicegui import app, ui
-from starlette.responses import HTMLResponse, PlainTextResponse, Response
+from starlette.responses import HTMLResponse, Response
 
 from .analytics_common import (
     CHART_FINDS_ROUTE,
@@ -39,17 +36,6 @@ from gkrp_data_portal.ui.repository.analytics_repo import (
     build_chart_histogram,
 )
 from gkrp_data_portal.ui.lang import t
-
-_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
-_CHART_GUIDE_PATH = _PROJECT_ROOT / "CHART.md"
-
-
-def _load_chart_guide() -> str:
-    """Load and render CHART.md as HTML."""
-    if _CHART_GUIDE_PATH.exists():
-        md = _CHART_GUIDE_PATH.read_text(encoding="utf-8")
-        return markdown.markdown(md, extensions=["tables", "fenced_code"])
-    return "<p>Chart guide not found.</p>"
 
 
 @ui.page("/analytics")
@@ -109,12 +95,6 @@ def analytics_data_csv(
         limit=min(max(int(limit), 1), TABLE_MAX_LIMIT),
         offset=0,
     )
-
-    logger.info(
-        "DEBUG first_row_keys: {}",
-        sorted(res.items[0].keys()) if res.items else "NO_ROWS",
-    )
-    logger.info("DEBUG first_row_sample: {}", res.items[0] if res.items else "NO_ROWS")
 
     buf = io.StringIO()
     cols = ui_columns(res.columns)
@@ -176,9 +156,7 @@ def analytics_chart_json(
         return Response(content=json.dumps(fig), media_type="application/json")
 
     if series:
-        xs, series_data = build_histogram_series(
-            [], x, series, top_n=30, pre_aggregated=chart_agg
-        )
+        xs, series_data = build_histogram_series(chart_agg, top_n=30)
         series_label = _column_to_label(series)
         fig = plotly_grouped_bar(
             xs,
@@ -187,9 +165,7 @@ def analytics_chart_json(
             series_label=series_label,
         )
     else:
-        xs, ys = build_histogram(
-            [], x, top_n=30, pre_aggregated=chart_agg
-        )
+        xs, ys = build_histogram(chart_agg, top_n=30)
         if chart_type == "pie":
             fig = plotly_pie(xs, ys, title=f"Count by {x} ({query_id})")
         elif chart_type == "donut":
@@ -229,8 +205,3 @@ def analytics_chart_html(query_id: str = "q2") -> Response:
 </html>
 """
     return HTMLResponse(html)
-
-
-@app.get("/api/analytics/health")
-def analytics_health() -> Response:
-    return PlainTextResponse("ok")

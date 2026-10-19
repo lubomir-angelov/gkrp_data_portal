@@ -55,8 +55,8 @@ def list_layers(
                 Tbllayer.layertype.cast(Text).ilike(like),
                 Tbllayer.level.ilike(like),
                 Tbllayer.structure.ilike(like),
-               Tbllayer.color1.cast(Text).ilike(like),
-               Tbllayer.color2.cast(Text).ilike(like),
+                Tbllayer.color1.cast(Text).ilike(like),
+                Tbllayer.color2.cast(Text).ilike(like),
             )
         )
     stmt = _apply_filters(stmt, Tbllayer, filters)

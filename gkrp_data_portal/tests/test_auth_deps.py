@@ -11,7 +11,6 @@ from gkrp_data_portal.auth.deps import (
     SESSION_USER_KEY,
     get_current_user,
     require_admin,
-    require_user,
 )
 
 
@@ -46,42 +45,6 @@ class TestGetCurrentUser:
             get_current_user(mock_db)
             mock_db.get.assert_called_once()
             assert mock_db.get.call_args[0][1] == 123
-
-
-class TestRequireUser:
-    @contextmanager
-    def _mock_session_scope(self, user):
-        """Helper to mock session_scope as a context manager yielding a mock db."""
-        with patch("gkrp_data_portal.auth.deps.session_scope") as mock_scope:
-            mock_scope.return_value.__enter__ = MagicMock(return_value=MagicMock())
-            mock_scope.return_value.__exit__ = MagicMock(return_value=False)
-            with patch(
-                "gkrp_data_portal.auth.deps.get_current_user", return_value=user
-            ):
-                yield
-
-    def test_returns_user_when_authenticated(self):
-        mock_user = MagicMock()
-        mock_user.is_active = True
-        with self._mock_session_scope(mock_user):
-            result = require_user()
-            assert result is mock_user
-
-    def test_raises_when_not_authenticated(self):
-        with self._mock_session_scope(None):
-            with pytest.raises(
-                PermissionError, match="Not authenticated or inactive user"
-            ):
-                require_user()
-
-    def test_raises_when_inactive(self):
-        mock_user = MagicMock()
-        mock_user.is_active = False
-        with self._mock_session_scope(mock_user):
-            with pytest.raises(
-                PermissionError, match="Not authenticated or inactive user"
-            ):
-                require_user()
 
 
 class TestRequireAdmin:

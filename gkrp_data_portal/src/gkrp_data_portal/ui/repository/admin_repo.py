@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -40,7 +39,9 @@ def create_invite_for_email(
     if not email_norm:
         raise ValueError("email is required")
 
-    existing = db.execute(select(User).where(User.email == email_norm)).scalar_one_or_none()
+    existing = db.execute(
+        select(User).where(User.email == email_norm)
+    ).scalar_one_or_none()
     user = existing if existing else User(email=email_norm)
 
     user.role = role
@@ -63,7 +64,9 @@ def accept_invite(
     password_hash: str,
 ) -> None:
     """Finalize invitation: set username/password and activate."""
-    user = db.execute(select(User).where(User.invite_token_hash == token_hash)).scalar_one_or_none()
+    user = db.execute(
+        select(User).where(User.invite_token_hash == token_hash)
+    ).scalar_one_or_none()
     if user is None:
         raise ValueError("Invalid invite")
 

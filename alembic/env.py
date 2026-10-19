@@ -6,6 +6,7 @@ Alembic to use the application's SQLAlchemy metadata.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -19,16 +20,17 @@ SRC_ROOT = REPO_ROOT / "gkrp_data_portal" / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from gkrp_data_portal.core.logging import configure_logging
-from gkrp_data_portal.db.base import Base
-import gkrp_data_portal.models  # noqa: F401
+from gkrp_data_portal.db.base import Base  # noqa: E402 - needs SRC_ROOT on sys.path (inserted above)
+import gkrp_data_portal.models  # noqa: E402, F401 - sys.path dependent; registers models on Base.metadata
 
 # this is the Alembic Config object, which provides access to the values within
 # the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-configure_logging()
+# Alembic logs via stdlib logging; configure a root handler for migration runs.
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s - %(message)s"
+)
 
 
 def _get_url() -> str:

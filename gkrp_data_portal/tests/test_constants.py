@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from gkrp_data_portal.models.constants import (
     BAKING_VALUES,
     BOTTOMTYPE_VALUES,
@@ -171,3 +173,34 @@ class TestConstants:
         assert "" in PRIMARY_ORN_VALUES
         assert "" in SECONDARY_ORN_VALUES
         assert "" in TERTIARY_ORN_VALUES
+
+
+class TestSqlInList:
+    def test_quotes_and_joins(self):
+        from gkrp_data_portal.models.constants import sql_in_list
+
+        assert sql_in_list(("a", "")) == "'a', ''"
+
+    def test_rendered_check_constraints_pinned(self):
+        from gkrp_data_portal.models.archaeology import Tbllayer
+        from gkrp_data_portal.models.auth import User
+
+        def sqltext(model, name):
+            return next(
+                str(c.sqltext)
+                for c in model.__table__.constraints
+                if getattr(c, "name", None) == name
+            )
+
+        assert sqltext(User, "ck_tblregistered_role_allowed") == (
+            "role IN ('admin', 'user')"
+        )
+        assert sqltext(Tbllayer, "ck_tbllayers_layertype_allowed") == (
+            "layertype IN ('механичен', 'контекст', '')"
+        )
+
+    def test_value_with_single_quote_raises(self):
+        from gkrp_data_portal.models.constants import sql_in_list
+
+        with pytest.raises(ValueError, match="single quote"):
+            sql_in_list(("ok", "it's"))

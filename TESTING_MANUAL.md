@@ -131,7 +131,6 @@ Each data page follows the same pattern: search bar, filter dropdowns, data tabl
 | 6.9 | Click **Download PNG** | Browser downloads `analytics_chart_fragments.png`. |
 | 6.10 | Click **Download JPG** | Browser downloads `analytics_chart_fragments.jpg`. |
 | 6.11 | Click **Print / Save as PDF** | New tab opens with a printable chart view. |
-| 6.12 | Toggle "Enable all rows" | Chart refetches with higher row limit. |
 | 6.13 | Click **Help** button | Help dialog opens with chart guide. |
 
 ---
@@ -147,7 +146,6 @@ Each data page follows the same pattern: search bar, filter dropdowns, data tabl
 | 7.5 | Change **Chart Type** | Chart re-renders. |
 | 7.6 | Apply Finds filters (Find Type, Material, Coin, etc.) | Chart re-renders with filtered data. |
 | 7.7 | Download PNG / JPG / PDF | Same behavior as Fragments chart. |
-| 7.8 | Toggle "Enable all rows" | Chart refetches with higher row limit. |
 
 ---
 
@@ -312,7 +310,6 @@ When a defect is found:
 | 6.9 | Кликнете **Изтегли PNG** | Браузърът изтегля `analytics_chart_fragments.png`. |
 | 6.10 | Кликнете **Изтегли JPG** | Браузърът изтегля `analytics_chart_fragments.jpg`. |
 | 6.11 | Кликнете **Печат / Запази като PDF** | Нов таб отваря печатен изглед на графиката. |
-| 6.12 | Превключете "Активиране на всички редове" | Графиката презарежда с по-висок лимит. |
 | 6.13 | Кликнете бутона **Помощ** | Отваря се диалог с упътване за графиките. |
 
 ---
@@ -328,7 +325,6 @@ When a defect is found:
 | 7.5 | Променете **Вид графика** | Графиката се рендира отново. |
 | 7.6 | Приложете филтри за находки (Вид, Материал, Монета и др.) | Графиката се рендира с филтрирани данни. |
 | 7.7 | Изтеглете PNG / JPG / PDF | Същото поведение като при графиката с фрагменти. |
-| 7.8 | Превключете "Активиране на всички редове" | Графиката презарежда с по-висок лимит. |
 
 ---
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pathlib
 from datetime import date
 from typing import Any, Optional
 
@@ -209,11 +210,7 @@ LOCALE: dict[str, str] = {
     "status_returned": "Върнати {count} реда (общо {total}).",
     "status_no_results_query": "Няма резултати ({query_id})",
     "tip_filter_header": "Съвет: използвайте филтрите в заглавието (падащото меню показва наличните стойности).",
-    "chart_fetch_info": "Графиките зареждат до 25 000 реда за изграждане на топ 30 кофи. Това е достатъчно за колони с до ~40 категории; ако филтрирате към малък поднабор (напр. един обект и сектор) лимитът може да изреже редки категории.",
     "limit_max_info": "Използвайте 'max' за зареждане на всички съвпадащи редове (до 100 000).",
-    "enable_all_rows": "Активиране на всички редове за малък поднабор",
-    "toggle_on": "Вкл",
-    "toggle_off": "Изкл",
     # --- Search ---
     "search_layers": "Търсене (обект/сектор/квадрат/пласт)",
     "search_fragments": "Търсене (инвентарен бр./бележка/тип фрагмент/вид фрагмент/технология)",
@@ -432,11 +429,7 @@ LOCALE: dict[str, str] = {
     "status_returned_en": "Returned {count} rows (total {total}).",
     "status_no_results_query_en": "No results ({query_id})",
     "tip_filter_header_en": "Tip: use the filters in the header (dropdown shows available values).",
-    "chart_fetch_info_en": "Charts load up to 25,000 rows to build top 30 buckets. This is enough for columns with up to ~40 categories; if you filter to a small subset (e.g. one site and sector) the limit may cut rare categories.",
     "limit_max_info_en": "Use 'max' to load all matching rows (up to 100,000).",
-    "enable_all_rows_en": "Enable all rows for a small subset",
-    "toggle_on_en": "On",
-    "toggle_off_en": "Off",
     "search_layers_en": "Search (site/sector/square/layer)",
     "search_fragments_en": "Search (inv. no./note/fragment type/fragment kind/technology)",
     "search_ornaments_en": "Search (location/primary/secondary/tertiary)",
@@ -490,8 +483,12 @@ CHART_FINDS_ROUTE = "/analytics/chart_finds"
 
 DEFAULT_LIMIT = 500
 
+# Single source of truth for the in-app help guides rendered by ui.markdown.
+_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
+CHART_GUIDE_PATH = _PROJECT_ROOT / "CHART.md"
+TABLE_GUIDE_PATH = _PROJECT_ROOT / "ANALYTICS_TABLE_HELP.md"
+
 TABLE_MAX_LIMIT = 100000  # table UI cap
-CHART_MAX_FETCH = 25000  # chart safety cap (top-N buckets don't benefit from >25k rows)
 
 # Client-side helpers for Plotly image export / resize.
 # NiceGUI loads plotly.js as an ES module ("nicegui-plotly") that is never
@@ -534,8 +531,6 @@ _UI_HIDDEN_COLUMNS = frozenset(
         "l_recordcreatedon",
         "f_recordenteredon",
         "f_recordenteredby",
-        "f_recordcreatedby",
-        "f_recordcreatedon",
         "o_recordenteredon",
         "fi_recordenteredon",
         "fi_recordenteredby",
@@ -564,7 +559,6 @@ _UI_HIDDEN_COLUMNS = frozenset(
         "f_locationid",
         "f_outline",
         "f_speed",
-        "f_recrodenteredby",
         "f_topsize",
         "f_necksize",
         "f_bodysize",
@@ -579,7 +573,6 @@ _UI_HIDDEN_COLUMNS = frozenset(
         "f_fract",
         "f_onepot",
         "f_handlesize",
-        "f_img_url",
         "f_image_url",
         "f_inventory",
         "fi_image_url",
@@ -651,33 +644,6 @@ def result_for(query_id: str, **kwargs) -> AnalyticsResult:
         return query_finds(db, **kwargs)
 
 
-def _extract_layer_filters(kwargs: dict) -> dict[str, Any] | None:
-    """Extract layer_filters from kwargs, falling back to legacy site/sector/square."""
-    lf = kwargs.get("layer_filters")
-    if lf:
-        return lf
-    site = kwargs.get("site")
-    sector = kwargs.get("sector")
-    square = kwargs.get("square")
-    if site or sector or square:
-        return {
-            "Site": [site] if site else [],
-            "Sector": [sector] if sector else [],
-            "Square": [square] if square else [],
-        }
-    return None
-
-
-def norm_bucket(v: Any) -> str:
-    """Normalize values into a histogram bucket label (never empty)."""
-    if v is None:
-        return "(null)"
-    if isinstance(v, str):
-        s = v.strip()
-        return s if s else "(null)"
-    return str(v)
-
-
 _COLUMN_LABEL_KEYS: dict[str, str] = {
     "f_piecetype": "frag_piecetype",
     "f_technology": "frag_technology",
@@ -694,7 +660,7 @@ _COLUMN_LABEL_KEYS: dict[str, str] = {
     "f_type": "frag_type",
     "f_subtype": "frag_subtype",
     "f_variant": "frag_variant",
-    "o_primary": "frag_primary",
+    "o_primary_": "frag_primary",
     "o_secondary": "frag_secondary",
     "o_tertiary": "frag_tertiary",
     "o_quarternary": "frag_quarternary",
@@ -722,137 +688,46 @@ def _column_to_label(col: str) -> str:
 
 
 def build_histogram(
-    rows: list[dict], x_key: str, top_n: int = 30,
-    pre_aggregated: list[dict[str, Any]] | None = None,
+    pre_aggregated: list[dict[str, Any]], *, top_n: int
 ) -> tuple[list[str], list[int]]:
-    """Build a top-N histogram for a column.
-
-    If *pre_aggregated* is provided (from SQL aggregation), use it directly.
-    Each item should be ``{"bucket": str, "count": int}``.
-    Otherwise, fall back to Python-side aggregation from raw rows.
-    """
-    if pre_aggregated:
-        items = sorted(pre_aggregated, key=lambda x: x.get("count", 0), reverse=True)[:top_n]
-        return [i["bucket"] for i in items], [i["count"] for i in items]
-
-    if not rows or not x_key:
-        return [], []
-
-    use_count = "f_count_deduped" in rows[0] or "f_count" in rows[0]
-    bucket_sum: dict[str, int] = {}
-    seen_frags: set = set()
-    for r in rows:
-        bucket = norm_bucket(r.get(x_key))
-        if use_count:
-            frag_id = r.get("f_fragmentid")
-            if frag_id is not None and frag_id in seen_frags:
-                continue
-            val = r.get("f_count_deduped")
-            if val is None:
-                val = r.get("f_count")
-            bucket_sum[bucket] = bucket_sum.get(bucket, 0) + (
-                val if isinstance(val, (int, float)) else 0
-            )
-            if frag_id is not None:
-                seen_frags.add(frag_id)
-        else:
-            bucket_sum[bucket] = bucket_sum.get(bucket, 0) + 1
-
-    items = sorted(bucket_sum.items(), key=lambda x: x[1], reverse=True)[:top_n]
-    xs = [k for k, _ in items]
-    ys = [v for _, v in items]
-    return xs, ys
+    """Unzip SQL-aggregated ``{"bucket", "count"}`` rows into top-N (xs, ys), count-desc."""
+    items = sorted(pre_aggregated, key=lambda x: x["count"], reverse=True)[:top_n]
+    return [i["bucket"] for i in items], [i["count"] for i in items]
 
 
 def build_histogram_series(
-    rows: list[dict], x_key: str, series_key: str, top_n: int = 30,
-    pre_aggregated: list[dict[str, Any]] | None = None,
+    pre_aggregated: list[dict[str, Any]], *, top_n: int
 ) -> tuple[list[str], dict[str, list[int]]]:
-    """Build a top-N histogram grouped by a series dimension.
+    """Pivot SQL-aggregated rows into a top-N grouped histogram.
 
-    If *pre_aggregated* is provided (from SQL aggregation), use it directly.
-    Each item should be ``{"x_bucket": str, "series_bucket": str, "count": int}``.
-    Otherwise, fall back to Python-side aggregation from raw rows.
+    Each item is ``{"x_bucket": str, "series_bucket": str, "count": int}``.
 
     Returns ``(xs, series_data)`` where ``xs`` are the top-N bucket labels and
     ``series_data`` is ``{series_value: [y1, y2, ...]}`` — one list per series
     value, aligned to ``xs``.
     """
-    if pre_aggregated:
-        # Pivot SQL results: collect all x_buckets and series_values
-        x_total: dict[str, int] = {}
-        series_vals: dict[str, dict[str, int]] = {}
-        for item in pre_aggregated:
-            xb = item.get("x_bucket", "")
-            sb = item.get("series_bucket", "")
-            cnt = int(item.get("count", 0))
-            x_total[xb] = x_total.get(xb, 0) + cnt
-            if sb not in series_vals:
-                series_vals[sb] = {}
-            series_vals[sb][xb] = cnt
+    x_total: dict[str, int] = {}
+    series_vals: dict[str, dict[str, int]] = {}
+    for item in pre_aggregated:
+        xb = item["x_bucket"]
+        sb = item["series_bucket"]
+        cnt = int(item["count"])
+        x_total[xb] = x_total.get(xb, 0) + cnt
+        if sb not in series_vals:
+            series_vals[sb] = {}
+        series_vals[sb][xb] = cnt
 
-        # Top-N x_buckets by total
-        top_x = sorted(x_total.items(), key=lambda x: x[1], reverse=True)[:top_n]
-        xs = [k for k, _ in top_x]
+    # Top-N x_buckets by total
+    top_x = sorted(x_total.items(), key=lambda x: x[1], reverse=True)[:top_n]
+    xs = [k for k, _ in top_x]
 
-        # Build aligned series data
-        result_series: dict[str, list[int]] = {}
-        for sv, xb_map in series_vals.items():
-            counts = [xb_map.get(xb, 0) for xb in xs]
-            if any(c > 0 for c in counts):
-                result_series[sv] = counts
-        return xs, result_series
-
-    if not rows or not x_key or not series_key:
-        return [], {}
-
-    use_count = "f_count_deduped" in rows[0] or "f_count" in rows[0]
-    bucket_series: dict[tuple[str, str], int] = {}
-    seen_frags: set = set()
-    for r in rows:
-        x_bucket = norm_bucket(r.get(x_key))
-        s_bucket = norm_bucket(r.get(series_key))
-        if use_count:
-            frag_id = r.get("f_fragmentid")
-            if frag_id is not None and frag_id in seen_frags:
-                continue
-            val = r.get("f_count_deduped")
-            if val is None:
-                val = r.get("f_count")
-            bucket_series[(x_bucket, s_bucket)] = bucket_series.get(
-                (x_bucket, s_bucket), 0
-            ) + (val if isinstance(val, (int, float)) else 0)
-            if frag_id is not None:
-                seen_frags.add(frag_id)
-        else:
-            bucket_series[(x_bucket, s_bucket)] = (
-                bucket_series.get((x_bucket, s_bucket), 0) + 1
-            )
-
-    # Aggregate per x_bucket (sum across series) to pick top-N
-    bucket_total: dict[str, int] = {}
-    for (xb, sb), v in bucket_series.items():
-        bucket_total[xb] = bucket_total.get(xb, 0) + v
-
-    top_buckets = sorted(bucket_total.items(), key=lambda x: x[1], reverse=True)[:top_n]
-    xs = [k for k, _ in top_buckets]
-
-    # Collect all series values seen in the top-N buckets
-    all_series: set[str] = set()
-    for xb in xs:
-        for bx, bs in bucket_series:
-            if bx == xb:
-                all_series.add(bs)
-
-    # Build aligned series data — trace names are raw values, group title is column label
-    # Filter out series values that are all zeros across the top-N buckets
-    series_vals: dict[str, list[int]] = {}
-    for sv in all_series:
-        counts = [bucket_series.get((xb, sv), 0) for xb in xs]
+    # Build aligned series data; drop series that are all zeros across the top-N
+    result_series: dict[str, list[int]] = {}
+    for sv, xb_map in series_vals.items():
+        counts = [xb_map.get(xb, 0) for xb in xs]
         if any(c > 0 for c in counts):
-            series_vals[sv] = counts
-
-    return xs, series_vals
+            result_series[sv] = counts
+    return xs, result_series
 
 
 def plotly_bar(xs: list[str], ys: list[int], title: str) -> dict:

@@ -5,15 +5,28 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import MagicMock
 
+import pytest
+from sqlalchemy import text
+
 
 from gkrp_data_portal.ui.repository.analytics_repo import (
+    CHART_COL_EXPR,
+    ARCH_FILTER_COLS,
+    _DISTINCT_COL_DEFS,
+    FINDS_LOCATION_FILTER_COLS,
+    FRAGMENT_FILTER_COLS,
+    LAYER_FILTER_COLS,
+    ORNAMENT_FILTER_COLS,
     AnalyticsResult,
+    _apply_arch_filters,
+    _apply_frag_filters,
+    _apply_layer_filters,
     _build_where,
+    _build_where_finds,
+    get_groupby_columns,
     _model_select_list,
     build_chart_histogram,
-    extract_image_urls,
     query_finds,
-    query_q1_layers_fragments,
     query_q2_layers_fragments_ornaments,
 )
 
@@ -39,7 +52,7 @@ class TestModelSelectList:
 class TestBuildWhere:
     def test_returns_empty_with_no_filters(self):
         sql, params = _build_where(
-            query_id="q1",
+            query_id="q2",
             site=None,
             sector=None,
             square=None,
@@ -52,7 +65,7 @@ class TestBuildWhere:
 
     def test_filters_by_site(self):
         sql, params = _build_where(
-            query_id="q1",
+            query_id="q2",
             site="Sofia",
             sector=None,
             square=None,
@@ -65,7 +78,7 @@ class TestBuildWhere:
 
     def test_filters_by_sector(self):
         sql, params = _build_where(
-            query_id="q1",
+            query_id="q2",
             site=None,
             sector="Alpha",
             square=None,
@@ -77,7 +90,7 @@ class TestBuildWhere:
 
     def test_filters_by_square(self):
         sql, params = _build_where(
-            query_id="q1",
+            query_id="q2",
             site=None,
             sector=None,
             square="B4",
@@ -91,7 +104,7 @@ class TestBuildWhere:
         from_ = date(2024, 1, 1)
         to = date(2024, 12, 31)
         sql, params = _build_where(
-            query_id="q1",
+            query_id="q2",
             site=None,
             sector=None,
             square=None,
@@ -104,20 +117,6 @@ class TestBuildWhere:
         assert params["date_from"] == from_
         assert params["date_to"] == to
 
-    def test_free_text_q1(self):
-        sql, params = _build_where(
-            query_id="q1",
-            site=None,
-            sector=None,
-            square=None,
-            date_from=None,
-            date_to=None,
-            q="pottery",
-        )
-        assert "COALESCE(f.inventory,'') ILIKE :q" in sql
-        assert "COALESCE(f.note,'') ILIKE :q" in sql
-        assert "COALESCE(f.piecetype::text,'') ILIKE :q" in sql
-
     def test_free_text_q2(self):
         sql, params = _build_where(
             query_id="q2",
@@ -129,6 +128,8 @@ class TestBuildWhere:
             q="decoration",
         )
         assert "COALESCE(f.inventory,'') ILIKE :q" in sql
+        assert "COALESCE(f.note,'') ILIKE :q" in sql
+        assert "COALESCE(f.piecetype::text,'') ILIKE :q" in sql
 
     def test_free_text_finds(self):
         sql, params = _build_where(
@@ -147,7 +148,7 @@ class TestBuildWhere:
     def test_combines_filters(self):
         from_ = date(2024, 1, 1)
         sql, params = _build_where(
-            query_id="q1",
+            query_id="q2",
             site="Sofia",
             sector=None,
             square="A1",
@@ -160,96 +161,6 @@ class TestBuildWhere:
         assert "l.recordenteredon >= :date_from" in sql
         assert "COALESCE(f.inventory,'') ILIKE :q" in sql
         assert " AND " in sql
-
-
-class TestExtractImageUrls:
-    def test_returns_unique_urls(self):
-        items = [
-            {"f_image_url": "http://example.com/1.jpg"},
-            {"f_image_url": "http://example.com/2.jpg"},
-            {"f_image_url": "http://example.com/1.jpg"},
-        ]
-        urls = extract_image_urls(items)
-        assert urls == ["http://example.com/1.jpg", "http://example.com/2.jpg"]
-
-    def test_skips_none_values(self):
-        items = [{"f_image_url": None}, {"f_image_url": "http://example.com/1.jpg"}]
-        urls = extract_image_urls(items)
-        assert urls == ["http://example.com/1.jpg"]
-
-    def test_skips_empty_strings(self):
-        items = [
-            {"f_image_url": ""},
-            {"f_image_url": "   "},
-            {"f_image_url": "http://example.com/1.jpg"},
-        ]
-        urls = extract_image_urls(items)
-        assert urls == ["http://example.com/1.jpg"]
-
-    def test_collects_from_finds_column(self):
-        items = [
-            {"fi_image_url": "http://example.com/find1.jpg"},
-        ]
-        urls = extract_image_urls(items)
-        assert urls == ["http://example.com/find1.jpg"]
-
-    def test_returns_empty_for_no_images(self):
-        items = [{"some_other_col": "value"}]
-        assert extract_image_urls(items) == []
-
-    def test_skips_non_string_values(self):
-        items = [{"f_image_url": 123}, {"f_image_url": "http://example.com/1.jpg"}]
-        urls = extract_image_urls(items)
-        assert urls == ["http://example.com/1.jpg"]
-
-
-class TestQueryQ1LayersFragments:
-    def test_returns_analytics_result(self):
-        mock_db = MagicMock()
-        mock_row = MagicMock()
-        mock_row.mappings.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_row
-        mock_row.scalar_one.return_value = 0
-
-        result = query_q1_layers_fragments(mock_db)
-        assert isinstance(result, AnalyticsResult)
-        assert result.items == []
-        assert result.total == 0
-
-    def test_passes_filters_to_query(self):
-        mock_db = MagicMock()
-        mock_row = MagicMock()
-        mock_row.mappings.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_row
-        mock_row.scalar_one.return_value = 0
-
-        query_q1_layers_fragments(
-            mock_db,
-            site="Sofia",
-            sector="Alpha",
-            date_from=date(2024, 1, 1),
-            date_to=date(2024, 12, 31),
-            q="pottery",
-        )
-
-        calls = mock_db.execute.call_args_list
-        assert len(calls) == 2  # count query + data query
-        all_sql = " ".join(str(c) for c in calls)
-        assert "Sofia" in all_sql
-
-    def test_count_uses_sum_f_count(self):
-        mock_db = MagicMock()
-        mock_row = MagicMock()
-        mock_row.mappings.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_row
-        mock_row.scalar_one.return_value = 0
-
-        query_q1_layers_fragments(mock_db)
-
-        calls = mock_db.execute.call_args_list
-        count_sql = str(calls[1][0][0])
-        assert "SUM(f_count)" in count_sql
-        assert "COUNT(*)" not in count_sql
 
 
 class TestQueryQ2LayersFragmentsOrnaments:
@@ -363,9 +274,7 @@ class TestBuildChartHistogram:
         ]
         mock_db.execute.return_value = mock_row
 
-        result = build_chart_histogram(
-            mock_db, query_id="q2", x_key="l_site", top_n=30
-        )
+        result = build_chart_histogram(mock_db, query_id="q2", x_key="l_site", top_n=30)
         assert len(result) == 3
         assert result[0]["bucket"] == "Sofia"
         assert result[0]["count"] == 150
@@ -458,3 +367,399 @@ class TestBuildChartHistogram:
         sql = str(calls[0][0][0])
         params = calls[0][0][1]
         assert "piecetype::text ILIKE" in sql
+        assert params["frag_piecetype_0"] == "%Body%"
+
+
+def _chart_where_and_params(**kwargs):
+    """Run build_chart_histogram against a mock db; return (WHERE text, params)."""
+    db = MagicMock()
+    db.execute.return_value.mappings.return_value.all.return_value = []
+    build_chart_histogram(db, **kwargs)
+    sql = str(db.execute.call_args[0][0])
+    where = sql.split(") sub", 1)[1].split("GROUP BY")[0]
+    return " ".join(where.split()), db.execute.call_args[0][1]
+
+
+class TestFilterSqlPins:
+    """Pin the exact SQL/params emitted by the ILIKE filter builders."""
+
+    def test_frag_filters(self):
+        clauses: list[str] = []
+        params: dict = {}
+        _apply_frag_filters(
+            clauses,
+            params,
+            {
+                "Piecetype": ["A", "B"],
+                "Primary": "  x ",
+                "Encrust color": [],
+                "Technology": None,
+            },
+            "f2",
+            "o2",
+        )
+        assert clauses == [
+            "(f2.piecetype::text ILIKE :frag_piecetype_0 OR f2.piecetype::text ILIKE :frag_piecetype_1)",
+            "o2.primary_::text ILIKE :frag_primary_",
+        ]
+        assert params == {
+            "frag_piecetype_0": "%A%",
+            "frag_piecetype_1": "%B%",
+            "frag_primary_": "%x%",
+        }
+
+    def test_layer_filters(self):
+        clauses: list[str] = []
+        params: dict = {}
+        _apply_layer_filters(
+            clauses, params, {"Site": ["S"], "Layer": " L1 ", "Square": None}, "l2"
+        )
+        assert clauses == [
+            "(l2.site::text ILIKE :layer_site_0)",
+            "l2.layer::text ILIKE :layer_layer",
+        ]
+        assert params == {
+            "layer_site_0": "%S%",
+            "layer_layer": "%L1%",
+        }
+
+    def test_arch_filters(self):
+        clauses: list[str] = []
+        params: dict = {}
+        _apply_arch_filters(clauses, params, {"Find Type": ["coin"], "Depth": "1.2"})
+        assert clauses == [
+            "(fi.find_type::text ILIKE :arch_find_type_0)",
+            "fi.depth_m::text ILIKE :arch_depth_m",
+        ]
+        assert params == {
+            "arch_find_type_0": "%coin%",
+            "arch_depth_m": "%1.2%",
+        }
+
+    def test_build_where_finds(self):
+        sql, params = _build_where_finds(
+            query_id="finds_arch",
+            site=None,
+            sector=None,
+            square=None,
+            date_from=None,
+            date_to=None,
+            q=None,
+            layer_filters={"Sector": ["A"], "Layer": ["m1", "m2"]},
+            arch_filters={"Material": ["Fe"]},
+        )
+        assert sql == (
+            "WHERE (fi.sector::text ILIKE :layer_sector_0) AND "
+            "(fi.layer_mechanical::text ILIKE :layer_layer_mechanical_0 OR "
+            "fi.layer_mechanical::text ILIKE :layer_layer_mechanical_1) AND "
+            "(fi.material::text ILIKE :arch_material_0)"
+        )
+        assert params == {
+            "layer_sector_0": "%A%",
+            "layer_layer_mechanical_0": "%m1%",
+            "layer_layer_mechanical_1": "%m2%",
+            "arch_material_0": "%Fe%",
+        }
+
+    def test_chart_histogram_q2_where(self):
+        where, params = _chart_where_and_params(
+            query_id="q2",
+            x_key="l_site",
+            layer_filters={"Site": ["S"], "Layer": "L"},
+            frag_filters={"Piecetype": ["A", "B"], "Primary": ["p"]},
+        )
+        assert where == (
+            "WHERE (site::text ILIKE :layer_site_0) AND layer::text ILIKE :layer_layer "
+            "AND (piecetype::text ILIKE :frag_piecetype_0 OR "
+            "piecetype::text ILIKE :frag_piecetype_1) AND "
+            "(primary_::text ILIKE :frag_primary__0)"
+        )
+        assert params == {
+            "layer_site_0": "%S%",
+            "layer_layer": "%L%",
+            "frag_piecetype_0": "%A%",
+            "frag_piecetype_1": "%B%",
+            "frag_primary__0": "%p%",
+        }
+
+    def test_chart_histogram_finds_arch_where(self):
+        where, params = _chart_where_and_params(
+            query_id="finds_arch",
+            x_key="fi_material",
+            layer_filters={"Sector": ["A"], "Layer": ["m"]},
+            frag_filters={"Find Type": ["coin"]},
+        )
+        assert where == (
+            "WHERE (sector::text ILIKE :layer_sector_0) AND "
+            "(layer_mechanical::text ILIKE :layer_layer_mechanical_0) AND "
+            "(find_type::text ILIKE :arch_find_type_0)"
+        )
+        assert params == {
+            "layer_sector_0": "%A%",
+            "layer_layer_mechanical_0": "%m%",
+            "arch_find_type_0": "%coin%",
+        }
+
+    def test_chart_histogram_finds_where(self):
+        where, params = _chart_where_and_params(
+            query_id="finds", x_key="l_site", layer_filters={"Square": ["Q"]}
+        )
+        assert where == "WHERE (square::text ILIKE :layer_square_0)"
+        assert params == {"layer_square_0": "%Q%"}
+
+    def test_distinct_col_defs(self):
+        assert _DISTINCT_COL_DEFS == [
+            ("Site", "l.site", ("q2", "finds")),
+            ("Sector", "l.sector", ("q2", "finds")),
+            ("Square", "l.square", ("q2", "finds")),
+            ("Layer", "l.layer", ("q2", "finds")),
+            ("Piecetype", "f.piecetype", ("q2",)),
+            ("Technology", "f.technology", ("q2",)),
+            ("Baking", "f.baking", ("q2",)),
+            ("Color / Primary color", "f.primarycolor", ("q2",)),
+            ("Covering", "f.covering", ("q2",)),
+            ("Surface", "f.surface", ("q2",)),
+            ("Wall thickness", "f.wallthickness", ("q2",)),
+            ("Handle type", "f.handletype", ("q2",)),
+            ("Handle size", "f.handlesize", ("q2",)),
+            ("Bottom type", "f.bottomtype", ("q2",)),
+            ("Category", "f.category", ("q2",)),
+            ("Form", "f.form", ("q2",)),
+            ("Type", "f.type", ("q2",)),
+            ("Subtype", "f.subtype", ("q2",)),
+            ("Variant", "f.variant", ("q2",)),
+            ("Note", "f.note", ("q2",)),
+            ("Inventory", "f.inventory", ("q2",)),
+            ("Primary", "o.primary_", ("q2",)),
+            ("Secondary", "o.secondary", ("q2",)),
+            ("Tertiary", "o.tertiary", ("q2",)),
+            ("Quarternary", "o.quarternary", ("q2",)),
+            ("Color / color1", "o.color1", ("q2",)),
+            ("Encrust color", "o.encrustcolor1", ("q2",)),
+            ("Find Type", "fi.find_type", ("finds_arch",)),
+            ("Material", "fi.material", ("finds_arch",)),
+            ("Coin", "fi.coin", ("finds_arch",)),
+            ("Denomination", "fi.denomination", ("finds_arch",)),
+            ("Mint", "fi.mint", ("finds_arch",)),
+            ("Year", "fi.year", ("finds_arch",)),
+            ("Inv No", "fi.inv_no", ("finds_arch",)),
+            ("Depth", "fi.depth_m", ("finds_arch",)),
+            ("Context", "fi.context", ("finds_arch",)),
+            ("Sector", "fi.sector", ("finds_arch",)),
+            ("Square", "fi.square", ("finds_arch",)),
+            ("Layer", "fi.layer_mechanical", ("finds_arch",)),
+        ]
+
+    def test_chart_col_expr(self):
+        assert CHART_COL_EXPR == {
+            "l_site": "l.site",
+            "l_sector": "l.sector",
+            "l_square": "l.square",
+            "l_layer": "l.layer",
+            "f_piecetype": "f.piecetype",
+            "f_technology": "f.technology",
+            "f_baking": "f.baking",
+            "f_primarycolor": "f.primarycolor",
+            "f_covering": "f.covering",
+            "f_surface": "f.surface",
+            "f_wallthickness": "f.wallthickness",
+            "f_handletype": "f.handletype",
+            "f_handlesize": "f.handlesize",
+            "f_bottomtype": "f.bottomtype",
+            "f_category": "f.category",
+            "f_form": "f.form",
+            "f_type": "f.type",
+            "f_subtype": "f.subtype",
+            "f_variant": "f.variant",
+            "f_note": "f.note",
+            "f_inventory": "f.inventory",
+            "o_primary_": "o.primary_",
+            "o_secondary": "o.secondary",
+            "o_tertiary": "o.tertiary",
+            "o_quarternary": "o.quarternary",
+            "o_color1": "o.color1",
+            "o_encrustcolor1": "o.encrustcolor1",
+            "fi_find_type": "fi.find_type",
+            "fi_material": "fi.material",
+            "fi_coin": "fi.coin",
+            "fi_denomination": "fi.denomination",
+            "fi_mint": "fi.mint",
+            "fi_year": "fi.year",
+            "fi_inv_no": "fi.inv_no",
+            "fi_depth_m": "fi.depth_m",
+            "fi_context": "fi.context",
+            "fi_sector": "fi.sector",
+            "fi_square": "fi.square",
+            "fi_layer_mechanical": "fi.layer_mechanical",
+        }
+
+    def test_groupby_columns_q2(self):
+        assert get_groupby_columns("q2") == [
+            "l_site",
+            "l_sector",
+            "l_square",
+            "l_layer",
+            "f_piecetype",
+            "f_technology",
+            "f_baking",
+            "f_primarycolor",
+            "f_covering",
+            "f_surface",
+            "f_wallthickness",
+            "f_handletype",
+            "f_handlesize",
+            "f_bottomtype",
+            "f_category",
+            "f_form",
+            "f_type",
+            "f_subtype",
+            "f_variant",
+            "f_note",
+            "f_inventory",
+            "o_primary_",
+            "o_secondary",
+            "o_tertiary",
+            "o_quarternary",
+            "o_color1",
+            "o_encrustcolor1",
+        ]
+
+    def test_groupby_columns_finds(self):
+        assert get_groupby_columns("finds") == [
+            "l_site",
+            "l_sector",
+            "l_square",
+            "l_layer",
+        ]
+
+    def test_groupby_columns_finds_arch(self):
+        assert get_groupby_columns("finds_arch") == [
+            "fi_find_type",
+            "fi_material",
+            "fi_coin",
+            "fi_denomination",
+            "fi_mint",
+            "fi_year",
+            "fi_inv_no",
+            "fi_depth_m",
+            "fi_context",
+            "fi_sector",
+            "fi_square",
+            "fi_layer_mechanical",
+        ]
+
+
+def _assert_binds_supplied(sql: str, params: dict) -> None:
+    """Every :bind referenced by *sql* must be present in *params*."""
+    assert set(text(sql)._bindparams) <= set(params)
+
+
+def _chart_sql_and_params(**kwargs):
+    db = MagicMock()
+    db.execute.return_value.mappings.return_value.all.return_value = []
+    build_chart_histogram(db, **kwargs)
+    return str(db.execute.call_args[0][0]), db.execute.call_args[0][1]
+
+
+_FRAG_AND_ORN_LABELS = [*FRAGMENT_FILTER_COLS, *ORNAMENT_FILTER_COLS]
+_NO_DATES = dict(
+    site=None, sector=None, square=None, date_from=None, date_to=None, q=None
+)
+
+
+class TestFilterBindCompleteness:
+    """Every label of every canonical filter map yields fully bound SQL."""
+
+    @pytest.mark.parametrize("label", list(LAYER_FILTER_COLS))
+    def test_layer_labels_q2(self, label):
+        where, params = _build_where(
+            query_id="q2", layer_filters={label: ["x", "y"]}, **_NO_DATES
+        )
+        _assert_binds_supplied(where, params)
+
+    @pytest.mark.parametrize("label", _FRAG_AND_ORN_LABELS)
+    def test_fragment_and_ornament_labels_q2(self, label):
+        where, params = _build_where(
+            query_id="q2", frag_filters={label: ["x", "y"]}, **_NO_DATES
+        )
+        assert "ILIKE" in where
+        _assert_binds_supplied(where, params)
+
+    @pytest.mark.parametrize("label", list(ARCH_FILTER_COLS))
+    def test_arch_labels_finds_arch(self, label):
+        where, params = _build_where(
+            query_id="finds_arch", frag_filters={label: ["x", "y"]}, **_NO_DATES
+        )
+        assert "ILIKE" in where
+        _assert_binds_supplied(where, params)
+
+    @pytest.mark.parametrize("label", list(FINDS_LOCATION_FILTER_COLS))
+    def test_location_labels_build_where_finds(self, label):
+        where, params = _build_where_finds(
+            query_id="finds_arch", layer_filters={label: ["x", "y"]}, **_NO_DATES
+        )
+        _assert_binds_supplied(where, params)
+
+    @pytest.mark.parametrize("label", list(ARCH_FILTER_COLS))
+    def test_arch_labels_build_where_finds(self, label):
+        where, params = _build_where_finds(
+            query_id="finds_arch", arch_filters={label: ["x", "y"]}, **_NO_DATES
+        )
+        _assert_binds_supplied(where, params)
+
+    @pytest.mark.parametrize("label", list(LAYER_FILTER_COLS))
+    @pytest.mark.parametrize("query_id", ["q2", "finds"])
+    def test_chart_layer_labels(self, query_id, label):
+        sql, params = _chart_sql_and_params(
+            query_id=query_id, x_key="l_site", layer_filters={label: ["x", "y"]}
+        )
+        _assert_binds_supplied(sql, params)
+
+    @pytest.mark.parametrize("label", list(FINDS_LOCATION_FILTER_COLS))
+    def test_chart_location_labels_finds_arch(self, label):
+        sql, params = _chart_sql_and_params(
+            query_id="finds_arch",
+            x_key="fi_material",
+            layer_filters={label: ["x", "y"]},
+        )
+        _assert_binds_supplied(sql, params)
+
+    @pytest.mark.parametrize("label", _FRAG_AND_ORN_LABELS)
+    def test_chart_fragment_and_ornament_labels(self, label):
+        sql, params = _chart_sql_and_params(
+            query_id="q2", x_key="l_site", frag_filters={label: ["x", "y"]}
+        )
+        assert "ILIKE" in sql
+        _assert_binds_supplied(sql, params)
+
+    @pytest.mark.parametrize("label", list(ARCH_FILTER_COLS))
+    def test_chart_arch_labels(self, label):
+        sql, params = _chart_sql_and_params(
+            query_id="finds_arch", x_key="fi_material", frag_filters={label: ["x", "y"]}
+        )
+        assert "ILIKE" in sql
+        _assert_binds_supplied(sql, params)
+
+
+class TestFilterBuilderInvariants:
+    def test_unknown_label_raises(self):
+        with pytest.raises(KeyError):
+            _apply_layer_filters([], {}, {"Bogus": ["x"]})
+
+    @pytest.mark.parametrize(
+        "cols",
+        [
+            LAYER_FILTER_COLS,
+            FINDS_LOCATION_FILTER_COLS,
+            ARCH_FILTER_COLS,
+            {**FRAGMENT_FILTER_COLS, **ORNAMENT_FILTER_COLS},
+        ],
+    )
+    def test_column_names_unique_within_map(self, cols):
+        assert len(set(cols.values())) == len(cols)
+
+    def test_chart_ornament_primary_uses_projected_column(self):
+        sql, _ = _chart_sql_and_params(query_id="q2", x_key="o_primary_")
+        assert "GROUP BY primary_" in sql
+        assert "o.primary_," in sql
+        assert "AS o_primary" not in sql

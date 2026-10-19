@@ -7,6 +7,19 @@ strings are kept because the legacy schema allows them.
 
 from __future__ import annotations
 
+
+def sql_in_list(values: tuple[str, ...]) -> str:
+    """Return a SQL IN-list with quoted literals.
+
+    Raises ValueError if any value contains a single quote: quoting is not
+    escaped, so such a value cannot be rendered safely.
+    """
+    for v in values:
+        if "'" in v:
+            raise ValueError(f"sql_in_list: value contains a single quote: {v!r}")
+    return ", ".join(f"'{v}'" for v in values)
+
+
 LAYER_TYPE_VALUES = ("механичен", "контекст", "")
 
 COLOR_VALUES = (
