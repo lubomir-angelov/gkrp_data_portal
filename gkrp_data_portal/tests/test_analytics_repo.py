@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 from pathlib import Path
 from datetime import date
 from unittest.mock import MagicMock
@@ -256,6 +257,60 @@ class TestQueryFinds:
         calls = mock_db.execute.call_args_list
         data_sql = str(calls[0][0][0])
         assert "f_count_deduped" not in data_sql
+
+
+def _captured_sql(fn, **kwargs) -> list[str]:
+    """Run *fn* against a mock db; return [main_sql, count_sql] as sent."""
+    db = MagicMock()
+    db.execute.return_value.mappings.return_value.all.return_value = []
+    db.execute.return_value.scalar_one.return_value = 0
+    fn(db, **kwargs)
+    return [str(c[0][0]) for c in db.execute.call_args_list]
+
+
+def _assert_aliases_defined(sql: str) -> None:
+    """Every ``alias.column`` reference must name an alias from FROM/JOIN."""
+    defined = set(re.findall(r"\b(?:FROM|JOIN)\s+(?:tbl\w+|finds)\s+(\w+)", sql)) | set(
+        re.findall(r"\)\s+(\w+)\s*(?:\)|$)", sql.strip())
+    )
+    used = set(re.findall(r"\b([a-z]+\d?)\.[a-z_0-9]+", sql))
+    assert used <= defined, f"undefined aliases {used - defined} in:\n{sql}"
+
+
+class TestCountSqlAliasCompleteness:
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"q": "a"},
+            {"frag_filters": {"Primary": ["x"]}},
+            {"frag_filters": {"Color / color1": ["x"]}},
+            {
+                "frag_filters": {"Primary": ["x"]},
+                "layer_filters": {"Site": ["A"]},
+            },
+        ],
+    )
+    def test_q2_main_and_count_sql(self, kwargs):
+        main_sql, count_sql = _captured_sql(
+            query_q2_layers_fragments_ornaments, **kwargs
+        )
+        _assert_aliases_defined(main_sql)
+        _assert_aliases_defined(count_sql)
+
+    def test_q2_count_joins_ornaments_inside_distinct_subquery(self):
+        _, count_sql = _captured_sql(
+            query_q2_layers_fragments_ornaments, frag_filters={"Primary": ["x"]}
+        )
+        join = "LEFT JOIN tblornaments o2 ON f2.fragmentid = o2.fragmentid"
+        assert join in count_sql
+        assert count_sql.index("SELECT DISTINCT") < count_sql.index(join)
+        assert count_sql.index(join) < count_sql.index("WHERE")
+
+    def test_finds_q_main_and_count_sql(self):
+        main_sql, count_sql = _captured_sql(query_finds, q="a")
+        _assert_aliases_defined(main_sql)
+        _assert_aliases_defined(count_sql)
+        assert "fi2.description" in count_sql
 
 
 class TestBuildChartHistogram:

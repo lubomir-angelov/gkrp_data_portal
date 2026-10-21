@@ -196,8 +196,13 @@ def _build_where(
     layer_alias: str = "l",
     frag_alias: str = "f",
     orn_alias: str = "o",
+    finds_alias: str = "fi",
 ) -> tuple[str, dict[str, Any]]:
-    """Build a safe WHERE clause using only whitelisted filters."""
+    """Build a safe WHERE clause using only whitelisted filters.
+
+    Every column reference derives from the alias params, so the main query
+    and its renamed-alias count query can never diverge.
+    """
     clauses: list[str] = []
     params: dict[str, Any] = {}
 
@@ -227,11 +232,15 @@ def _build_where(
         params["q"] = f"%{q}%"
         if query_id == "q2":
             clauses.append(
-                "(COALESCE(f.inventory,'') ILIKE :q OR COALESCE(f.note,'') ILIKE :q OR COALESCE(f.piecetype::text,'') ILIKE :q)"
+                f"(COALESCE({frag_alias}.inventory,'') ILIKE :q"
+                f" OR COALESCE({frag_alias}.note,'') ILIKE :q"
+                f" OR COALESCE({frag_alias}.piecetype::text,'') ILIKE :q)"
             )
         elif query_id == "finds":
             clauses.append(
-                "(COALESCE(fi.description,'') ILIKE :q OR COALESCE(fi.findtype,'') ILIKE :q OR COALESCE(fi.inventory,'') ILIKE :q)"
+                f"(COALESCE({finds_alias}.description,'') ILIKE :q"
+                f" OR COALESCE({finds_alias}.findtype,'') ILIKE :q"
+                f" OR COALESCE({finds_alias}.inventory,'') ILIKE :q)"
             )
 
     # Fragment field filters (only applied for q2 which has f alias)
@@ -329,11 +338,14 @@ def query_q2_layers_fragments_ornaments(
         frag_alias="f2",
         orn_alias="o2",
     )
+    # Ornament join is required inside the DISTINCT subquery so ornament
+    # filters resolve; DISTINCT (fragmentid, count) still sums each fragment once.
     count_sql = f"""SELECT COALESCE((
         SELECT SUM(f2.count) FROM (
             SELECT DISTINCT f2.fragmentid, f2.count
             FROM tblfragments f2
             INNER JOIN tbllayers l2 ON l2.layerid = f2.locationid
+            LEFT JOIN tblornaments o2 ON f2.fragmentid = o2.fragmentid
             {count_where_sql}
         ) f2
     ), 0)"""
@@ -411,6 +423,7 @@ def query_finds(
         layer_alias="l2",
         frag_alias="f2",
         orn_alias="o2",
+        finds_alias="fi2",
     )
     count_sql = f"""SELECT COUNT(*) FROM (
         SELECT fi2.findid
