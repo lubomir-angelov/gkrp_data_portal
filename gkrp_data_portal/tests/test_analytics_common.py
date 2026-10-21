@@ -104,32 +104,23 @@ class TestParseDate:
 
 class TestBuildHistogram:
     def test_empty(self):
-        assert build_histogram([], top_n=30) == ([], [])
+        assert build_histogram([]) == ([], [])
 
-    def test_count_desc_order(self):
+    def test_preserves_sql_input_order(self):
         rows = [{"bucket": "b", "count": 2}, {"bucket": "a", "count": 5}]
-        assert build_histogram(rows, top_n=30) == (["a", "b"], [5, 2])
-
-    def test_respects_top_n(self):
-        rows = [
-            {"bucket": "a", "count": 1},
-            {"bucket": "b", "count": 4},
-            {"bucket": "c", "count": 3},
-            {"bucket": "d", "count": 2},
-        ]
-        assert build_histogram(rows, top_n=2) == (["b", "c"], [4, 3])
+        assert build_histogram(rows) == (["b", "a"], [2, 5])
 
     def test_ties_keep_input_order(self):
         rows = [{"bucket": "x", "count": 3}, {"bucket": "y", "count": 3}]
-        assert build_histogram(rows, top_n=30) == (["x", "y"], [3, 3])
+        assert build_histogram(rows) == (["x", "y"], [3, 3])
 
     def test_null_bucket_passes_through(self):
         rows = [{"bucket": None, "count": 1}]
-        assert build_histogram(rows, top_n=30) == ([None], [1])
+        assert build_histogram(rows) == ([None], [1])
 
     def test_missing_count_raises(self):
         with pytest.raises(KeyError):
-            build_histogram([{"bucket": "a"}], top_n=30)
+            build_histogram([{"bucket": "a"}])
 
 
 class TestPlotlyBar:
@@ -153,7 +144,13 @@ class TestColumnToLabel:
         assert _column_to_label("f_surface") == LOCALE["frag_surface"]
         assert _column_to_label("o_primary_") == LOCALE["frag_primary"]
         assert _column_to_label("l_site") == LOCALE["label_site"]
-        assert _column_to_label("unknown_col") == "unknown_col"
+        assert _column_to_label("fi_find_type") == LOCALE["label_find_type"]
+
+    def test_unmapped_column_raises(self):
+        from gkrp_data_portal.ui.pages.analytics_common import _column_to_label
+
+        with pytest.raises(KeyError):
+            _column_to_label("unknown_col")
 
 
 def _srow(x, s, c):
@@ -162,34 +159,28 @@ def _srow(x, s, c):
 
 class TestBuildHistogramSeries:
     def test_empty(self):
-        assert build_histogram_series([], top_n=30) == ([], {})
+        assert build_histogram_series([]) == ([], {})
 
     def test_pivot_and_zero_fill(self):
         rows = [_srow("A", "X", 3), _srow("A", "Y", 5), _srow("B", "X", 2)]
-        xs, data = build_histogram_series(rows, top_n=30)
+        xs, data = build_histogram_series(rows)
         assert xs == ["A", "B"]
         assert data == {"X": [3, 2], "Y": [5, 0]}
 
-    def test_x_ordered_by_total_desc(self):
-        rows = [_srow("A", "X", 1), _srow("B", "X", 9)]
-        xs, data = build_histogram_series(rows, top_n=30)
+    def test_x_order_is_first_appearance(self):
+        rows = [_srow("B", "X", 1), _srow("A", "X", 9), _srow("B", "Y", 4)]
+        xs, data = build_histogram_series(rows)
         assert xs == ["B", "A"]
-        assert data == {"X": [9, 1]}
-
-    def test_top_n_drops_series_only_in_dropped_x(self):
-        rows = [_srow("A", "X", 10), _srow("B", "Y", 1)]
-        xs, data = build_histogram_series(rows, top_n=1)
-        assert xs == ["A"]
-        assert data == {"X": [10]}
+        assert data == {"X": [1, 9], "Y": [4, 0]}
 
     def test_count_coerced_to_int(self):
-        xs, data = build_histogram_series([_srow("A", "X", Decimal("4"))], top_n=30)
+        xs, data = build_histogram_series([_srow("A", "X", Decimal("4"))])
         assert data == {"X": [4]}
         assert isinstance(data["X"][0], int)
 
     def test_missing_series_bucket_raises(self):
         with pytest.raises(KeyError):
-            build_histogram_series([{"x_bucket": "A", "count": 1}], top_n=30)
+            build_histogram_series([{"x_bucket": "A", "count": 1}])
 
     def test_producer_consumer_contract(self):
         mock_db = MagicMock()
@@ -201,9 +192,14 @@ class TestBuildHistogramSeries:
         ]
         mock_db.execute.return_value = mock_row
         result = build_chart_histogram(
-            mock_db, query_id="q2", x_key="l_site", series_key="f_piecetype", top_n=30
+            mock_db,
+            query_id="q2",
+            x_key="l_site",
+            series_key="f_piecetype",
+            layer_filters=None,
+            frag_filters=None,
         )
-        xs, data = build_histogram_series(result, top_n=30)
+        xs, data = build_histogram_series(result)
         assert xs == ["Sofia", "Plovdiv"]
         assert data == {"Body": [100, 30], "Rim": [50, 0]}
 
@@ -225,8 +221,15 @@ class TestPlotlyExportJs:
             "window.__gkrpPlotlyEl",
             "window.__gkrpPlotlyDownload",
             "window.__gkrpPlotlyResize",
+            "window.__gkrpPlotlyPrint",
         ):
             assert name in PLOTLY_EXPORT_JS
+
+    def test_print_helper_does_not_swallow_errors(self):
+        print_js = PLOTLY_EXPORT_JS[
+            PLOTLY_EXPORT_JS.index("window.__gkrpPlotlyPrint") :
+        ]
+        assert "catch(() => {})" not in print_js
 
 
 class TestPlotlyGroupedBar:
@@ -235,7 +238,9 @@ class TestPlotlyGroupedBar:
             "Tech 1": [10, 20, 30],
             "Tech 2": [5, 10, 15],
         }
-        result = plotly_grouped_bar(["A", "B", "C"], series_data, "Test Title")
+        result = plotly_grouped_bar(
+            ["A", "B", "C"], series_data, "Test Title", series_label="Тип"
+        )
         assert "data" in result
         assert "layout" in result
         assert len(result["data"]) == 2
@@ -250,7 +255,7 @@ class TestPlotlyGroupedBar:
         assert result["layout"]["showlegend"] is True
 
     def test_empty_data_returns_bar_chart(self):
-        result = plotly_grouped_bar([], {}, "Empty")
+        result = plotly_grouped_bar([], {}, "Empty", series_label="Тип")
         assert len(result["data"]) == 1
         assert result["data"][0]["type"] == "bar"
         assert result["data"][0]["x"] == []
@@ -258,16 +263,20 @@ class TestPlotlyGroupedBar:
 
     def test_single_series(self):
         series_data = {"Only": [1, 2, 3]}
-        result = plotly_grouped_bar(["A", "B", "C"], series_data, "Single")
+        result = plotly_grouped_bar(
+            ["A", "B", "C"], series_data, "Single", series_label="Тип"
+        )
         assert len(result["data"]) == 1
         assert result["data"][0]["name"] == "Only"
 
     def test_legend_configured(self):
         series_data = {"X": [1], "Y": [2]}
-        result = plotly_grouped_bar(["A"], series_data, "Legend Test")
+        result = plotly_grouped_bar(
+            ["A"], series_data, "Legend Test", series_label="Тип"
+        )
         legend = result["layout"]["legend"]
         assert legend["orientation"] == "h"
-        assert legend["title"]["text"] == "Series"
+        assert legend["title"]["text"] == "Тип"
 
 
 class TestGuides:

@@ -87,84 +87,13 @@ The fix introduces a **chart-specific query path** that performs GROUP BY aggreg
 
 **File**: `gkrp_data_portal/src/gkrp_data_portal/ui/repository/analytics_repo.py`
 
-Add a new function `build_chart_histogram` that:
-
-- Accepts the same filter parameters as the existing query functions
-- Accepts `x_key` (the column to group by) and `series_key` (optional secondary grouping)
-- Accepts `top_n` (default 30) and `limit` (safety cap, default 25000)
-- Builds and executes a SQL query that:
-  - Applies the same WHERE clause filters as the existing queries
-  - Groups by the x_key column (and series_key if provided)
-  - Sums `f_count` or `f_count_deduped` per group (matching existing histogram logic)
-  - Orders by count descending, LIMIT top_n
-- Returns a list of `{bucket: str, count: int, series: str | None}` dicts
-
-**SQL structure for q2 (no series):**
-```sql
-SELECT
-    <x_key_column> AS bucket,
-    COALESCE(SUM(f_count_deduped), 0) AS count
-FROM (
-    SELECT l.<x_key>, f.count AS f_count_deduped,
-           MAX(f.count) OVER (PARTITION BY f.fragmentid) AS f_count_deduped
-    FROM tbllayers l
-    INNER JOIN tblfragments f ON l.layerid = f.locationid
-    LEFT JOIN tblornaments o ON f.fragmentid = o.fragmentid
-    <WHERE clause>
-) sub
-WHERE bucket IS NOT NULL
-GROUP BY bucket
-ORDER BY count DESC
-LIMIT <top_n>
-```
-
-**Key design decisions:**
-
-- The window function `MAX(f.count) OVER (PARTITION BY f.fragmentid)` is applied in a subquery to de-duplicate fragment counts across ornament rows, then the outer query groups and sums. This matches the existing `f_count_deduped` semantics in `query_q2_layers_fragments_ornaments`.
-- The WHERE clause is built using the same `_build_where` helper to ensure filter consistency.
-- For the "finds" and "finds_arch" queries, the subquery structure adapts to their respective joins.
-
-**SQL structure for q2 (with series):**
-```sql
-SELECT
-    <x_key_column> AS x_bucket,
-    <series_key_column> AS series_bucket,
-    COALESCE(SUM(f_count_deduped), 0) AS count
-FROM (...) sub
-WHERE x_bucket IS NOT NULL AND series_bucket IS NOT NULL
-GROUP BY x_bucket, series_bucket
-ORDER BY count DESC
-```
-The caller then pivots the result into the `{x_bucket: {series: count}}` structure matching `build_histogram_series` output.
+`build_chart_histogram` aggregates in SQL and returns the rows already ranked: DISTINCT-per-bucket counting (each fragment once per bucket), one ranked-totals CTE (x-only deduplicated total, `ROW_NUMBER`) shared by single-axis and series modes, and the `CHART_TOP_N` bound. The function and CHART.md section 6 are the authority; the SQL is intentionally not copied here. Return shapes: `{bucket, count}` single-axis, `{x_bucket, series_bucket, count}` with a series.
 
 #### 2. Update `analytics_common.py` histogram builders
 
 **File**: `gkrp_data_portal/src/gkrp_data_portal/ui/pages/analytics_common.py`
 
-Modify `build_histogram` and `build_histogram_series` to accept an optional pre-aggregated data source:
-
-```python
-def build_histogram(
-    rows: list[dict],
-    x_key: str,
-    top_n: int = 30,
-    pre_aggregated: list[dict] | None = None,
-) -> tuple[list[str], list[int]]:
-    """Build a top-N histogram.
-
-    If *pre_aggregated* is provided (from SQL aggregation), use it directly.
-    Otherwise, fall back to Python-side aggregation from raw rows.
-    """
-    if pre_aggregated:
-        # pre_aggregated is [{bucket: str, count: int}, ...]
-        items = sorted(pre_aggregated, key=lambda x: x["count"], reverse=True)[:top_n]
-        return [i["bucket"] for i in items], [i["count"] for i in items]
-    # ... existing Python-side logic unchanged ...
-```
-
-Similarly for `build_histogram_series`, accept `pre_aggregated_series` as a list of `{x_bucket, series_bucket, count}` dicts and pivot them in Python (the pivot is O(n) where n = top_n x series_count, which is small).
-
-This keeps the existing Python-side path as a fallback (for backward compatibility and for cases where pre-aggregation isn't used) while enabling the SQL path.
+`build_histogram` and `build_histogram_series` take the SQL-ranked rows and only unzip / pivot them in input order; they neither sort nor slice (SQL is the sole ranking authority).
 
 #### 3. Wire chart-specific query into the page refresh flow
 
@@ -186,8 +115,6 @@ def refresh() -> None:
         series_key=series_key,
         layer_filters=f.get("layer_filters"),
         frag_filters=f.get("frag_filters"),
-        top_n=30,
-        limit=CHART_MAX_FETCH,
     )
 
     # Build figure from pre-aggregated data (no raw rows needed for chart)

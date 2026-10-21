@@ -7,10 +7,9 @@ Layout:
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
-from nicegui import app, ui
+from nicegui import ui
 
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
@@ -394,8 +393,6 @@ def page_analytics_table() -> None:
 
         # Persist and expose selected query id.
         state["query_id"] = query_id
-        app.storage.general["analytics_last_query_id"] = query_id
-        ui.run_javascript(f"window.__gkrp_query_id = {json.dumps(query_id)};")
 
         return {
             "query_id": query_id,

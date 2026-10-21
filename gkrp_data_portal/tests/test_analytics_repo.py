@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import inspect
+from pathlib import Path
 from datetime import date
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
 
-
+from gkrp_data_portal.ui.repository import analytics_repo
 from gkrp_data_portal.ui.repository.analytics_repo import (
+    CHART_TOP_N,
     CHART_COL_EXPR,
+    _CHART_SUBQUERIES,
     ARCH_FILTER_COLS,
     _DISTINCT_COL_DEFS,
     FINDS_LOCATION_FILTER_COLS,
@@ -254,15 +259,32 @@ class TestQueryFinds:
 
 
 class TestBuildChartHistogram:
-    def test_returns_empty_for_unknown_query_id(self):
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            dict(query_id="nonexistent", x_key="l_site", series_key=None),
+            dict(query_id="finds", x_key="l_site", series_key=None),
+            dict(query_id="q2", x_key="unknown_col", series_key=None),
+            dict(query_id="q2", x_key="l_site", series_key="unknown_col"),
+            dict(query_id="q2", x_key="l_site", series_key=""),
+            dict(query_id="q2", x_key="fi_find_type", series_key=None),
+            dict(query_id="finds_arch", x_key="l_site", series_key=None),
+        ],
+    )
+    def test_raises_keyerror_before_sql(self, kwargs):
         mock_db = MagicMock()
-        result = build_chart_histogram(mock_db, query_id="nonexistent", x_key="l_site")
-        assert result == []
+        with pytest.raises(KeyError):
+            build_chart_histogram(
+                mock_db, layer_filters=None, frag_filters=None, **kwargs
+            )
+        mock_db.execute.assert_not_called()
 
-    def test_returns_empty_for_unknown_x_key(self):
-        mock_db = MagicMock()
-        result = build_chart_histogram(mock_db, query_id="q2", x_key="unknown_col")
-        assert result == []
+    def test_signature_has_no_legacy_params(self):
+        params = inspect.signature(build_chart_histogram).parameters
+        assert not {"date_from", "date_to", "site", "sector", "square", "q"} & set(
+            params
+        )
+        assert all(p.default is inspect.Parameter.empty for p in params.values())
 
     def test_q2_single_axis_returns_buckets(self):
         mock_db = MagicMock()
@@ -274,31 +296,55 @@ class TestBuildChartHistogram:
         ]
         mock_db.execute.return_value = mock_row
 
-        result = build_chart_histogram(mock_db, query_id="q2", x_key="l_site", top_n=30)
+        result = build_chart_histogram(
+            mock_db, **_CHART_ARGS, query_id="q2", x_key="l_site"
+        )
         assert len(result) == 3
         assert result[0]["bucket"] == "Sofia"
         assert result[0]["count"] == 150
         assert result[1]["bucket"] == "Plovdiv"
         assert result[1]["count"] == 80
 
-    def test_q2_series_returns_pivoted_data(self):
+    def test_q2_series_passes_ranked_rows_through(self):
         mock_db = MagicMock()
         mock_row = MagicMock()
         mock_row.mappings.return_value.all.return_value = [
             {"x_bucket": "Sofia", "series_bucket": "Body", "cnt": 100},
             {"x_bucket": "Sofia", "series_bucket": "Rim", "cnt": 50},
+            {"x_bucket": "Sofia", "series_bucket": "Base", "cnt": 1},
             {"x_bucket": "Plovdiv", "series_bucket": "Body", "cnt": 30},
         ]
         mock_db.execute.return_value = mock_row
 
         result = build_chart_histogram(
-            mock_db, query_id="q2", x_key="l_site", series_key="f_piecetype", top_n=30
+            mock_db,
+            **{**_CHART_ARGS, "series_key": "f_piecetype"},
+            query_id="q2",
+            x_key="l_site",
         )
-        # Should return one row per (x_bucket, series_bucket) combo for top-N x_buckets
-        assert len(result) == 3
-        buckets = {r["x_bucket"] for r in result}
-        assert "Sofia" in buckets
-        assert "Plovdiv" in buckets
+        assert result == [
+            {"x_bucket": "Sofia", "series_bucket": "Body", "count": 100},
+            {"x_bucket": "Sofia", "series_bucket": "Rim", "count": 50},
+            {"x_bucket": "Sofia", "series_bucket": "Base", "count": 1},
+            {"x_bucket": "Plovdiv", "series_bucket": "Body", "count": 30},
+        ]
+
+    def test_top_n_bind_is_contracted_bound(self):
+        _, params = _chart_sql_and_params(**_CHART_ARGS, query_id="q2", x_key="l_site")
+        assert params["top_n"] == CHART_TOP_N
+
+    def test_finds_arch_counts_rows_in_sql(self):
+        sql, _ = _chart_sql_and_params(
+            **_CHART_ARGS, query_id="finds_arch", x_key="fi_material"
+        )
+        assert "COUNT(*)" in sql
+        assert "DISTINCT fragmentid" not in sql
+
+    @pytest.mark.parametrize("query_id", sorted(_CHART_SUBQUERIES))
+    def test_no_recordenteredon_in_chart_sql(self, query_id):
+        x_key = next(iter(CHART_COL_EXPR[query_id]))
+        sql, _ = _chart_sql_and_params(**_CHART_ARGS, query_id=query_id, x_key=x_key)
+        assert "recordenteredon" not in sql
 
     def test_finds_arch_counts_rows(self):
         mock_db = MagicMock()
@@ -310,44 +356,11 @@ class TestBuildChartHistogram:
         mock_db.execute.return_value = mock_row
 
         result = build_chart_histogram(
-            mock_db, query_id="finds_arch", x_key="fi_find_type", top_n=30
+            mock_db, **_CHART_ARGS, query_id="finds_arch", x_key="fi_find_type"
         )
         assert len(result) == 2
         assert result[0]["bucket"] == "Metal"
         assert result[0]["count"] == 25
-
-    def test_finds_counts_rows(self):
-        mock_db = MagicMock()
-        mock_row = MagicMock()
-        mock_row.mappings.return_value.all.return_value = [
-            {"bucket": "Sofia", "cnt": 10},
-        ]
-        mock_db.execute.return_value = mock_row
-
-        result = build_chart_histogram(
-            mock_db, query_id="finds", x_key="l_site", top_n=30
-        )
-        assert len(result) == 1
-        assert result[0]["bucket"] == "Sofia"
-        assert result[0]["count"] == 10
-
-    def test_applies_site_filter(self):
-        mock_db = MagicMock()
-        mock_row = MagicMock()
-        mock_row.mappings.return_value.all.return_value = [
-            {"bucket": "TypeA", "cnt": 5},
-        ]
-        mock_db.execute.return_value = mock_row
-
-        build_chart_histogram(
-            mock_db, query_id="q2", x_key="f_piecetype", site="Sofia", top_n=30
-        )
-
-        calls = mock_db.execute.call_args_list
-        sql = str(calls[0][0][0])
-        params = calls[0][0][1]
-        assert "site ILIKE" in sql
-        assert params["site"] == "%Sofia%"
 
     def test_applies_frag_filter(self):
         mock_db = MagicMock()
@@ -359,8 +372,9 @@ class TestBuildChartHistogram:
             mock_db,
             query_id="q2",
             x_key="l_site",
+            series_key=None,
+            layer_filters=None,
             frag_filters={"Piecetype": ["Body"]},
-            top_n=30,
         )
 
         calls = mock_db.execute.call_args_list
@@ -370,13 +384,126 @@ class TestBuildChartHistogram:
         assert params["frag_piecetype_0"] == "%Body%"
 
 
+class TestChartTopNDrift:
+    def test_chart_md_states_the_bound(self):
+        chart_md = (Path(__file__).resolve().parents[2] / "CHART.md").read_text(
+            encoding="utf-8"
+        )
+        assert f"първите {CHART_TOP_N} групи" in chart_md
+
+
+class TestChartHistogramExecuted:
+    """Run the generated SQL on SQLite with seeded rows (numbers, not substrings)."""
+
+    @pytest.fixture
+    def db(self):
+        engine = create_engine("sqlite://")
+        with engine.begin() as conn:
+            for ddl in (
+                "CREATE TABLE tbllayers (layerid INT, site TEXT, sector TEXT,"
+                " square TEXT, layer TEXT)",
+                "CREATE TABLE tblfragments (fragmentid INT, locationid INT,"
+                " piecetype TEXT, technology TEXT, baking TEXT, primarycolor TEXT,"
+                " covering TEXT, surface TEXT, wallthickness TEXT, handletype TEXT,"
+                " handlesize TEXT, bottomtype TEXT, category TEXT, form TEXT,"
+                " type TEXT, subtype TEXT, variant TEXT, note TEXT, inventory TEXT,"
+                " count INT)",
+                "CREATE TABLE tblornaments (fragmentid INT, primary_ TEXT,"
+                " secondary TEXT, tertiary TEXT, quarternary TEXT, color1 TEXT,"
+                " encrustcolor1 TEXT)",
+                "CREATE TABLE finds (sector TEXT, square TEXT, layer_mechanical TEXT,"
+                " find_type TEXT, material TEXT, coin TEXT, denomination TEXT,"
+                " mint TEXT, year TEXT, inv_no TEXT, depth_m TEXT, context TEXT,"
+                " findid INT, description TEXT)",
+            ):
+                conn.exec_driver_sql(ddl)
+            for layerid, site in ((1, "A"), (2, "B"), (3, None), (4, "C")):
+                conn.execute(
+                    text("INSERT INTO tbllayers (layerid, site) VALUES (:i, :s)"),
+                    {"i": layerid, "s": site},
+                )
+            # (fragmentid, layerid, count)
+            for fid, lid, cnt in (
+                (1, 1, 5),
+                (2, 1, 2),
+                (3, 2, 6),
+                (4, 3, 1),
+                (5, 4, 8),
+            ):
+                conn.execute(
+                    text(
+                        "INSERT INTO tblfragments (fragmentid, locationid, count)"
+                        " VALUES (:f, :l, :c)"
+                    ),
+                    {"f": fid, "l": lid, "c": cnt},
+                )
+            for fid, prim in ((1, "P1"), (1, "P2"), (1, "P3"), (2, "P1")):
+                conn.execute(
+                    text(
+                        "INSERT INTO tblornaments (fragmentid, primary_)"
+                        " VALUES (:f, :p)"
+                    ),
+                    {"f": fid, "p": prim},
+                )
+            for findid, material in ((1, "Fe"), (2, "Fe"), (3, "Au")):
+                conn.execute(
+                    text("INSERT INTO finds (findid, material) VALUES (:i, :m)"),
+                    {"i": findid, "m": material},
+                )
+        with Session(engine) as session:
+            yield session
+
+    def _run(self, db, **kwargs):
+        return build_chart_histogram(
+            db, layer_filters=None, frag_filters=None, **kwargs
+        )
+
+    def test_single_axis_counts_each_fragment_once(self, db):
+        rows = self._run(db, query_id="q2", x_key="l_site", series_key=None)
+        assert rows == [
+            {"bucket": "C", "count": 8},
+            {"bucket": "A", "count": 7},
+            {"bucket": "B", "count": 6},
+            {"bucket": None, "count": 1},
+        ]
+
+    def test_series_ranks_by_deduplicated_total_and_keeps_null_group(self, db):
+        rows = self._run(db, query_id="q2", x_key="l_site", series_key="o_primary_")
+        assert rows == [
+            {"x_bucket": "C", "series_bucket": None, "count": 8},
+            {"x_bucket": "A", "series_bucket": "P1", "count": 7},
+            {"x_bucket": "A", "series_bucket": "P2", "count": 5},
+            {"x_bucket": "A", "series_bucket": "P3", "count": 5},
+            {"x_bucket": "B", "series_bucket": None, "count": 6},
+            {"x_bucket": None, "series_bucket": None, "count": 1},
+        ]
+
+    def test_top_n_cutoff_uses_deduplicated_total(self, db, monkeypatch):
+        # A: deduplicated 7 (fan-out 17) vs C: 8 -- C must win the single slot.
+        monkeypatch.setattr(analytics_repo, "CHART_TOP_N", 1)
+        rows = self._run(db, query_id="q2", x_key="l_site", series_key="o_primary_")
+        assert rows == [{"x_bucket": "C", "series_bucket": None, "count": 8}]
+
+    def test_finds_arch_counts_rows(self, db):
+        rows = self._run(
+            db, query_id="finds_arch", x_key="fi_material", series_key=None
+        )
+        assert rows == [
+            {"bucket": "Fe", "count": 2},
+            {"bucket": "Au", "count": 1},
+        ]
+
+
+_CHART_ARGS = dict(series_key=None, layer_filters=None, frag_filters=None)
+
+
 def _chart_where_and_params(**kwargs):
     """Run build_chart_histogram against a mock db; return (WHERE text, params)."""
     db = MagicMock()
     db.execute.return_value.mappings.return_value.all.return_value = []
-    build_chart_histogram(db, **kwargs)
+    build_chart_histogram(db, **{**_CHART_ARGS, **kwargs})
     sql = str(db.execute.call_args[0][0])
-    where = sql.split(") sub", 1)[1].split("GROUP BY")[0]
+    where = sql.split(") sub", 1)[1].split("GROUP BY")[0].split(") d")[0]
     return " ".join(where.split()), db.execute.call_args[0][1]
 
 
@@ -475,6 +602,7 @@ class TestFilterSqlPins:
             "(primary_::text ILIKE :frag_primary__0)"
         )
         assert params == {
+            "top_n": 30,
             "layer_site_0": "%S%",
             "layer_layer": "%L%",
             "frag_piecetype_0": "%A%",
@@ -495,17 +623,11 @@ class TestFilterSqlPins:
             "(find_type::text ILIKE :arch_find_type_0)"
         )
         assert params == {
+            "top_n": 30,
             "layer_sector_0": "%A%",
             "layer_layer_mechanical_0": "%m%",
             "arch_find_type_0": "%coin%",
         }
-
-    def test_chart_histogram_finds_where(self):
-        where, params = _chart_where_and_params(
-            query_id="finds", x_key="l_site", layer_filters={"Square": ["Q"]}
-        )
-        assert where == "WHERE (square::text ILIKE :layer_square_0)"
-        assert params == {"layer_square_0": "%Q%"}
 
     def test_distinct_col_defs(self):
         assert _DISTINCT_COL_DEFS == [
@@ -551,34 +673,17 @@ class TestFilterSqlPins:
         ]
 
     def test_chart_col_expr(self):
-        assert CHART_COL_EXPR == {
-            "l_site": "l.site",
-            "l_sector": "l.sector",
-            "l_square": "l.square",
-            "l_layer": "l.layer",
-            "f_piecetype": "f.piecetype",
-            "f_technology": "f.technology",
-            "f_baking": "f.baking",
-            "f_primarycolor": "f.primarycolor",
-            "f_covering": "f.covering",
-            "f_surface": "f.surface",
-            "f_wallthickness": "f.wallthickness",
-            "f_handletype": "f.handletype",
-            "f_handlesize": "f.handlesize",
-            "f_bottomtype": "f.bottomtype",
-            "f_category": "f.category",
-            "f_form": "f.form",
-            "f_type": "f.type",
-            "f_subtype": "f.subtype",
-            "f_variant": "f.variant",
-            "f_note": "f.note",
-            "f_inventory": "f.inventory",
-            "o_primary_": "o.primary_",
-            "o_secondary": "o.secondary",
-            "o_tertiary": "o.tertiary",
-            "o_quarternary": "o.quarternary",
-            "o_color1": "o.color1",
-            "o_encrustcolor1": "o.encrustcolor1",
+        assert set(CHART_COL_EXPR) == {"q2", "finds", "finds_arch"}
+        assert list(CHART_COL_EXPR["finds"]) == [
+            "l_site",
+            "l_sector",
+            "l_square",
+            "l_layer",
+        ]
+        assert CHART_COL_EXPR["q2"]["l_site"] == "l.site"
+        assert CHART_COL_EXPR["q2"]["o_primary_"] == "o.primary_"
+        assert "fi_find_type" not in CHART_COL_EXPR["q2"]
+        assert CHART_COL_EXPR["finds_arch"] == {
             "fi_find_type": "fi.find_type",
             "fi_material": "fi.material",
             "fi_coin": "fi.coin",
@@ -592,6 +697,10 @@ class TestFilterSqlPins:
             "fi_square": "fi.square",
             "fi_layer_mechanical": "fi.layer_mechanical",
         }
+
+    def test_get_groupby_columns_unknown_query_raises(self):
+        with pytest.raises(KeyError):
+            get_groupby_columns("nonexistent")
 
     def test_groupby_columns_q2(self):
         assert get_groupby_columns("q2") == [
@@ -657,7 +766,7 @@ def _assert_binds_supplied(sql: str, params: dict) -> None:
 def _chart_sql_and_params(**kwargs):
     db = MagicMock()
     db.execute.return_value.mappings.return_value.all.return_value = []
-    build_chart_histogram(db, **kwargs)
+    build_chart_histogram(db, **{**_CHART_ARGS, **kwargs})
     return str(db.execute.call_args[0][0]), db.execute.call_args[0][1]
 
 
@@ -708,7 +817,7 @@ class TestFilterBindCompleteness:
         _assert_binds_supplied(where, params)
 
     @pytest.mark.parametrize("label", list(LAYER_FILTER_COLS))
-    @pytest.mark.parametrize("query_id", ["q2", "finds"])
+    @pytest.mark.parametrize("query_id", ["q2"])
     def test_chart_layer_labels(self, query_id, label):
         sql, params = _chart_sql_and_params(
             query_id=query_id, x_key="l_site", layer_filters={label: ["x", "y"]}
@@ -760,6 +869,6 @@ class TestFilterBuilderInvariants:
 
     def test_chart_ornament_primary_uses_projected_column(self):
         sql, _ = _chart_sql_and_params(query_id="q2", x_key="o_primary_")
-        assert "GROUP BY primary_" in sql
+        assert "primary_ AS x_val" in sql
         assert "o.primary_," in sql
         assert "AS o_primary" not in sql

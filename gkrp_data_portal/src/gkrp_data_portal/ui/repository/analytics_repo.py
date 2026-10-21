@@ -283,8 +283,8 @@ def query_q2_layers_fragments_ornaments(
 ) -> AnalyticsResult:
     """Filter #2: tbllayers LEFT JOIN tblfragments LEFT JOIN tblornaments.
 
-    Uses a window function to de-duplicate f.count across ornament rows,
-    so each fragment's count is summed only once in histograms and totals.
+    ``f_count_deduped`` repeats f.count on every ornament row of a fragment
+    (display column of the table; totals count distinct fragments separately).
     Fragments without ornaments are included via LEFT JOIN.
     """
     select_cols = (
@@ -445,35 +445,28 @@ _DISTINCT_COL_DEFS: list[tuple[str, str, tuple[str, ...]]] = (
 )
 
 
-# Reverse mapping: prefixed result column name -> SQL col expression
-# e.g. "l_site" -> "l.site", "f_piecetype" -> "f.piecetype", "o_primary_" -> "o.primary_"
-def _build_col_expr_lookup() -> dict[str, str]:
-    """Build {prefixed_col_name: sql_expr} from _DISTINCT_COL_DEFS."""
-    lookup: dict[str, str] = {}
-    for _label, sql_expr, _qids in _DISTINCT_COL_DEFS:
-        # sql_expr is like "l.site" -> prefixed is "l_site"
-        # sql_expr is like "o.primary_" -> prefixed is "o_primary_"
-        parts = sql_expr.split(".", 1)
-        if len(parts) == 2:
-            alias, col = parts
-            prefixed = f"{alias}_{col}"
-            lookup[prefixed] = sql_expr
-    return lookup
+# Per-query mapping: query_id -> {prefixed result column name: SQL col expression}
+# e.g. {"q2": {"l_site": "l.site", "o_primary_": "o.primary_", ...}}.
+# Dict order is the UI order of _DISTINCT_COL_DEFS.
+def _build_chart_col_expr() -> dict[str, dict[str, str]]:
+    """{query_id: {prefixed_col: "alias.col"}} from _DISTINCT_COL_DEFS."""
+    by_query: dict[str, dict[str, str]] = {}
+    for _label, sql_expr, qids in _DISTINCT_COL_DEFS:
+        alias, col = sql_expr.split(".", 1)
+        for qid in qids:
+            by_query.setdefault(qid, {})[f"{alias}_{col}"] = sql_expr
+    return by_query
 
 
-CHART_COL_EXPR: dict[str, str] = _build_col_expr_lookup()
+CHART_COL_EXPR: dict[str, dict[str, str]] = _build_chart_col_expr()
 
 
 def get_groupby_columns(query_id: str) -> list[str]:
-    """Return the list of prefixed column names available for group-by.
+    """Return the prefixed column names available for group-by for *query_id*.
 
-    Built from ``_DISTINCT_COL_DEFS`` for the given query_id.
+    Raises ``KeyError`` for an unknown query id.
     """
-    return [
-        f"{sql_expr.split('.', 1)[0]}_{sql_expr.split('.', 1)[1]}"
-        for _label, sql_expr, qids in _DISTINCT_COL_DEFS
-        if query_id in qids
-    ]
+    return list(CHART_COL_EXPR[query_id])
 
 
 def get_distinct_values(
@@ -752,8 +745,8 @@ def _build_where_finds(
 # ---------------------------------------------------------------------------
 
 # Subquery templates per query_id: the FROM/JOIN clause used by the full query.
-# Each template produces rows with prefixed columns (l_site, f_piecetype, ...)
-# and f_count_deduped via a window function.
+# Each template projects bare column names (site, piecetype, ...). q2 also
+# projects fragmentid + frag_count so histograms can count each fragment once.
 _CHART_SUBQUERIES: dict[str, str] = {
     "q2": (
         "SELECT "
@@ -761,28 +754,12 @@ _CHART_SUBQUERIES: dict[str, str] = {
         "  f.piecetype, f.technology, f.baking, f.primarycolor, f.covering, "
         "  f.surface, f.wallthickness, f.handletype, f.handlesize, "
         "  f.bottomtype, f.category, f.form, f.type, f.subtype, f.variant, "
-        "  f.note, f.inventory, f.fragmentid, f.count, "
+        "  f.note, f.inventory, f.fragmentid, f.count AS frag_count, "
         "  o.primary_, o.secondary, o.tertiary, o.quarternary, "
-        "  o.color1, o.encrustcolor1, "
-        "  MAX(f.count) OVER (PARTITION BY f.fragmentid) AS f_count_deduped "
+        "  o.color1, o.encrustcolor1 "
         "FROM tbllayers l "
         "INNER JOIN tblfragments f ON l.layerid = f.locationid "
         "LEFT JOIN tblornaments o ON f.fragmentid = o.fragmentid"
-    ),
-    "finds": (
-        "SELECT "
-        "  l.site, l.sector, l.square, l.layer, "
-        "  f.piecetype, f.technology, f.baking, f.primarycolor, f.covering, "
-        "  f.surface, f.wallthickness, f.handletype, f.handlesize, "
-        "  f.bottomtype, f.category, f.form, f.type, f.subtype, f.variant, "
-        "  f.note, f.inventory, f.fragmentid, "
-        "  o.primary_, o.secondary, o.tertiary, o.quarternary, "
-        "  o.color1, o.encrustcolor1, "
-        "  fi.findid, fi.findtype, fi.description, fi.inventory AS fi_inventory "
-        "FROM tblfinds fi "
-        "INNER JOIN tbllayers l ON l.layerid = fi.layerid "
-        "LEFT JOIN tblfragments f ON f.fragmentid = fi.fragmentid "
-        "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
     ),
     "finds_arch": (
         "SELECT "
@@ -795,54 +772,42 @@ _CHART_SUBQUERIES: dict[str, str] = {
 }
 
 
+# Contracted top-N display window for chart histograms (CHART.md section 6).
+CHART_TOP_N = 30
+
+
 def build_chart_histogram(
     db: Session,
     *,
     query_id: str,
     x_key: str,
-    series_key: str | None = None,
-    site: Optional[str] = None,
-    sector: Optional[str] = None,
-    square: Optional[str] = None,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
-    q: Optional[str] = None,
-    frag_filters: Optional[dict[str, Any]] = None,
-    layer_filters: Optional[dict[str, Any]] = None,
-    top_n: int = 30,
+    series_key: str | None,
+    layer_filters: dict[str, Any] | None,
+    frag_filters: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    """Build a top-N histogram by aggregating in SQL.
+    """Build an exact top-N histogram by aggregating in SQL.
 
-    Returns a list of dicts:
+    Returns a list of dicts, already in display (rank) order:
     - Single-axis: ``[{"bucket": str, "count": int}, ...]``
     - With series: ``[{"x_bucket": str, "series_bucket": str, "count": int}, ...]``
 
-    Uses the same WHERE-clause logic as the full query functions, but
-    performs GROUP BY in the database so only ``top_n`` rows are returned
-    instead of fetching thousands of raw rows.
+    The ``CHART_TOP_N`` x-groups are chosen by their deduplicated x-only total
+    (the single-axis chart number; ties ordered by bucket); with a series, every series
+    value of those groups is returned. q2 counts each fragment once per
+    (x, series) bucket by its fragment count; finds_arch counts rows.
+
+    Raises ``KeyError`` for an unknown query id, or for an x / series column
+    that is not valid for *query_id*.
     """
-    subquery_sql = _CHART_SUBQUERIES.get(query_id)
-    if not subquery_sql:
-        return []
+    subquery_sql = _CHART_SUBQUERIES[query_id]
+    cols = CHART_COL_EXPR[query_id]
+    x_col = cols[x_key].split(".", 1)[1]
+    s_col = None if series_key is None else cols[series_key].split(".", 1)[1]
 
-    x_sql = CHART_COL_EXPR.get(x_key)
-    if not x_sql:
-        return []
-
-    if series_key:
-        s_sql = CHART_COL_EXPR.get(series_key)
-        if not s_sql:
-            return []
-    else:
-        s_sql = None
-
-    # Build WHERE clause using the subquery's alias-less column names.
-    # The subquery columns are like "site", "piecetype", "primary_" (no prefix).
-    # We need to map the filter column references to the subquery's column names.
+    # WHERE runs against the subquery's bare column names ("site", "piecetype").
     clauses: list[str] = []
-    params: dict[str, Any] = {}
+    params: dict[str, Any] = {"top_n": CHART_TOP_N}
 
-    # Layer filters: bare subquery column names
     if layer_filters:
         _add_ilike_filters(
             clauses,
@@ -855,43 +820,6 @@ def build_chart_histogram(
             ),
             filters=layer_filters,
         )
-    else:
-        # finds has no site column in the subquery; ignore legacy site param
-        legacy_cols: dict[str, str | None] = {
-            "site": None if query_id == "finds_arch" else "site",
-            "sector": "sector",
-            "square": "square",
-        }
-        for name, value in (("site", site), ("sector", sector), ("square", square)):
-            col = legacy_cols[name]
-            if value and col:
-                clauses.append(f"{col} ILIKE :{name}")
-                params[name] = f"%{value}%"
-
-    if date_from:
-        clauses.append("recordenteredon >= :date_from")
-        params["date_from"] = date_from
-    if date_to:
-        clauses.append("recordenteredon <= :date_to")
-        params["date_to"] = date_to
-
-    if q:
-        params["q"] = f"%{q}%"
-        if query_id in ("q2",):
-            clauses.append(
-                "(COALESCE(note,'') ILIKE :q OR COALESCE(inventory,'') ILIKE :q OR COALESCE(piecetype::text,'') ILIKE :q)"
-            )
-        elif query_id == "finds":
-            clauses.append(
-                "(COALESCE(description,'') ILIKE :q OR COALESCE(findtype,'') ILIKE :q OR COALESCE(fi_inventory,'') ILIKE :q)"
-            )
-        elif query_id == "finds_arch":
-            clauses.append(
-                "(COALESCE(description,'') ILIKE :q "
-                "OR COALESCE(find_type,'') ILIKE :q "
-                "OR COALESCE(material,'') ILIKE :q "
-                "OR COALESCE(inv_no::text,'') ILIKE :q)"
-            )
 
     # Fragment + ornament field filters (q2 only)
     if frag_filters and query_id == "q2":
@@ -917,59 +845,88 @@ def build_chart_histogram(
     if clauses:
         where_sql = "WHERE " + " AND ".join(clauses)
 
-    x_col = x_sql.split(".", 1)[1]  # e.g. "site" from "l.site"
-
-    # finds / finds_arch count rows (no f_count_deduped); only q2 sums f_count_deduped
-    if query_id in ("finds", "finds_arch"):
-        agg_expr = "COUNT(*)"
-    else:
-        agg_expr = "COALESCE(SUM(f_count_deduped), 0)"
-
-    if s_sql:
-        s_col = s_sql.split(".", 1)[1]
-        # Series histogram: GROUP BY x_bucket, series_bucket
-        sql = f"""
-            SELECT {x_col}::text AS x_bucket, {s_col}::text AS series_bucket,
-                   {agg_expr} AS cnt
-            FROM ({subquery_sql}) sub
-            {where_sql}
-            GROUP BY {x_col}, {s_col}
-            ORDER BY cnt DESC
-            LIMIT {top_n * 10}
+    # Ranking authority: x-only deduplicated totals (the number the single-axis
+    # chart shows), shared by both modes so a series never re-inflates the rank.
+    if query_id == "q2":
+        # Each fragment counts once per bucket (ornament rows fan out the join).
+        totals_sql = f"""
+            SELECT CAST(x_val AS TEXT) AS x_bucket,
+                   COALESCE(SUM(frag_count), 0) AS x_total
+            FROM (
+                SELECT DISTINCT fragmentid, frag_count, {x_col} AS x_val
+                FROM ({subquery_sql}) sub
+                {where_sql}
+            ) d
+            GROUP BY x_val
         """
     else:
-        # Single-axis histogram: GROUP BY x_bucket
-        sql = f"""
-            SELECT {x_col}::text AS bucket,
-                   {agg_expr} AS cnt
+        totals_sql = f"""
+            SELECT CAST({x_col} AS TEXT) AS x_bucket, COUNT(*) AS x_total
             FROM ({subquery_sql}) sub
             {where_sql}
             GROUP BY {x_col}
-            ORDER BY cnt DESC
-            LIMIT {top_n}
+        """
+    top_sql = """
+        top AS (
+            SELECT x_bucket, x_total,
+                   ROW_NUMBER() OVER (ORDER BY x_total DESC, x_bucket) AS x_rank
+            FROM totals
+        )
+    """
+
+    if s_col is None:
+        sql = f"""
+            WITH totals AS ({totals_sql}),
+            {top_sql}
+            SELECT x_bucket AS bucket, x_total AS cnt FROM top
+            WHERE x_rank <= :top_n
+            ORDER BY x_rank
+        """
+    else:
+        if query_id == "q2":
+            agg_sql = f"""
+                SELECT CAST(x_val AS TEXT) AS x_bucket,
+                       CAST(s_val AS TEXT) AS series_bucket,
+                       COALESCE(SUM(frag_count), 0) AS cnt
+                FROM (
+                    SELECT DISTINCT fragmentid, frag_count,
+                           {x_col} AS x_val, {s_col} AS s_val
+                    FROM ({subquery_sql}) sub
+                    {where_sql}
+                ) d
+                GROUP BY x_val, s_val
+            """
+        else:
+            agg_sql = f"""
+                SELECT CAST({x_col} AS TEXT) AS x_bucket,
+                       CAST({s_col} AS TEXT) AS series_bucket,
+                       COUNT(*) AS cnt
+                FROM ({subquery_sql}) sub
+                {where_sql}
+                GROUP BY {x_col}, {s_col}
+            """
+        # Null-safe join: a NULL x value is a real group.
+        sql = f"""
+            WITH totals AS ({totals_sql}),
+            {top_sql},
+            agg AS ({agg_sql})
+            SELECT a.x_bucket, a.series_bucket, a.cnt
+            FROM agg a JOIN top t
+              ON (a.x_bucket = t.x_bucket
+                  OR (a.x_bucket IS NULL AND t.x_bucket IS NULL))
+            WHERE t.x_rank <= :top_n
+            ORDER BY t.x_rank, a.cnt DESC, a.series_bucket
         """
 
     rows = db.execute(text(sql), params).mappings().all()
 
-    if s_sql:
-        # Pivot series results: group by x_bucket, collect series buckets and counts
-        x_buckets: dict[str, dict[str, int]] = {}
-        for r in rows:
-            xb = r["x_bucket"]
-            sb = r["series_bucket"]
-            cnt = int(r["cnt"])
-            if xb not in x_buckets:
-                x_buckets[xb] = {}
-            x_buckets[xb][sb] = cnt
-
-        # Pick top-N x_buckets by total count
-        x_totals = sorted(
-            x_buckets.items(), key=lambda x: sum(x[1].values()), reverse=True
-        )[:top_n]
-        result: list[dict[str, Any]] = []
-        for xb, series_map in x_totals:
-            for sb, cnt in series_map.items():
-                result.append({"x_bucket": xb, "series_bucket": sb, "count": cnt})
-        return result
-    else:
+    if s_col is None:
         return [{"bucket": r["bucket"], "count": int(r["cnt"])} for r in rows]
+    return [
+        {
+            "x_bucket": r["x_bucket"],
+            "series_bucket": r["series_bucket"],
+            "count": int(r["cnt"]),
+        }
+        for r in rows
+    ]

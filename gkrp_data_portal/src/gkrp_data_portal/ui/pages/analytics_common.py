@@ -510,6 +510,21 @@ window.__gkrpPlotlyResize = (id) =>
     const gd = window.__gkrpPlotlyEl(id);
     if (gd) { P.Plots.resize(gd); P.redraw(gd); }
   }).catch(() => {});
+window.__gkrpPlotlyPrint = (id) => {
+  const w = window.open('', '_blank');
+  if (!w) throw new Error('gkrp: print window was blocked by the browser');
+  return window.__gkrpPlotly().then((P) => {
+    const gd = window.__gkrpPlotlyEl(id);
+    if (!gd) throw new Error('gkrp: plotly element c' + id + ' not found');
+    return P.toImage(gd, { format: 'png', height: 650, width: 1100 });
+  }).then((url) => {
+    const img = w.document.createElement('img');
+    img.src = url;
+    img.style.width = '100%';
+    img.onload = () => { w.focus(); w.print(); };
+    w.document.body.appendChild(img);
+  }).catch((e) => { w.close(); throw e; });
+};
 """
 
 
@@ -664,13 +679,19 @@ _COLUMN_LABEL_KEYS: dict[str, str] = {
     "o_secondary": "frag_secondary",
     "o_tertiary": "frag_tertiary",
     "o_quarternary": "frag_quarternary",
-    "o_color1": "frag_color_color1",
-    "o_encrustcolor1": "frag_encrust_color",
     "l_site": "label_site",
     "l_sector": "label_sector",
     "l_square": "label_square",
     "l_layer": "label_layer",
-    # finds table location columns
+    # finds table columns
+    "fi_find_type": "label_find_type",
+    "fi_material": "label_material",
+    "fi_coin": "label_coin",
+    "fi_denomination": "label_denomination",
+    "fi_mint": "label_mint",
+    "fi_year": "label_year",
+    "fi_depth_m": "label_depth_m",
+    "fi_context": "label_context",
     "fi_sector": "label_sector",
     "fi_square": "label_square",
     "fi_layer_mechanical": "label_layer",
@@ -678,50 +699,43 @@ _COLUMN_LABEL_KEYS: dict[str, str] = {
 
 
 def _column_to_label(col: str) -> str:
-    """Convert a prefixed column name to a readable label."""
+    """Translated label for a chart group-by/series column; KeyError if unmapped."""
     from gkrp_data_portal.ui.lang import t
 
-    key = _COLUMN_LABEL_KEYS.get(col)
-    if key:
-        return t(key)
-    return col
+    return t(_COLUMN_LABEL_KEYS[col])
 
 
 def build_histogram(
-    pre_aggregated: list[dict[str, Any]], *, top_n: int
+    pre_aggregated: list[dict[str, Any]],
 ) -> tuple[list[str], list[int]]:
-    """Unzip SQL-aggregated ``{"bucket", "count"}`` rows into top-N (xs, ys), count-desc."""
-    items = sorted(pre_aggregated, key=lambda x: x["count"], reverse=True)[:top_n]
-    return [i["bucket"] for i in items], [i["count"] for i in items]
+    """Unzip SQL-ranked ``{"bucket", "count"}`` rows (rows arrive ranked from
+    build_chart_histogram) into (xs, ys), preserving input order."""
+    return [i["bucket"] for i in pre_aggregated], [i["count"] for i in pre_aggregated]
 
 
 def build_histogram_series(
-    pre_aggregated: list[dict[str, Any]], *, top_n: int
+    pre_aggregated: list[dict[str, Any]],
 ) -> tuple[list[str], dict[str, list[int]]]:
-    """Pivot SQL-aggregated rows into a top-N grouped histogram.
+    """Pivot SQL-ranked rows into a grouped histogram.
 
-    Each item is ``{"x_bucket": str, "series_bucket": str, "count": int}``.
+    Each item is ``{"x_bucket": str, "series_bucket": str, "count": int}``;
+    rows arrive ranked from build_chart_histogram, so ``xs`` keeps
+    first-appearance order.
 
-    Returns ``(xs, series_data)`` where ``xs`` are the top-N bucket labels and
-    ``series_data`` is ``{series_value: [y1, y2, ...]}`` — one list per series
-    value, aligned to ``xs``.
+    Returns ``(xs, series_data)`` where ``series_data`` is
+    ``{series_value: [y1, y2, ...]}`` — one list per series value, aligned to
+    ``xs``.
     """
-    x_total: dict[str, int] = {}
+    xs: list[str] = []
     series_vals: dict[str, dict[str, int]] = {}
     for item in pre_aggregated:
         xb = item["x_bucket"]
         sb = item["series_bucket"]
-        cnt = int(item["count"])
-        x_total[xb] = x_total.get(xb, 0) + cnt
-        if sb not in series_vals:
-            series_vals[sb] = {}
-        series_vals[sb][xb] = cnt
+        if xb not in xs:
+            xs.append(xb)
+        series_vals.setdefault(sb, {})[xb] = int(item["count"])
 
-    # Top-N x_buckets by total
-    top_x = sorted(x_total.items(), key=lambda x: x[1], reverse=True)[:top_n]
-    xs = [k for k, _ in top_x]
-
-    # Build aligned series data; drop series that are all zeros across the top-N
+    # Build aligned series data; drop series that are all zeros
     result_series: dict[str, list[int]] = {}
     for sv, xb_map in series_vals.items():
         counts = [xb_map.get(xb, 0) for xb in xs]
@@ -798,7 +812,8 @@ def plotly_grouped_bar(
     xs: list[str],
     series_data: dict[str, list[int]],
     title: str,
-    series_label: str = "Series",
+    *,
+    series_label: str,
 ) -> dict:
     """Build a grouped (clustered) bar chart with one trace per series value."""
     if not xs or not series_data:

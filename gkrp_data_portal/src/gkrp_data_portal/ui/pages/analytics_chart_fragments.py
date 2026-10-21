@@ -42,6 +42,10 @@ from gkrp_data_portal.ui.repository.analytics_repo import (
 
 # Group-by options hidden from the dropdowns (members of get_groupby_columns("q2")).
 _GROUPBY_EXCLUDE = frozenset({"f_note", "f_inventory", "o_color1", "o_encrustcolor1"})
+GROUPBY_OPTIONS: list[str] = [
+    c for c in get_groupby_columns("q2") if c not in _GROUPBY_EXCLUDE
+]
+DEFAULT_X = "l_site"
 
 
 @ui.page(CHART_FRAGMENTS_ROUTE)
@@ -49,9 +53,7 @@ def page_analytics_chart_fragments() -> None:
     ui.label(t("title_analytics_chart_fragments")).classes("text-h5 text-blue-600")
 
     state: dict[str, Any] = {
-        "query_id": "q2",
         "_refreshing": False,
-        "_suppress_x_change": False,
         "_hierarchy": {},
         "_all_sites": [],
         "_all_sectors": [],
@@ -149,13 +151,15 @@ def page_analytics_chart_fragments() -> None:
 
             with ui.row().classes("w-full items-center justify-between gap-2"):
                 with ui.column().classes("gap-0"):
-                    sel_x = ui.select(options=[], label=t("label_group_by")).classes(
-                        "w-[300px]"
-                    )
+                    sel_x = ui.select(
+                        options=GROUPBY_OPTIONS,
+                        value=DEFAULT_X,
+                        label=t("label_group_by"),
+                    ).classes("w-[300px]")
                     ui.label(t("chart_help_groupby")).classes("text-xs text-gray-400")
                 with ui.column().classes("gap-0"):
                     sel_series = ui.select(
-                        options=[],
+                        options=GROUPBY_OPTIONS,
                         label=t("label_series"),
                         clearable=True,
                     ).classes("w-[200px]")
@@ -186,7 +190,7 @@ def page_analytics_chart_fragments() -> None:
                     ui.button(
                         t("btn_print_pdf"),
                         on_click=lambda: ui.run_javascript(
-                            "window.open('/api/analytics/chart.html?query_id=' + encodeURIComponent(window.__gkrp_query_id || 'q2'), '_blank');"
+                            f"window.__gkrpPlotlyPrint({chart_id});"
                         ),
                     )
 
@@ -265,13 +269,14 @@ def page_analytics_chart_fragments() -> None:
         xs: list[str],
         ys: list[int],
         title: str,
-        series_data: dict[str, list[int]] | None = None,
-        series_label: str = "Series",
+        series: tuple[dict[str, list[int]], str] | None = None,
     ) -> dict[str, Any]:
         chart_type = (sel_chart_type.value or "Bar").lower()
-        chart_type_debug.set_text(f"chart_type={chart_type} series={bool(series_data)}")
-        if series_data:
-            return plotly_grouped_bar(xs, series_data, title, series_label=series_label)
+        chart_type_debug.set_text(
+            f"chart_type={chart_type} series={series is not None}"
+        )
+        if series is not None:
+            return plotly_grouped_bar(xs, series[0], title, series_label=series[1])
         if chart_type == "pie":
             return plotly_pie(xs, ys, title)
         if chart_type == "donut":
@@ -301,9 +306,6 @@ def page_analytics_chart_fragments() -> None:
             label: _select_to_list(widget)
             for label, widget in [*frag_filters, *orn_filters]
         }
-
-        state["query_id"] = "q2"
-        ui.run_javascript(f"window.__gkrp_query_id = {json.dumps('q2')};")
 
         return {
             "query_id": "q2",
@@ -412,35 +414,9 @@ def page_analytics_chart_fragments() -> None:
         try:
             f = _read_filters()
 
-            # --- Build group-by column options from known definitions ---
-            all_cols = get_groupby_columns("q2")
-            groupby_cols = [c for c in all_cols if c.lower() not in _GROUPBY_EXCLUDE]
-            sel_x.options = groupby_cols
-            sel_x.update()
-            sel_series.options = groupby_cols
-            sel_series.update()
-
-            # Default X if not set or invalid
-            preferred = [
-                "l_site",
-                "l_sector",
-                "l_square",
-                "f_piecetype",
-                "f_category",
-                "f_form",
-                "f_technology",
-            ]
-            if not sel_x.value or sel_x.value not in groupby_cols:
-                default_x = next((c for c in preferred if c in groupby_cols), None) or (
-                    groupby_cols[0] if groupby_cols else None
-                )
-                state["_suppress_x_change"] = True
-                sel_x.set_value(default_x)
-                state["_suppress_x_change"] = False
-
             # --- Chart: SQL-side aggregation (no raw row fetch needed) ---
-            x_key = sel_x.value or "l_site"
-            series_key = sel_series.value
+            x_key: str = sel_x.value
+            series_key: str | None = sel_series.value
 
             with session_scope() as db:
                 chart_agg = build_chart_histogram(
@@ -450,7 +426,6 @@ def page_analytics_chart_fragments() -> None:
                     series_key=series_key,
                     layer_filters=f.get("layer_filters"),
                     frag_filters=f.get("frag_filters"),
-                    top_n=30,
                 )
 
             if not chart_agg:
@@ -463,25 +438,23 @@ def page_analytics_chart_fragments() -> None:
                 status.set_text(t("status_no_results"))
                 return
 
-            if series_key and series_key in (sel_x.options or []):
-                series_label = _column_to_label(series_key)
-                xs, series_data = build_histogram_series(chart_agg, top_n=30)
+            if series_key is not None:
+                xs, series_data = build_histogram_series(chart_agg)
                 _set_chart(
                     _build_figure(
                         xs,
                         [],
                         f"Count by {x_key} grouped by {series_key} (q2)",
-                        series_data=series_data,
-                        series_label=series_label,
+                        series=(series_data, _column_to_label(series_key)),
                     )
                 )
             else:
-                xs, ys = build_histogram(chart_agg, top_n=30)
+                xs, ys = build_histogram(chart_agg)
                 _set_chart(_build_figure(xs, ys, f"Count by {x_key} (q2)"))
 
             dbg.set_text(
-                f"query=q2 chart_buckets={len(xs)} "
-                f"x={x_key} series={series_key or 'none'}"
+                f"query=q2 chart_buckets={len(xs)} x={x_key}"
+                + ("" if series_key is None else f" series={series_key}")
             )
 
             # --- Filter dropdowns: still need distinct-value queries ---
@@ -539,12 +512,7 @@ def page_analytics_chart_fragments() -> None:
     sel_square.on("change", lambda e: _on_layer_change())
     sel_layer.on("change", lambda e: _on_layer_change())
 
-    def _on_x_change(e) -> None:
-        if state.get("_suppress_x_change"):
-            return
-        refresh()
-
-    sel_x.on("change", _on_x_change)
+    sel_x.on("change", lambda e: refresh())
     sel_chart_type.on("change", lambda e: refresh())
 
     refresh()

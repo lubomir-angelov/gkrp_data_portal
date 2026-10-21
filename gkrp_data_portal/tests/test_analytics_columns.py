@@ -11,10 +11,12 @@ from gkrp_data_portal.models.archaeology import (
     Tbllayer,
     Tblornament,
 )
+from gkrp_data_portal.ui.pages import analytics_chart_finds as finds_page
+from gkrp_data_portal.ui.pages import analytics_chart_fragments as fragments_page
 from gkrp_data_portal.ui.pages.analytics_chart_finds import ARCH_LABELS_NOT_SHOWN
-from gkrp_data_portal.ui.pages.analytics_chart_fragments import _GROUPBY_EXCLUDE
 from gkrp_data_portal.ui.pages.analytics_common import (
     _COLUMN_LABEL_KEYS,
+    LOCALE,
     _UI_HIDDEN_COLUMNS,
     QUERY_OPTIONS,
 )
@@ -71,14 +73,33 @@ def test_every_table_query_has_visible_columns(query_id):
 
 
 def test_groupby_exclude_members_are_offered_options():
-    assert _GROUPBY_EXCLUDE <= set(get_groupby_columns("q2"))
+    assert fragments_page._GROUPBY_EXCLUDE <= set(get_groupby_columns("q2"))
+    assert finds_page._GROUPBY_EXCLUDE <= set(get_groupby_columns("finds_arch"))
+
+
+def test_default_x_is_an_option():
+    assert fragments_page.DEFAULT_X in fragments_page.GROUPBY_OPTIONS
+    assert finds_page.DEFAULT_X in finds_page.GROUPBY_OPTIONS
+
+
+def test_finds_groupby_options_pinned():
+    assert finds_page.GROUPBY_OPTIONS == [
+        "fi_find_type",
+        "fi_material",
+        "fi_coin",
+        "fi_denomination",
+        "fi_mint",
+        "fi_year",
+        "fi_depth_m",
+        "fi_context",
+        "fi_sector",
+        "fi_square",
+        "fi_layer_mechanical",
+    ]
 
 
 def test_groupby_dropdown_options_pinned():
-    options = [
-        c for c in get_groupby_columns("q2") if c.lower() not in _GROUPBY_EXCLUDE
-    ]
-    assert options == [
+    assert fragments_page.GROUPBY_OPTIONS == [
         "l_site",
         "l_sector",
         "l_square",
@@ -119,7 +140,8 @@ def _projected_names(subquery_sql: str) -> set[str]:
 
 
 def test_chart_subquery_ids_match_query_options():
-    assert set(_CHART_SUBQUERIES) == set(QUERY_OPTIONS.values()) | {"finds"}
+    assert set(_CHART_SUBQUERIES) == set(QUERY_OPTIONS.values())
+    assert set(_CHART_SUBQUERIES) <= set(CHART_COL_EXPR)
 
 
 @pytest.mark.parametrize("query_id", sorted(_CHART_SUBQUERIES))
@@ -133,8 +155,19 @@ def test_chart_subqueries_project_every_mapped_column(query_id):
     assert not missing
 
 
-def test_column_label_keys_are_chart_columns():
-    assert set(_COLUMN_LABEL_KEYS) <= set(CHART_COL_EXPR)
+def test_q2_chart_subquery_projects_fragment_identity_and_count():
+    projected = _projected_names(_CHART_SUBQUERIES["q2"])
+    assert {"fragmentid", "frag_count"} <= projected
+
+
+def test_label_keys_equal_reachable_chart_columns():
+    reachable = set(fragments_page.GROUPBY_OPTIONS) | set(finds_page.GROUPBY_OPTIONS)
+    assert set(_COLUMN_LABEL_KEYS) == reachable
+
+
+def test_label_keys_exist_in_locale_both_languages():
+    for key in set(_COLUMN_LABEL_KEYS.values()):
+        assert key in LOCALE and f"{key}_en" in LOCALE
 
 
 def test_finds_page_hidden_arch_labels_are_real():
