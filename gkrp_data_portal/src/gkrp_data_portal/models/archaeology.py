@@ -53,16 +53,8 @@ from gkrp_data_portal.models.constants import (
     TECHNOLOGY_VALUES,
     TERTIARY_ORN_VALUES,
     WALLTHICKNESS_VALUES,
+    sql_in_list,
 )
-
-
-def _in_list(values: tuple[str, ...]) -> str:
-    """Return a SQL IN-list with quoted literals.
-
-    The ceramics value sets do not contain single quotes, so basic quoting is
-    sufficient.
-    """
-    return ", ".join(f"'{v}'" for v in values)
 
 
 class Tbllayer(Base):
@@ -71,15 +63,15 @@ class Tbllayer(Base):
     __tablename__ = "tbllayers"
     __table_args__ = (
         CheckConstraint(
-            f"layertype IN ({_in_list(LAYER_TYPE_VALUES)})",
+            f"layertype IN ({sql_in_list(LAYER_TYPE_VALUES)})",
             name="layertype_allowed",
         ),
         CheckConstraint(
-            f"color1 IN ({_in_list(COLOR_VALUES)})",
+            f"color1 IN ({sql_in_list(COLOR_VALUES)})",
             name="color1_allowed",
         ),
         CheckConstraint(
-            f"color2 IN ({_in_list(COLOR_VALUES)})",
+            f"color2 IN ({sql_in_list(COLOR_VALUES)})",
             name="color2_allowed",
         ),
     )
@@ -138,76 +130,78 @@ class Tblfragment(Base):
     __tablename__ = "tblfragments"
     __table_args__ = (
         CheckConstraint(
-            f"fragmenttype IN ({_in_list(FRAGMENTTYPE_VALUES)})",
+            f"fragmenttype IN ({sql_in_list(FRAGMENTTYPE_VALUES)})",
             name="fragmenttype_allowed",
         ),
         CheckConstraint(
-            f"technology IN ({_in_list(TECHNOLOGY_VALUES)})",
+            f"technology IN ({sql_in_list(TECHNOLOGY_VALUES)})",
             name="technology_allowed",
         ),
         CheckConstraint(
-            f"baking IN ({_in_list(BAKING_VALUES)})",
+            f"baking IN ({sql_in_list(BAKING_VALUES)})",
             name="baking_allowed",
         ),
         CheckConstraint(
-            f"fract IN ({_in_list(FRACT_VALUES)})",
+            f"fract IN ({sql_in_list(FRACT_VALUES)})",
             name="fract_allowed",
         ),
         CheckConstraint(
-            f"primarycolor IN ({_in_list(COLOR_VALUES)})",
+            f"primarycolor IN ({sql_in_list(COLOR_VALUES)})",
             name="primarycolor_allowed",
         ),
         CheckConstraint(
-            f"secondarycolor IN ({_in_list(COLOR_VALUES)})",
+            f"secondarycolor IN ({sql_in_list(COLOR_VALUES)})",
             name="secondarycolor_allowed",
         ),
         CheckConstraint(
-            f"covering IN ({_in_list(COVERING_VALUES)})",
+            f"covering IN ({sql_in_list(COVERING_VALUES)})",
             name="covering_allowed",
         ),
         CheckConstraint(
-            f"includesconc IN ({_in_list(INCLUDESCONC_VALUES)})",
+            f"includesconc IN ({sql_in_list(INCLUDESCONC_VALUES)})",
             name="includesconc_allowed",
         ),
         CheckConstraint(
-            f"includessize IN ({_in_list(INCLUDESSIZE_VALUES)})",
+            f"includessize IN ({sql_in_list(INCLUDESSIZE_VALUES)})",
             name="includessize_allowed",
         ),
         CheckConstraint(
-            f"surface IN ({_in_list(SURFACE_VALUES)})",
+            f"surface IN ({sql_in_list(SURFACE_VALUES)})",
             name="surface_allowed",
         ),
         CheckConstraint(
-            f"onepot IN ({_in_list(ONEPOT_VALUES)})",
+            f"onepot IN ({sql_in_list(ONEPOT_VALUES)})",
             name="onepot_allowed",
         ),
         CheckConstraint(
-            f"piecetype IN ({_in_list(PIECETYPE_VALUES)})",
+            f"piecetype IN ({sql_in_list(PIECETYPE_VALUES)})",
             name="piecetype_allowed",
         ),
         CheckConstraint(
-            f"wallthickness IN ({_in_list(WALLTHICKNESS_VALUES)})",
+            f"wallthickness IN ({sql_in_list(WALLTHICKNESS_VALUES)})",
             name="wallthickness_allowed",
         ),
         CheckConstraint(
-            f"handlesize IN ({_in_list(HANDLESIZE_VALUES)})",
+            f"handlesize IN ({sql_in_list(HANDLESIZE_VALUES)})",
             name="handlesize_allowed",
         ),
         CheckConstraint(
-            f"dishsize IN ({_in_list(DISHSIZE_VALUES)})",
+            f"dishsize IN ({sql_in_list(DISHSIZE_VALUES)})",
             name="dishsize_allowed",
         ),
         CheckConstraint(
-            f"bottomtype IN ({_in_list(BOTTOMTYPE_VALUES)})",
+            f"bottomtype IN ({sql_in_list(BOTTOMTYPE_VALUES)})",
             name="bottomtype_allowed",
         ),
         CheckConstraint(
-            f"outline IN ({_in_list(OUTLINE_VALUES)})",
+            f"outline IN ({sql_in_list(OUTLINE_VALUES)})",
             name="outline_allowed",
         ),
     )
 
-    fragmentid: Mapped[int] = mapped_column(Integer, Identity(start=19304), primary_key=True)
+    fragmentid: Mapped[int] = mapped_column(
+        Integer, Identity(start=19304), primary_key=True
+    )
 
     locationid: Mapped[Optional[int]] = mapped_column(
         ForeignKey("tbllayers.layerid", ondelete="SET NULL"),
@@ -294,15 +288,15 @@ class Tbllayerinclude(Base):
     __tablename__ = "tbllayerincludes"
     __table_args__ = (
         CheckConstraint(
-            f"includetype IN ({_in_list(INCLUDETYPE_VALUES)})",
+            f"includetype IN ({sql_in_list(INCLUDETYPE_VALUES)})",
             name="includetype_allowed",
         ),
         CheckConstraint(
-            f"includesize IN ({_in_list(INCLUDESIZE_VALUES)})",
+            f"includesize IN ({sql_in_list(INCLUDESIZE_VALUES)})",
             name="includesize_allowed",
         ),
         CheckConstraint(
-            f"includeconc IN ({_in_list(INCLUDECONC_VALUES)})",
+            f"includeconc IN ({sql_in_list(INCLUDECONC_VALUES)})",
             name="includeconc_allowed",
         ),
     )
@@ -360,15 +354,15 @@ class Tblornament(Base):
     __tablename__ = "tblornaments"
     __table_args__ = (
         CheckConstraint(
-            f"primary_ IN ({_in_list(PRIMARY_ORN_VALUES)})",
+            f"primary_ IN ({sql_in_list(PRIMARY_ORN_VALUES)})",
             name="primary_allowed",
         ),
         CheckConstraint(
-            f"secondary IN ({_in_list(SECONDARY_ORN_VALUES)})",
+            f"secondary IN ({sql_in_list(SECONDARY_ORN_VALUES)})",
             name="secondary_allowed",
         ),
         CheckConstraint(
-            f"tertiary IN ({_in_list(TERTIARY_ORN_VALUES)})",
+            f"tertiary IN ({sql_in_list(TERTIARY_ORN_VALUES)})",
             name="tertiary_allowed",
         ),
     )
@@ -474,7 +468,9 @@ class Find(Base):
     mint: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     dimensions_cm: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    preservation_grade: Mapped[Optional[float]] = mapped_column(Numeric(6, 2), nullable=True)
+    preservation_grade: Mapped[Optional[float]] = mapped_column(
+        Numeric(6, 2), nullable=True
+    )
     weight_g: Mapped[Optional[float]] = mapped_column(Numeric(8, 2), nullable=True)
 
     sector: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -492,11 +488,17 @@ class Find(Base):
     drw_link: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     extra_field: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
-    reper_n_coord: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
-    reper_e_coord: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    reper_n_coord: Mapped[Optional[float]] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    reper_e_coord: Mapped[Optional[float]] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
     reper_baltic: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     baltic: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
-    stratigraphic_level: Mapped[Optional[float]] = mapped_column(Numeric(6, 2), nullable=True)
+    stratigraphic_level: Mapped[Optional[float]] = mapped_column(
+        Numeric(6, 2), nullable=True
+    )
 
     recordenteredby: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     recordenteredon: Mapped[object] = mapped_column(

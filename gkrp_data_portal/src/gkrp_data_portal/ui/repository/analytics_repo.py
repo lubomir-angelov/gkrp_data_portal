@@ -1,7 +1,7 @@
 """Analytics repository: predefined queries + safe filtering.
 
-Implements the two predefined queries (layers+fragments; layers+fragments+ornaments)
-and a third selector for finds (tblfinds).
+Implements the predefined queries: layers+fragments+ornaments (q2), tblfinds
+(finds) and the archaeological finds table (finds_arch).
 
 All result columns are prefixed to avoid collisions:
 - l_<col> for tbllayers
@@ -12,6 +12,7 @@ All result columns are prefixed to avoid collisions:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Optional
@@ -43,6 +44,93 @@ def _model_select_list(prefix: str, alias: str, model) -> list[str]:
     return cols
 
 
+# Canonical UI-label -> bare column-name maps. Filter widgets on the pages,
+# DISTINCT dropdowns, group-by columns and the chart WHERE clause all derive
+# from these keys; tests/test_analytics_columns.py checks that every chart
+# subquery projects every mapped column. Dict order is the UI/DISTINCT order.
+LAYER_FILTER_COLS: dict[str, str] = {
+    "Site": "site",
+    "Sector": "sector",
+    "Square": "square",
+    "Layer": "layer",
+}
+# finds has no site column; its location columns live on the finds table itself
+FINDS_LOCATION_FILTER_COLS: dict[str, str] = {
+    "Sector": "sector",
+    "Square": "square",
+    "Layer": "layer_mechanical",
+}
+FRAGMENT_FILTER_COLS: dict[str, str] = {
+    "Piecetype": "piecetype",
+    "Technology": "technology",
+    "Baking": "baking",
+    "Color / Primary color": "primarycolor",
+    "Covering": "covering",
+    "Surface": "surface",
+    "Wall thickness": "wallthickness",
+    "Handle type": "handletype",
+    "Handle size": "handlesize",
+    "Bottom type": "bottomtype",
+    "Category": "category",
+    "Form": "form",
+    "Type": "type",
+    "Subtype": "subtype",
+    "Variant": "variant",
+}
+ORNAMENT_FILTER_COLS: dict[str, str] = {
+    "Primary": "primary_",
+    "Secondary": "secondary",
+    "Tertiary": "tertiary",
+    "Quarternary": "quarternary",
+    "Color / color1": "color1",
+    "Encrust color": "encrustcolor1",
+}
+ARCH_FILTER_COLS: dict[str, str] = {
+    "Find Type": "find_type",
+    "Material": "material",
+    "Coin": "coin",
+    "Denomination": "denomination",
+    "Mint": "mint",
+    "Year": "year",
+    "Inv No": "inv_no",
+    "Depth": "depth_m",
+    "Context": "context",
+}
+
+
+def _qualified(alias: str, cols: Mapping[str, str]) -> dict[str, str]:
+    """Prefix every bare column in *cols* with the SQL table alias."""
+    return {label: f"{alias}.{col}" for label, col in cols.items()}
+
+
+def _add_ilike_filters(
+    clauses: list[str],
+    params: dict[str, Any],
+    *,
+    param_prefix: str,
+    label_to_col: Mapping[str, str],
+    filters: Mapping[str, Any],
+) -> None:
+    """Append one ILIKE clause per non-empty filter; list values are OR-ed.
+
+    Bind names derive from the bare column name (always a valid SQL bind
+    identifier). An unknown label raises ``KeyError``.
+    """
+    for label, values in filters.items():
+        col = label_to_col[label]
+        col_expr = f"{col}::text"
+        param_name = f"{param_prefix}_{col.rsplit('.', 1)[-1]}"
+        if isinstance(values, list) and values:
+            names = [f"{param_name}_{i}" for i in range(len(values))]
+            clauses.append(
+                "(" + " OR ".join(f"{col_expr} ILIKE :{n}" for n in names) + ")"
+            )
+            params.update({n: f"%{v}%" for n, v in zip(names, values)})
+        elif isinstance(values, str) and values.strip():
+            params[param_name] = f"%{values.strip()}%"
+            clauses.append(f"{col_expr} ILIKE :{param_name}")
+
+
 def _apply_frag_filters(
     clauses: list[str],
     params: dict[str, Any],
@@ -50,53 +138,17 @@ def _apply_frag_filters(
     frag_alias: str = "f",
     orn_alias: str = "o",
 ) -> None:
-    """Apply fragment field filters from the UI dropdowns.
-
-    Maps UI labels to SQL column references using the given aliases.
-    Multi-select uses ANY/ILIKE; single text inputs use ILIKE.
-    """
-    label_to_col: dict[str, str] = {
-        "Piecetype": f"{frag_alias}.piecetype",
-        "Technology": f"{frag_alias}.technology",
-        "Baking": f"{frag_alias}.baking",
-        "Color / Primary color": f"{frag_alias}.primarycolor",
-        "Covering": f"{frag_alias}.covering",
-        "Surface": f"{frag_alias}.surface",
-        "Wall thickness": f"{frag_alias}.wallthickness",
-        "Handle type": f"{frag_alias}.handletype",
-        "Handle size": f"{frag_alias}.handlesize",
-        "Bottom type": f"{frag_alias}.bottomtype",
-        "Category": f"{frag_alias}.category",
-        "Form": f"{frag_alias}.form",
-        "Type": f"{frag_alias}.type",
-        "Subtype": f"{frag_alias}.subtype",
-        "Variant": f"{frag_alias}.variant",
-        "Primary": f"{orn_alias}.primary_",
-        "Secondary": f"{orn_alias}.secondary",
-        "Tertiary": f"{orn_alias}.tertiary",
-        "Quarternary": f"{orn_alias}.quarternary",
-        "Color / color1": f"{orn_alias}.color1",
-        "Encrust color": f"{orn_alias}.encrustcolor1",
-    }
-    for label, values in frag_filters.items():
-        col = label_to_col.get(label)
-        if not col:
-            continue
-        col_expr = f"{col}::text"
-        safe_label = label.replace(" ", "_")
-        if isinstance(values, list) and values:
-            param_name = f"frag_{safe_label}"
-            params[param_name] = values
-            conditions = " OR ".join(
-                [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
-            )
-            clauses.append(f"({conditions})")
-            for i, v in enumerate(values):
-                params[f"{param_name}_{i}"] = f"%{v}%"
-        elif isinstance(values, str) and values.strip():
-            param_name = f"frag_{safe_label}"
-            params[param_name] = f"%{values.strip()}%"
-            clauses.append(f"{col_expr} ILIKE :{param_name}")
+    """Apply fragment + ornament field filters from the UI dropdowns."""
+    _add_ilike_filters(
+        clauses,
+        params,
+        param_prefix="frag",
+        label_to_col={
+            **_qualified(frag_alias, FRAGMENT_FILTER_COLS),
+            **_qualified(orn_alias, ORNAMENT_FILTER_COLS),
+        },
+        filters=frag_filters,
+    )
 
 
 def _apply_arch_filters(
@@ -104,41 +156,14 @@ def _apply_arch_filters(
     params: dict[str, Any],
     arch_filters: dict[str, Any],
 ) -> None:
-    """Apply archaeological finds field filters from the UI dropdowns.
-
-    Maps UI labels to SQL column references using the 'fi' alias.
-    Multi-select uses ILIKE with OR; single text inputs use ILIKE.
-    """
-    label_to_col: dict[str, str] = {
-        "Find Type": "fi.find_type",
-        "Material": "fi.material",
-        "Coin": "fi.coin",
-        "Denomination": "fi.denomination",
-        "Mint": "fi.mint",
-        "Year": "fi.year",
-        "Inv No": "fi.inv_no",
-        "Depth": "fi.depth_m",
-        "Context": "fi.context",
-    }
-    for label, values in arch_filters.items():
-        col = label_to_col.get(label)
-        if not col:
-            continue
-        col_expr = f"{col}::text"
-        safe_label = label.replace(" ", "_")
-        if isinstance(values, list) and values:
-            param_name = f"arch_{safe_label}"
-            params[param_name] = values
-            conditions = " OR ".join(
-                [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
-            )
-            clauses.append(f"({conditions})")
-            for i, v in enumerate(values):
-                params[f"{param_name}_{i}"] = f"%{v}%"
-        elif isinstance(values, str) and values.strip():
-            param_name = f"arch_{safe_label}"
-            params[param_name] = f"%{values.strip()}%"
-            clauses.append(f"{col_expr} ILIKE :{param_name}")
+    """Apply archaeological finds field filters (``fi`` alias)."""
+    _add_ilike_filters(
+        clauses,
+        params,
+        param_prefix="arch",
+        label_to_col=_qualified("fi", ARCH_FILTER_COLS),
+        filters=arch_filters,
+    )
 
 
 def _apply_layer_filters(
@@ -147,36 +172,14 @@ def _apply_layer_filters(
     layer_filters: dict[str, Any],
     layer_alias: str = "l",
 ) -> None:
-    """Apply layer field filters from the UI dropdowns.
-
-    Maps UI labels to SQL column references using the given alias.
-    Multi-select uses ANY/ILIKE; single text inputs use ILIKE.
-    """
-    label_to_col: dict[str, str] = {
-        "Site": f"{layer_alias}.site",
-        "Sector": f"{layer_alias}.sector",
-        "Square": f"{layer_alias}.square",
-        "Layer": f"{layer_alias}.layer",
-    }
-    for label, values in layer_filters.items():
-        col = label_to_col.get(label)
-        if not col:
-            continue
-        col_expr = f"{col}::text"
-        safe_label = label.replace(" ", "_")
-        if isinstance(values, list) and values:
-            param_name = f"layer_{safe_label}"
-            params[param_name] = values
-            conditions = " OR ".join(
-                [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
-            )
-            clauses.append(f"({conditions})")
-            for i, v in enumerate(values):
-                params[f"{param_name}_{i}"] = f"%{v}%"
-        elif isinstance(values, str) and values.strip():
-            param_name = f"layer_{safe_label}"
-            params[param_name] = f"%{values.strip()}%"
-            clauses.append(f"{col_expr} ILIKE :{param_name}")
+    """Apply layer field filters from the UI dropdowns."""
+    _add_ilike_filters(
+        clauses,
+        params,
+        param_prefix="layer",
+        label_to_col=_qualified(layer_alias, LAYER_FILTER_COLS),
+        filters=layer_filters,
+    )
 
 
 def _build_where(
@@ -193,8 +196,13 @@ def _build_where(
     layer_alias: str = "l",
     frag_alias: str = "f",
     orn_alias: str = "o",
+    finds_alias: str = "fi",
 ) -> tuple[str, dict[str, Any]]:
-    """Build a safe WHERE clause using only whitelisted filters."""
+    """Build a safe WHERE clause using only whitelisted filters.
+
+    Every column reference derives from the alias params, so the main query
+    and its renamed-alias count query can never diverge.
+    """
     clauses: list[str] = []
     params: dict[str, Any] = {}
 
@@ -222,13 +230,17 @@ def _build_where(
     # Free-text: differs slightly by query (which aliases exist)
     if q:
         params["q"] = f"%{q}%"
-        if query_id in ("q1", "q2"):
+        if query_id == "q2":
             clauses.append(
-                "(COALESCE(f.inventory,'') ILIKE :q OR COALESCE(f.note,'') ILIKE :q OR COALESCE(f.piecetype::text,'') ILIKE :q)"
+                f"(COALESCE({frag_alias}.inventory,'') ILIKE :q"
+                f" OR COALESCE({frag_alias}.note,'') ILIKE :q"
+                f" OR COALESCE({frag_alias}.piecetype::text,'') ILIKE :q)"
             )
         elif query_id == "finds":
             clauses.append(
-                "(COALESCE(fi.description,'') ILIKE :q OR COALESCE(fi.findtype,'') ILIKE :q OR COALESCE(fi.inventory,'') ILIKE :q)"
+                f"(COALESCE({finds_alias}.description,'') ILIKE :q"
+                f" OR COALESCE({finds_alias}.findtype,'') ILIKE :q"
+                f" OR COALESCE({finds_alias}.inventory,'') ILIKE :q)"
             )
 
     # Fragment field filters (only applied for q2 which has f alias)
@@ -264,56 +276,6 @@ def _count_sql(db: Session, *, count_sql: str, params: dict[str, Any]) -> int:
     return int(row)
 
 
-def query_q1_layers_fragments(
-    db: Session,
-    *,
-    site: Optional[str] = None,
-    sector: Optional[str] = None,
-    square: Optional[str] = None,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
-    q: Optional[str] = None,
-    limit: int = 500,
-    offset: int = 0,
-    frag_filters: Optional[dict[str, Any]] = None,
-    layer_filters: Optional[dict[str, Any]] = None,
-) -> AnalyticsResult:
-    """Filter #1: tbllayers INNER JOIN tblfragments (no ornaments)."""
-    select_cols = _model_select_list("l_", "l", Tbllayer) + _model_select_list(
-        "f_", "f", Tblfragment
-    )
-    base = f"""
-    SELECT
-      {", ".join(select_cols)}
-    FROM tbllayers l
-    INNER JOIN tblfragments f ON l.layerid = f.locationid
-    """
-
-    where_sql, params = _build_where(
-        query_id="q1",
-        site=site,
-        sector=sector,
-        square=square,
-        date_from=date_from,
-        date_to=date_to,
-        q=q,
-        frag_filters=frag_filters,
-        layer_filters=layer_filters,
-    )
-
-    sql = f"{base}\n{where_sql}\nORDER BY l.layerid DESC, f.fragmentid DESC"
-    count_sql = f"SELECT COALESCE(SUM(f_count), 0) FROM ({base}\n{where_sql}) x"
-
-    rows = _run_sql(db, sql=sql, params=params, limit=limit, offset=offset)
-    total = _count_sql(db, count_sql=count_sql, params=params)
-
-    items = [dict(r) for r in rows]
-    columns = (
-        list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
-    )
-    return AnalyticsResult(items=items, total=total, columns=columns)
-
-
 def query_q2_layers_fragments_ornaments(
     db: Session,
     *,
@@ -330,8 +292,8 @@ def query_q2_layers_fragments_ornaments(
 ) -> AnalyticsResult:
     """Filter #2: tbllayers LEFT JOIN tblfragments LEFT JOIN tblornaments.
 
-    Uses a window function to de-duplicate f.count across ornament rows,
-    so each fragment's count is summed only once in histograms and totals.
+    ``f_count_deduped`` repeats f.count on every ornament row of a fragment
+    (display column of the table; totals count distinct fragments separately).
     Fragments without ornaments are included via LEFT JOIN.
     """
     select_cols = (
@@ -376,11 +338,14 @@ def query_q2_layers_fragments_ornaments(
         frag_alias="f2",
         orn_alias="o2",
     )
+    # Ornament join is required inside the DISTINCT subquery so ornament
+    # filters resolve; DISTINCT (fragmentid, count) still sums each fragment once.
     count_sql = f"""SELECT COALESCE((
         SELECT SUM(f2.count) FROM (
             SELECT DISTINCT f2.fragmentid, f2.count
             FROM tblfragments f2
             INNER JOIN tbllayers l2 ON l2.layerid = f2.locationid
+            LEFT JOIN tblornaments o2 ON f2.fragmentid = o2.fragmentid
             {count_where_sql}
         ) f2
     ), 0)"""
@@ -458,6 +423,7 @@ def query_finds(
         layer_alias="l2",
         frag_alias="f2",
         orn_alias="o2",
+        finds_alias="fi2",
     )
     count_sql = f"""SELECT COUNT(*) FROM (
         SELECT fi2.findid
@@ -473,104 +439,47 @@ def query_finds(
 
     items = [dict(r) for r in rows]
     columns = (
-        list(items[0].keys())
-        if items
-        else [c.split(" AS ")[-1] for c in select_cols]
+        list(items[0].keys()) if items else [c.split(" AS ")[-1] for c in select_cols]
     )
     return AnalyticsResult(items=items, total=total, columns=columns)
 
 
-def extract_image_urls(items: list[dict[str, Any]]) -> list[str]:
-    """Collect unique image URLs from fragments/finds columns if present."""
-    urls: list[str] = []
-    seen: set[str] = set()
-
-    for r in items:
-        for key in ("f_image_url", "fi_image_url"):
-            v = r.get(key)
-            if isinstance(v, str) and v.strip():
-                if v not in seen:
-                    seen.add(v)
-                    urls.append(v)
-
-    return urls
-
-
 # Column definitions for DISTINCT queries: (label, sql_col_expr, query_ids)
-_DISTINCT_COL_DEFS: list[tuple[str, str, tuple[str, ...]]] = [
-    ("Site", "l.site", ("q2", "finds")),
-    ("Sector", "l.sector", ("q2", "finds")),
-    ("Square", "l.square", ("q2", "finds")),
-    ("Layer", "l.layer", ("q2", "finds")),
-    ("Piecetype", "f.piecetype", ("q2",)),
-    ("Technology", "f.technology", ("q2",)),
-    ("Baking", "f.baking", ("q2",)),
-    ("Color / Primary color", "f.primarycolor", ("q2",)),
-    ("Covering", "f.covering", ("q2",)),
-    ("Surface", "f.surface", ("q2",)),
-    ("Wall thickness", "f.wallthickness", ("q2",)),
-    ("Handle type", "f.handletype", ("q2",)),
-    ("Handle size", "f.handlesize", ("q2",)),
-    ("Bottom type", "f.bottomtype", ("q2",)),
-    ("Category", "f.category", ("q2",)),
-    ("Form", "f.form", ("q2",)),
-    ("Type", "f.type", ("q2",)),
-    ("Subtype", "f.subtype", ("q2",)),
-    ("Variant", "f.variant", ("q2",)),
-    ("Note", "f.note", ("q2",)),
-    ("Inventory", "f.inventory", ("q2",)),
-    ("Primary", "o.primary_", ("q2",)),
-    ("Secondary", "o.secondary", ("q2",)),
-    ("Tertiary", "o.tertiary", ("q2",)),
-    ("Quarternary", "o.quarternary", ("q2",)),
-    ("Color / color1", "o.color1", ("q2",)),
-    ("Encrust color", "o.encrustcolor1", ("q2",)),
-    # Archaeological finds columns
-    ("Find Type", "fi.find_type", ("finds_arch",)),
-    ("Material", "fi.material", ("finds_arch",)),
-    ("Coin", "fi.coin", ("finds_arch",)),
-    ("Denomination", "fi.denomination", ("finds_arch",)),
-    ("Mint", "fi.mint", ("finds_arch",)),
-    ("Year", "fi.year", ("finds_arch",)),
-    ("Inv No", "fi.inv_no", ("finds_arch",)),
-    ("Depth", "fi.depth_m", ("finds_arch",)),
-    ("Context", "fi.context", ("finds_arch",)),
-    # finds table location columns
-    ("Sector", "fi.sector", ("finds_arch",)),
-    ("Square", "fi.square", ("finds_arch",)),
-    ("Layer", "fi.layer_mechanical", ("finds_arch",)),
-]
+_DISTINCT_COL_DEFS: list[tuple[str, str, tuple[str, ...]]] = (
+    [(lbl, f"l.{c}", ("q2", "finds")) for lbl, c in LAYER_FILTER_COLS.items()]
+    + [(lbl, f"f.{c}", ("q2",)) for lbl, c in FRAGMENT_FILTER_COLS.items()]
+    + [("Note", "f.note", ("q2",)), ("Inventory", "f.inventory", ("q2",))]
+    + [(lbl, f"o.{c}", ("q2",)) for lbl, c in ORNAMENT_FILTER_COLS.items()]
+    + [(lbl, f"fi.{c}", ("finds_arch",)) for lbl, c in ARCH_FILTER_COLS.items()]
+    + [
+        (lbl, f"fi.{c}", ("finds_arch",))
+        for lbl, c in FINDS_LOCATION_FILTER_COLS.items()
+    ]
+)
 
 
-# Reverse mapping: prefixed result column name -> SQL col expression
-# e.g. "l_site" -> "l.site", "f_piecetype" -> "f.piecetype", "o_primary" -> "o.primary_"
-def _build_col_expr_lookup() -> dict[str, str]:
-    """Build {prefixed_col_name: sql_expr} from _DISTINCT_COL_DEFS."""
-    lookup: dict[str, str] = {}
-    for _label, sql_expr, _qids in _DISTINCT_COL_DEFS:
-        # sql_expr is like "l.site" -> prefixed is "l_site"
-        # sql_expr is like "o.primary_" -> prefixed is "o_primary"
-        parts = sql_expr.split(".", 1)
-        if len(parts) == 2:
-            alias, col = parts
-            prefixed = f"{alias}_{col}"
-            lookup[prefixed] = sql_expr
-    return lookup
+# Per-query mapping: query_id -> {prefixed result column name: SQL col expression}
+# e.g. {"q2": {"l_site": "l.site", "o_primary_": "o.primary_", ...}}.
+# Dict order is the UI order of _DISTINCT_COL_DEFS.
+def _build_chart_col_expr() -> dict[str, dict[str, str]]:
+    """{query_id: {prefixed_col: "alias.col"}} from _DISTINCT_COL_DEFS."""
+    by_query: dict[str, dict[str, str]] = {}
+    for _label, sql_expr, qids in _DISTINCT_COL_DEFS:
+        alias, col = sql_expr.split(".", 1)
+        for qid in qids:
+            by_query.setdefault(qid, {})[f"{alias}_{col}"] = sql_expr
+    return by_query
 
 
-CHART_COL_EXPR: dict[str, str] = _build_col_expr_lookup()
+CHART_COL_EXPR: dict[str, dict[str, str]] = _build_chart_col_expr()
 
 
 def get_groupby_columns(query_id: str) -> list[str]:
-    """Return the list of prefixed column names available for group-by.
+    """Return the prefixed column names available for group-by for *query_id*.
 
-    Built from ``_DISTINCT_COL_DEFS`` for the given query_id.
+    Raises ``KeyError`` for an unknown query id.
     """
-    return [
-        f"{sql_expr.split('.', 1)[0]}_{sql_expr.split('.', 1)[1]}"
-        for _label, sql_expr, qids in _DISTINCT_COL_DEFS
-        if query_id in qids
-    ]
+    return list(CHART_COL_EXPR[query_id])
 
 
 def get_distinct_values(
@@ -804,34 +713,13 @@ def _build_where_finds(
     params: dict[str, Any] = {}
 
     if layer_filters:
-        # finds table location columns (finds has no site column)
-        label_to_col: dict[str, str] = {
-            "Sector": "fi.sector",
-            "Square": "fi.square",
-            "Layer": "fi.layer_mechanical",
-        }
-        for label, values in layer_filters.items():
-            col = label_to_col.get(label)
-            if not col:
-                continue
-            col_expr = f"{col}::text"
-            safe_label = label.replace(" ", "_")
-            if isinstance(values, list) and values:
-                param_name = f"layer_{safe_label}"
-                params[param_name] = values
-                conditions = " OR ".join(
-                    [
-                        f"{col_expr} ILIKE :{param_name}_{i}"
-                        for i, v in enumerate(values)
-                    ]
-                )
-                clauses.append(f"({conditions})")
-                for i, v in enumerate(values):
-                    params[f"{param_name}_{i}"] = f"%{v}%"
-            elif isinstance(values, str) and values.strip():
-                param_name = f"layer_{safe_label}"
-                params[param_name] = f"%{values.strip()}%"
-                clauses.append(f"{col_expr} ILIKE :{param_name}")
+        _add_ilike_filters(
+            clauses,
+            params,
+            param_prefix="layer",
+            label_to_col=_qualified("fi", FINDS_LOCATION_FILTER_COLS),
+            filters=layer_filters,
+        )
     else:
         # legacy site param has no finds column; ignore it
         if sector:
@@ -870,8 +758,8 @@ def _build_where_finds(
 # ---------------------------------------------------------------------------
 
 # Subquery templates per query_id: the FROM/JOIN clause used by the full query.
-# Each template produces rows with prefixed columns (l_site, f_piecetype, ...)
-# and f_count_deduped via a window function.
+# Each template projects bare column names (site, piecetype, ...). q2 also
+# projects fragmentid + frag_count so histograms can count each fragment once.
 _CHART_SUBQUERIES: dict[str, str] = {
     "q2": (
         "SELECT "
@@ -879,28 +767,12 @@ _CHART_SUBQUERIES: dict[str, str] = {
         "  f.piecetype, f.technology, f.baking, f.primarycolor, f.covering, "
         "  f.surface, f.wallthickness, f.handletype, f.handlesize, "
         "  f.bottomtype, f.category, f.form, f.type, f.subtype, f.variant, "
-        "  f.note, f.inventory, f.fragmentid, f.count, "
-        "  o.primary_ AS o_primary, o.secondary, o.tertiary, o.quarternary, "
-        "  o.color1, o.encrustcolor1, "
-        "  MAX(f.count) OVER (PARTITION BY f.fragmentid) AS f_count_deduped "
+        "  f.note, f.inventory, f.fragmentid, f.count AS frag_count, "
+        "  o.primary_, o.secondary, o.tertiary, o.quarternary, "
+        "  o.color1, o.encrustcolor1 "
         "FROM tbllayers l "
         "INNER JOIN tblfragments f ON l.layerid = f.locationid "
         "LEFT JOIN tblornaments o ON f.fragmentid = o.fragmentid"
-    ),
-    "finds": (
-        "SELECT "
-        "  l.site, l.sector, l.square, l.layer, "
-        "  f.piecetype, f.technology, f.baking, f.primarycolor, f.covering, "
-        "  f.surface, f.wallthickness, f.handletype, f.handlesize, "
-        "  f.bottomtype, f.category, f.form, f.type, f.subtype, f.variant, "
-        "  f.note, f.inventory, f.fragmentid, "
-        "  o.primary_ AS o_primary, o.secondary, o.tertiary, o.quarternary, "
-        "  o.color1, o.encrustcolor1, "
-        "  fi.findid, fi.findtype, fi.description, fi.inventory AS fi_inventory "
-        "FROM tblfinds fi "
-        "INNER JOIN tbllayers l ON l.layerid = fi.layerid "
-        "LEFT JOIN tblfragments f ON f.fragmentid = fi.fragmentid "
-        "LEFT JOIN tblornaments o ON o.ornamentid = fi.ornamentid"
     ),
     "finds_arch": (
         "SELECT "
@@ -913,260 +785,161 @@ _CHART_SUBQUERIES: dict[str, str] = {
 }
 
 
+# Contracted top-N display window for chart histograms (CHART.md section 6).
+CHART_TOP_N = 30
+
+
 def build_chart_histogram(
     db: Session,
     *,
     query_id: str,
     x_key: str,
-    series_key: str | None = None,
-    site: Optional[str] = None,
-    sector: Optional[str] = None,
-    square: Optional[str] = None,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
-    q: Optional[str] = None,
-    frag_filters: Optional[dict[str, Any]] = None,
-    layer_filters: Optional[dict[str, Any]] = None,
-    top_n: int = 30,
+    series_key: str | None,
+    layer_filters: dict[str, Any] | None,
+    frag_filters: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    """Build a top-N histogram by aggregating in SQL.
+    """Build an exact top-N histogram by aggregating in SQL.
 
-    Returns a list of dicts:
+    Returns a list of dicts, already in display (rank) order:
     - Single-axis: ``[{"bucket": str, "count": int}, ...]``
     - With series: ``[{"x_bucket": str, "series_bucket": str, "count": int}, ...]``
 
-    Uses the same WHERE-clause logic as the full query functions, but
-    performs GROUP BY in the database so only ``top_n`` rows are returned
-    instead of fetching thousands of raw rows.
+    The ``CHART_TOP_N`` x-groups are chosen by their deduplicated x-only total
+    (the single-axis chart number; ties ordered by bucket); with a series, every series
+    value of those groups is returned. q2 counts each fragment once per
+    (x, series) bucket by its fragment count; finds_arch counts rows.
+
+    Raises ``KeyError`` for an unknown query id, or for an x / series column
+    that is not valid for *query_id*.
     """
-    subquery_sql = _CHART_SUBQUERIES.get(query_id)
-    if not subquery_sql:
-        return []
+    subquery_sql = _CHART_SUBQUERIES[query_id]
+    cols = CHART_COL_EXPR[query_id]
+    x_col = cols[x_key].split(".", 1)[1]
+    s_col = None if series_key is None else cols[series_key].split(".", 1)[1]
 
-    x_sql = CHART_COL_EXPR.get(x_key)
-    if not x_sql:
-        return []
-
-    if series_key:
-        s_sql = CHART_COL_EXPR.get(series_key)
-        if not s_sql:
-            return []
-    else:
-        s_sql = None
-
-    # Build WHERE clause using the subquery's alias-less column names.
-    # The subquery columns are like "site", "piecetype", "primary_" (no prefix).
-    # We need to map the filter column references to the subquery's column names.
+    # WHERE runs against the subquery's bare column names ("site", "piecetype").
     clauses: list[str] = []
-    params: dict[str, Any] = {}
+    params: dict[str, Any] = {"top_n": CHART_TOP_N}
 
-    # Layer filters: map label -> subquery column name
-    # finds has no site column; its layer column is layer_mechanical
-    _LAYER_COL_MAP: dict[str, str] = (
-        {
-            "Sector": "sector",
-            "Square": "square",
-            "Layer": "layer_mechanical",
-        }
-        if query_id == "finds_arch"
-        else {
-            "Site": "site",
-            "Sector": "sector",
-            "Square": "square",
-            "Layer": "layer",
-        }
-    )
     if layer_filters:
-        for label, values in layer_filters.items():
-            col = _LAYER_COL_MAP.get(label)
-            if not col:
-                continue
-            col_expr = f"{col}::text"
-            safe_label = label.replace(" ", "_")
-            if isinstance(values, list) and values:
-                param_name = f"layer_{safe_label}"
-                params[param_name] = values
-                conditions = " OR ".join(
-                    [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
-                )
-                clauses.append(f"({conditions})")
-                for i, v in enumerate(values):
-                    params[f"{param_name}_{i}"] = f"%{v}%"
-            elif isinstance(values, str) and values.strip():
-                param_name = f"layer_{safe_label}"
-                params[param_name] = f"%{values.strip()}%"
-                clauses.append(f"{col_expr} ILIKE :{param_name}")
-    else:
-        # finds has no site column in the subquery; ignore legacy site param
-        legacy_cols: dict[str, str | None] = {
-            "site": None if query_id == "finds_arch" else "site",
-            "sector": "sector",
-            "square": "square",
-        }
-        for name, value in (("site", site), ("sector", sector), ("square", square)):
-            col = legacy_cols[name]
-            if value and col:
-                clauses.append(f"{col} ILIKE :{name}")
-                params[name] = f"%{value}%"
+        _add_ilike_filters(
+            clauses,
+            params,
+            param_prefix="layer",
+            label_to_col=(
+                FINDS_LOCATION_FILTER_COLS
+                if query_id == "finds_arch"
+                else LAYER_FILTER_COLS
+            ),
+            filters=layer_filters,
+        )
 
-    if date_from:
-        clauses.append("recordenteredon >= :date_from")
-        params["date_from"] = date_from
-    if date_to:
-        clauses.append("recordenteredon <= :date_to")
-        params["date_to"] = date_to
-
-    if q:
-        params["q"] = f"%{q}%"
-        if query_id in ("q2",):
-            clauses.append(
-                "(COALESCE(note,'') ILIKE :q OR COALESCE(inventory,'') ILIKE :q OR COALESCE(piecetype::text,'') ILIKE :q)"
-            )
-        elif query_id == "finds":
-            clauses.append(
-                "(COALESCE(description,'') ILIKE :q OR COALESCE(findtype,'') ILIKE :q OR COALESCE(fi_inventory,'') ILIKE :q)"
-            )
-        elif query_id == "finds_arch":
-            clauses.append(
-                "(COALESCE(description,'') ILIKE :q "
-                "OR COALESCE(find_type,'') ILIKE :q "
-                "OR COALESCE(material,'') ILIKE :q "
-                "OR COALESCE(inv_no::text,'') ILIKE :q)"
-            )
-
-    # Fragment field filters (q2 only)
+    # Fragment + ornament field filters (q2 only)
     if frag_filters and query_id == "q2":
-        _FRAG_COL_MAP: dict[str, str] = {
-            "Piecetype": "piecetype",
-            "Technology": "technology",
-            "Baking": "baking",
-            "Color / Primary color": "primarycolor",
-            "Covering": "covering",
-            "Surface": "surface",
-            "Wall thickness": "wallthickness",
-            "Handle type": "handletype",
-            "Handle size": "handlesize",
-            "Bottom type": "bottomtype",
-            "Category": "category",
-            "Form": "form",
-            "Type": "type",
-            "Subtype": "subtype",
-            "Variant": "variant",
-            "Primary": "o_primary",
-            "Secondary": "secondary",
-            "Tertiary": "tertiary",
-            "Quarternary": "quarternary",
-            "Color / color1": "color1",
-            "Encrust color": "encrustcolor1",
-        }
-        for label, values in frag_filters.items():
-            col = _FRAG_COL_MAP.get(label)
-            if not col:
-                continue
-            col_expr = f"{col}::text"
-            safe_label = label.replace(" ", "_")
-            if isinstance(values, list) and values:
-                param_name = f"frag_{safe_label}"
-                params[param_name] = values
-                conditions = " OR ".join(
-                    [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
-                )
-                clauses.append(f"({conditions})")
-                for i, v in enumerate(values):
-                    params[f"{param_name}_{i}"] = f"%{v}%"
-            elif isinstance(values, str) and values.strip():
-                param_name = f"frag_{safe_label}"
-                params[param_name] = f"%{values.strip()}%"
-                clauses.append(f"{col_expr} ILIKE :{param_name}")
+        _add_ilike_filters(
+            clauses,
+            params,
+            param_prefix="frag",
+            label_to_col={**FRAGMENT_FILTER_COLS, **ORNAMENT_FILTER_COLS},
+            filters=frag_filters,
+        )
 
     # Archaeological finds filters
     if frag_filters and query_id == "finds_arch":
-        _ARCH_COL_MAP: dict[str, str] = {
-            "Find Type": "find_type",
-            "Material": "material",
-            "Coin": "coin",
-            "Denomination": "denomination",
-            "Mint": "mint",
-            "Year": "year",
-            "Inv No": "inv_no",
-            "Depth": "depth_m",
-            "Context": "context",
-        }
-        for label, values in frag_filters.items():
-            col = _ARCH_COL_MAP.get(label)
-            if not col:
-                continue
-            col_expr = f"{col}::text"
-            safe_label = label.replace(" ", "_")
-            if isinstance(values, list) and values:
-                param_name = f"arch_{safe_label}"
-                params[param_name] = values
-                conditions = " OR ".join(
-                    [f"{col_expr} ILIKE :{param_name}_{i}" for i, v in enumerate(values)]
-                )
-                clauses.append(f"({conditions})")
-                for i, v in enumerate(values):
-                    params[f"{param_name}_{i}"] = f"%{v}%"
-            elif isinstance(values, str) and values.strip():
-                param_name = f"arch_{safe_label}"
-                params[param_name] = f"%{values.strip()}%"
-                clauses.append(f"{col_expr} ILIKE :{param_name}")
+        _add_ilike_filters(
+            clauses,
+            params,
+            param_prefix="arch",
+            label_to_col=ARCH_FILTER_COLS,
+            filters=frag_filters,
+        )
 
     where_sql = ""
     if clauses:
         where_sql = "WHERE " + " AND ".join(clauses)
 
-    x_col = x_sql.split(".", 1)[1]  # e.g. "site" from "l.site"
-
-    # finds / finds_arch count rows (no f_count_deduped); only q2 sums f_count_deduped
-    if query_id in ("finds", "finds_arch"):
-        agg_expr = "COUNT(*)"
-    else:
-        agg_expr = "COALESCE(SUM(f_count_deduped), 0)"
-
-    if s_sql:
-        s_col = s_sql.split(".", 1)[1]
-        # Series histogram: GROUP BY x_bucket, series_bucket
-        sql = f"""
-            SELECT {x_col}::text AS x_bucket, {s_col}::text AS series_bucket,
-                   {agg_expr} AS cnt
-            FROM ({subquery_sql}) sub
-            {where_sql}
-            GROUP BY {x_col}, {s_col}
-            ORDER BY cnt DESC
-            LIMIT {top_n * 10}
+    # Ranking authority: x-only deduplicated totals (the number the single-axis
+    # chart shows), shared by both modes so a series never re-inflates the rank.
+    if query_id == "q2":
+        # Each fragment counts once per bucket (ornament rows fan out the join).
+        totals_sql = f"""
+            SELECT CAST(x_val AS TEXT) AS x_bucket,
+                   COALESCE(SUM(frag_count), 0) AS x_total
+            FROM (
+                SELECT DISTINCT fragmentid, frag_count, {x_col} AS x_val
+                FROM ({subquery_sql}) sub
+                {where_sql}
+            ) d
+            GROUP BY x_val
         """
     else:
-        # Single-axis histogram: GROUP BY x_bucket
-        sql = f"""
-            SELECT {x_col}::text AS bucket,
-                   {agg_expr} AS cnt
+        totals_sql = f"""
+            SELECT CAST({x_col} AS TEXT) AS x_bucket, COUNT(*) AS x_total
             FROM ({subquery_sql}) sub
             {where_sql}
             GROUP BY {x_col}
-            ORDER BY cnt DESC
-            LIMIT {top_n}
+        """
+    top_sql = """
+        top AS (
+            SELECT x_bucket, x_total,
+                   ROW_NUMBER() OVER (ORDER BY x_total DESC, x_bucket) AS x_rank
+            FROM totals
+        )
+    """
+
+    if s_col is None:
+        sql = f"""
+            WITH totals AS ({totals_sql}),
+            {top_sql}
+            SELECT x_bucket AS bucket, x_total AS cnt FROM top
+            WHERE x_rank <= :top_n
+            ORDER BY x_rank
+        """
+    else:
+        if query_id == "q2":
+            agg_sql = f"""
+                SELECT CAST(x_val AS TEXT) AS x_bucket,
+                       CAST(s_val AS TEXT) AS series_bucket,
+                       COALESCE(SUM(frag_count), 0) AS cnt
+                FROM (
+                    SELECT DISTINCT fragmentid, frag_count,
+                           {x_col} AS x_val, {s_col} AS s_val
+                    FROM ({subquery_sql}) sub
+                    {where_sql}
+                ) d
+                GROUP BY x_val, s_val
+            """
+        else:
+            agg_sql = f"""
+                SELECT CAST({x_col} AS TEXT) AS x_bucket,
+                       CAST({s_col} AS TEXT) AS series_bucket,
+                       COUNT(*) AS cnt
+                FROM ({subquery_sql}) sub
+                {where_sql}
+                GROUP BY {x_col}, {s_col}
+            """
+        # Null-safe join: a NULL x value is a real group.
+        sql = f"""
+            WITH totals AS ({totals_sql}),
+            {top_sql},
+            agg AS ({agg_sql})
+            SELECT a.x_bucket, a.series_bucket, a.cnt
+            FROM agg a JOIN top t
+              ON (a.x_bucket = t.x_bucket
+                  OR (a.x_bucket IS NULL AND t.x_bucket IS NULL))
+            WHERE t.x_rank <= :top_n
+            ORDER BY t.x_rank, a.cnt DESC, a.series_bucket
         """
 
     rows = db.execute(text(sql), params).mappings().all()
 
-    if s_sql:
-        # Pivot series results: group by x_bucket, collect series buckets and counts
-        x_buckets: dict[str, dict[str, int]] = {}
-        for r in rows:
-            xb = r["x_bucket"]
-            sb = r["series_bucket"]
-            cnt = int(r["cnt"])
-            if xb not in x_buckets:
-                x_buckets[xb] = {}
-            x_buckets[xb][sb] = cnt
-
-        # Pick top-N x_buckets by total count
-        x_totals = sorted(x_buckets.items(), key=lambda x: sum(x[1].values()), reverse=True)[:top_n]
-        result: list[dict[str, Any]] = []
-        for xb, series_map in x_totals:
-            for sb, cnt in series_map.items():
-                result.append({"x_bucket": xb, "series_bucket": sb, "count": cnt})
-        return result
-    else:
+    if s_col is None:
         return [{"bucket": r["bucket"], "count": int(r["cnt"])} for r in rows]
+    return [
+        {
+            "x_bucket": r["x_bucket"],
+            "series_bucket": r["series_bucket"],
+            "count": int(r["cnt"]),
+        }
+        for r in rows
+    ]

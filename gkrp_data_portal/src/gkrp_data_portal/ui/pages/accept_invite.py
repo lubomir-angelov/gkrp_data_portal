@@ -32,7 +32,9 @@ def page_accept_invite() -> None:
         # find user row that matches token hash (do not store raw token)
         # brute force is avoided: we compute hash and match
         token_hash = hashlib.sha256(token_raw.encode("utf-8")).hexdigest()
-        user = db.execute(select(User).where(User.invite_token_hash == token_hash)).scalar_one_or_none()
+        user = db.execute(
+            select(User).where(User.invite_token_hash == token_hash)
+        ).scalar_one_or_none()
 
         if user is None:
             ui.notify(t("notify_invalid_token"), type="negative")
@@ -50,9 +52,21 @@ def page_accept_invite() -> None:
             ui.label(t("notify_invalid_invite"))
             return
 
-    inp_username = ui.input(t("label_choose_username")).props("autocomplete=off").classes("w-[420px]")
-    inp_password = ui.input(t("label_choose_password"), password=True).props("autocomplete=new-password").classes("w-[420px]")
-    inp_password2 = ui.input(t("label_repeat_password"), password=True).props("autocomplete=new-password").classes("w-[420px]")
+    inp_username = (
+        ui.input(t("label_choose_username"))
+        .props("autocomplete=off")
+        .classes("w-[420px]")
+    )
+    inp_password = (
+        ui.input(t("label_choose_password"), password=True)
+        .props("autocomplete=new-password")
+        .classes("w-[420px]")
+    )
+    inp_password2 = (
+        ui.input(t("label_repeat_password"), password=True)
+        .props("autocomplete=new-password")
+        .classes("w-[420px]")
+    )
 
     def do_accept() -> None:
         username = (inp_username.value or "").strip()
@@ -68,7 +82,9 @@ def page_accept_invite() -> None:
         token_hash = hashlib.sha256(token_raw.encode("utf-8")).hexdigest()
 
         with session_scope() as db:
-            user2 = db.execute(select(User).where(User.invite_token_hash == token_hash)).scalar_one_or_none()
+            user2 = db.execute(
+                select(User).where(User.invite_token_hash == token_hash)
+            ).scalar_one_or_none()
             if user2 is None:
                 ui.notify("Invalid token", type="negative")
                 return

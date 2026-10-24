@@ -3,11 +3,10 @@ from __future__ import annotations
 from nicegui import app, ui
 from sqlalchemy import select
 
+from gkrp_data_portal.auth.deps import SESSION_USER_KEY
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.models.auth import User
 from gkrp_data_portal.ui.lang import t
-
-SESSION_USER_KEY = "user_id"
 
 
 @ui.page("/dev-login")
@@ -35,7 +34,9 @@ def page_dev_login() -> None:
         for (uid, email, username, role, is_active) in rows
     }
 
-    sel = ui.select(options=list(options.keys()), label=t("label_select_user")).classes("w-full")
+    sel = ui.select(options=list(options.keys()), label=t("label_select_user")).classes(
+        "w-full"
+    )
 
     def do_login() -> None:
         key = sel.value

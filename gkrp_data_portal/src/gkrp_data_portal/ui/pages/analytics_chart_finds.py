@@ -1,7 +1,7 @@
 """NiceGUI page: Analytics Chart — Finds.
 
 Layout:
-- Left: Finds filters (Find Type, Material, Coin, etc.) + limit selector
+- Left: Finds filters (Find Type, Material, Coin, etc.)
 - Center: chart (Plotly) with X-axis, series, chart type selectors
 
 This page uses the finds_arch query (finds table + optional layer join).
@@ -11,16 +11,13 @@ Visualizations count table rows (not f_count), so each row = 1.
 from __future__ import annotations
 
 import json
-import pathlib
 from typing import Any
 
-import markdown
 from nicegui import ui
 
 from .analytics_common import (
+    CHART_GUIDE_PATH,
     CHART_FINDS_ROUTE,
-    DEFAULT_LIMIT,
-    TABLE_MAX_LIMIT,
     build_histogram,
     build_histogram_series,
     plotly_bar,
@@ -33,20 +30,21 @@ from .analytics_common import (
 from gkrp_data_portal.ui.lang import t
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
+    ARCH_FILTER_COLS,
     build_chart_histogram,
     get_distinct_values,
+    get_groupby_columns,
 )
 
-_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
-_CHART_GUIDE_PATH = _PROJECT_ROOT / "CHART.md"
+# Archaeology filter labels deliberately not offered as widgets on this page.
+ARCH_LABELS_NOT_SHOWN: frozenset[str] = frozenset({"Inv No"})
 
-
-def _load_chart_guide() -> str:
-    """Load and render CHART.md as HTML."""
-    if _CHART_GUIDE_PATH.exists():
-        md = _CHART_GUIDE_PATH.read_text(encoding="utf-8")
-        return markdown.markdown(md, extensions=["tables", "fenced_code"])
-    return "<p>Chart guide not found.</p>"
+# Group-by options hidden from the dropdowns (members of get_groupby_columns("finds_arch")).
+_GROUPBY_EXCLUDE = frozenset({"fi_inv_no"})
+GROUPBY_OPTIONS: list[str] = [
+    c for c in get_groupby_columns("finds_arch") if c not in _GROUPBY_EXCLUDE
+]
+DEFAULT_X = "fi_find_type"
 
 
 @ui.page(CHART_FINDS_ROUTE)
@@ -54,9 +52,7 @@ def page_analytics_chart_finds() -> None:
     ui.label(t("title_analytics_chart_finds")).classes("text-h5 text-blue-600")
 
     state: dict[str, Any] = {
-        "query_id": "finds_arch",
         "_refreshing": False,
-        "_suppress_x_change": False,
     }
 
     with ui.row().classes("w-full gap-4 items-start flex-nowrap"):
@@ -76,109 +72,20 @@ def page_analytics_chart_finds() -> None:
             ):
                 finds_filters: list[tuple[str, Any]] = [
                     (
-                        "Find Type",
+                        label,
                         ui.select(
                             options=[],
-                            label="Find Type",
+                            label=label,
                             multiple=True,
                             clearable=True,
                             with_input=True,
                         )
                         .classes("w-full")
                         .props("dense"),
-                    ),
-                    (
-                        "Material",
-                        ui.select(
-                            options=[],
-                            label="Material",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Coin",
-                        ui.select(
-                            options=[],
-                            label="Coin",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Denomination",
-                        ui.select(
-                            options=[],
-                            label="Denomination",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Mint",
-                        ui.select(
-                            options=[],
-                            label="Mint",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Year",
-                        ui.select(
-                            options=[],
-                            label="Year",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Depth",
-                        ui.select(
-                            options=[],
-                            label="Depth",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Context",
-                        ui.select(
-                            options=[],
-                            label="Context",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
+                    )
+                    for label in ARCH_FILTER_COLS
+                    if label not in ARCH_LABELS_NOT_SHOWN
                 ]
-
-            sel_limit = ui.select(
-                options=[100, 200, 500, 1000, 2500, 5000, "max"],
-                value=DEFAULT_LIMIT,
-                label=t("label_limit"),
-            ).classes("w-full")
-            ui.label(t("limit_max_info")).classes("text-xs text-gray-400 mt-1")
 
         # Center panel — chart
         with ui.column().classes("flex-1 min-w-0"):
@@ -211,27 +118,31 @@ def page_analytics_chart_finds() -> None:
             with ui.row().classes("w-full items-center justify-between gap-2"):
                 with ui.column().classes("gap-0"):
                     sel_x = ui.select(
-                        options=[], label=t("label_group_by")
+                        options=GROUPBY_OPTIONS,
+                        value=DEFAULT_X,
+                        label=t("label_group_by"),
                     ).classes("w-[300px]")
-                    ui.label(
-                        t("chart_help_groupby_finds")
-                    ).classes("text-xs text-gray-400")
+                    ui.label(t("chart_help_groupby_finds")).classes(
+                        "text-xs text-gray-400"
+                    )
                 with ui.column().classes("gap-0"):
                     sel_series = ui.select(
-                        options=[],
+                        options=GROUPBY_OPTIONS,
                         label=t("label_series"),
                         clearable=True,
                     ).classes("w-[200px]")
-                    ui.label(
-                        t("chart_help_series_finds")
-                    ).classes("text-xs text-gray-400")
+                    ui.label(t("chart_help_series_finds")).classes(
+                        "text-xs text-gray-400"
+                    )
                 with ui.column().classes("gap-0"):
                     sel_chart_type = ui.select(
                         options=["Bar", "Pie", "Donut"],
                         value="Pie",
                         label=t("label_chart_type"),
                     ).classes("w-[160px]")
-                    ui.label(t("chart_help_chart_type_finds")).classes("text-xs text-gray-400")
+                    ui.label(t("chart_help_chart_type_finds")).classes(
+                        "text-xs text-gray-400"
+                    )
 
                 with ui.row().classes("gap-2"):
                     ui.button(
@@ -249,20 +160,9 @@ def page_analytics_chart_finds() -> None:
                     ui.button(
                         t("btn_print_pdf"),
                         on_click=lambda: ui.run_javascript(
-                            "window.open('/api/analytics/chart.html?query_id=' + encodeURIComponent(window.__gkrp_query_id || 'finds_arch'), '_blank');"
+                            f"window.__gkrpPlotlyPrint({chart_id});"
                         ),
                     )
-
-            with ui.column().classes("w-full mt-2"):
-                with ui.row().classes("items-center gap-2"):
-                    ui.label(t("chart_fetch_info")).classes(
-                        "text-sm text-gray-500"
-                    )
-                    use_all_rows = ui.toggle(
-                        {True: t("toggle_on"), False: t("toggle_off")},
-                        value=False,
-                    ).classes("text-sm")
-                    ui.label(t("enable_all_rows"))
 
     # --- local state ---
 
@@ -293,13 +193,14 @@ def page_analytics_chart_finds() -> None:
         xs: list[str],
         ys: list[int],
         title: str,
-        series_data: dict[str, list[int]] | None = None,
-        series_label: str = "Series",
+        series: tuple[dict[str, list[int]], str] | None = None,
     ) -> dict[str, Any]:
         chart_type = (sel_chart_type.value or "Bar").lower()
-        chart_type_debug.set_text(f"chart_type={chart_type} series={bool(series_data)}")
-        if series_data:
-            return plotly_grouped_bar(xs, series_data, title, series_label=series_label)
+        chart_type_debug.set_text(
+            f"chart_type={chart_type} series={series is not None}"
+        )
+        if series is not None:
+            return plotly_grouped_bar(xs, series[0], title, series_label=series[1])
         if chart_type == "pie":
             return plotly_pie(xs, ys, title)
         if chart_type == "donut":
@@ -315,36 +216,15 @@ def page_analytics_chart_finds() -> None:
         return None
 
     def _read_filters() -> dict[str, Any]:
-        limit_raw = sel_limit.value
-        if limit_raw == "max":
-            limit = TABLE_MAX_LIMIT
-        else:
-            limit = int(limit_raw or DEFAULT_LIMIT)
-            limit = max(1, min(limit, TABLE_MAX_LIMIT))
-
-        frag_filters_map: dict[str, list[str] | None] = {}
-        for label, widget in finds_filters:
-            if isinstance(widget, ui.select):
-                vals = widget.value
-                if isinstance(vals, list) and vals:
-                    frag_filters_map[label] = [
-                        str(v).strip() for v in vals if str(v).strip()
-                    ]
-                elif isinstance(vals, str) and vals.strip():
-                    frag_filters_map[label] = [vals.strip()]
-                else:
-                    frag_filters_map[label] = None
-
-        state["query_id"] = "finds_arch"
-        ui.run_javascript(f"window.__gkrp_query_id = {json.dumps('finds_arch')};")
+        frag_filters_map: dict[str, list[str] | None] = {
+            label: _select_to_list(widget) for label, widget in finds_filters
+        }
 
         return {
             "query_id": "finds_arch",
             # location comes from finds columns (fi_sector/fi_square/fi_layer_mechanical),
             # no layers-table filters on this page
             "layer_filters": None,
-            "limit": limit,
-            "offset": 0,
             "frag_filters": frag_filters_map,
         }
 
@@ -380,26 +260,8 @@ def page_analytics_chart_finds() -> None:
         try:
             f = _read_filters()
 
-            # Determine group-by columns from available data
-            # For finds_arch, use the column definitions to build the options
-            groupby_cols = [
-                "fi_find_type", "fi_material", "fi_coin", "fi_denomination",
-                "fi_mint", "fi_year", "fi_depth_m", "fi_context",
-                "fi_sector", "fi_square", "fi_layer_mechanical",
-            ]
-
-            sel_x.options = groupby_cols
-            sel_x.update()
-            sel_series.options = groupby_cols
-            sel_series.update()
-
-            if not sel_x.value or sel_x.value not in groupby_cols:
-                state["_suppress_x_change"] = True
-                sel_x.set_value(groupby_cols[0] if groupby_cols else None)
-                state["_suppress_x_change"] = False
-
-            x_key = sel_x.value
-            series_key = sel_series.value
+            x_key: str = sel_x.value
+            series_key: str | None = sel_series.value
 
             # --- Chart: SQL-side aggregation ---
             with session_scope() as db:
@@ -410,7 +272,6 @@ def page_analytics_chart_finds() -> None:
                     series_key=series_key,
                     layer_filters=f.get("layer_filters"),
                     frag_filters=f.get("frag_filters"),
-                    top_n=30,
                 )
 
             if not chart_agg:
@@ -425,30 +286,23 @@ def page_analytics_chart_finds() -> None:
                 status.set_text(t("status_no_results"))
                 return
 
-            if series_key and series_key in groupby_cols:
-                series_label = _column_to_label(series_key)
-                xs, series_data = build_histogram_series(
-                    [], x_key, series_key, top_n=30,
-                    pre_aggregated=chart_agg,
-                )
+            if series_key is not None:
+                xs, series_data = build_histogram_series(chart_agg)
                 _set_chart(
                     _build_figure(
                         xs,
                         [],
                         f"Count by {x_key} grouped by {series_key} (finds_arch)",
-                        series_data=series_data,
-                        series_label=series_label,
+                        series=(series_data, _column_to_label(series_key)),
                     )
                 )
             else:
-                xs, ys = build_histogram(
-                    [], x_key, top_n=30, pre_aggregated=chart_agg
-                )
+                xs, ys = build_histogram(chart_agg)
                 _set_chart(_build_figure(xs, ys, f"Count by {x_key} (finds_arch)"))
 
             dbg.set_text(
-                f"query=finds_arch chart_buckets={len(xs)} "
-                f"x={x_key} series={series_key or 'none'}"
+                f"query=finds_arch chart_buckets={len(xs)} x={x_key}"
+                + ("" if series_key is None else f" series={series_key}")
             )
 
             # --- Filter dropdowns: SQL DISTINCT queries ---
@@ -459,22 +313,16 @@ def page_analytics_chart_finds() -> None:
 
     btn_run.on("click", lambda e: refresh())
 
-    sel_limit.on("change", lambda e: refresh())
-
-    def _on_x_change(e) -> None:
-        if state.get("_suppress_x_change"):
-            return
-        refresh()
-
-    sel_x.on("change", _on_x_change)
+    sel_x.on("change", lambda e: refresh())
     sel_chart_type.on("change", lambda e: refresh())
-    use_all_rows.on("change", lambda e: refresh())
 
     refresh()
 
     # --- Help dialog (outside the 3-column row) ---
     with ui.dialog() as help_dialog, ui.card().classes("w-[1200px] max-h-[80vh]"):
-        ui.markdown(_load_chart_guide()).classes("max-w-full").style("max-width: none")
+        ui.markdown(CHART_GUIDE_PATH.read_text(encoding="utf-8")).classes(
+            "max-w-full"
+        ).style("max-width: none")
         ui.button(t("chart_help_close"), on_click=help_dialog.close).classes(
             "w-full mt-2"
         )

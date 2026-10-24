@@ -19,14 +19,6 @@ def get_current_user(db: Session) -> Optional[User]:
     return db.get(User, int(user_id))
 
 
-def require_user() -> User:
-    with session_scope() as db:
-        user = get_current_user(db)
-        if user is None or not user.is_active:
-            raise PermissionError("Not authenticated or inactive user")
-        return user
-
-
 def require_admin() -> User:
     with session_scope() as db:
         user = get_current_user(db)

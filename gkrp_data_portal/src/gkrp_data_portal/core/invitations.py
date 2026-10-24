@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 @dataclass(frozen=True)
 class InviteToken:
     """Represents a raw invite token plus its stored hash."""
+
     raw: str
     hashed: str
 

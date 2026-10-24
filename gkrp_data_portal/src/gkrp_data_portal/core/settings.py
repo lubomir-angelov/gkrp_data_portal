@@ -50,7 +50,8 @@ def get_invite_ttl_hours() -> int:
         return max(1, int(v))
     except ValueError:
         return 72
-    
+
+
 def get_storage_secret() -> str:
     """Secret used by NiceGUI to enable app.storage.user (cookie/session signing)."""
     secret = os.getenv("STORAGE_SECRET")
@@ -58,7 +59,6 @@ def get_storage_secret() -> str:
         # safe default for local dev; override in prod via env var
         secret = "dev-insecure-secret-change-me"
     return secret
-
 
 
 @dataclass(frozen=True)

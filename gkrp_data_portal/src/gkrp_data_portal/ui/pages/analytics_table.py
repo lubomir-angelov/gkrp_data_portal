@@ -7,19 +7,18 @@ Layout:
 
 from __future__ import annotations
 
-import json
-import pathlib
 from typing import Any
 
-import markdown
-from nicegui import app, ui
+from nicegui import ui
 
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
+    LAYER_FILTER_COLS,
     get_layer_hierarchy,
 )
 
 from .analytics_common import (
+    TABLE_GUIDE_PATH,
     DEFAULT_LIMIT,
     QUERY_OPTIONS,
     TABLE_MAX_LIMIT,
@@ -28,57 +27,15 @@ from .analytics_common import (
 )
 from gkrp_data_portal.ui.lang import t
 
-_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
-_TABLE_GUIDE_PATH = _PROJECT_ROOT / "ANALYTICS_TABLE_HELP.md"
-
-
-def _load_table_guide() -> str:
-    """Load and render ANALYTICS_TABLE_HELP.md as HTML."""
-    if _TABLE_GUIDE_PATH.exists():
-        md = _TABLE_GUIDE_PATH.read_text(encoding="utf-8")
-        return markdown.markdown(md, extensions=["tables", "fenced_code"])
-    return "<p>Table guide not found.</p>"
-
-
-# Default sort direction per column (sensible defaults).
-# IDs and dates default to descending (newest first); everything else ascending.
+# Default sort direction per visible column. IDs, dates and numeric measures
+# default to descending (newest/highest first); everything else ascending.
 _SORT_DIR: dict[str, str] = {
-    # Layer IDs
-    "l_layerid": "desc",
-    # Fragment IDs
-    "f_fragmentid": "desc",
-    # Ornament IDs
-    "o_ornamentid": "desc",
-    # Find IDs (tblfinds)
     "fi_findid": "desc",
-    # Archaeological find IDs (finds table)
-    "fi_findid_": "desc",
-    # Dates/timestamps — descending (newest first)
-    "l_recordenteredon": "desc",
-    "l_recordcreatedon": "desc",
-    "f_recordenteredon": "desc",
-    "o_recordenteredon": "desc",
-    "fi_recordenteredon": "desc",
     "fi_date_found": "desc",
-    # Numeric measures — descending (highest first)
-    "f_count": "desc",
-    "f_topsize": "desc",
-    "f_necksize": "desc",
-    "f_bodysize": "desc",
-    "f_bottomsize": "desc",
-    "f_dishheight": "desc",
     "fi_depth_m": "desc",
     "fi_weight_g": "desc",
     "fi_year": "desc",
-    "fi_year_inv_no": "desc",
-    "fi_cat_no": "desc",
-    "fi_museum_inv": "desc",
     "fi_preservation_grade": "desc",
-    "fi_reper_n_coord": "desc",
-    "fi_reper_e_coord": "desc",
-    "fi_reper_baltic": "desc",
-    "fi_baltic": "desc",
-    "fi_stratigraphic_level": "desc",
     "f_type": "desc",
     "f_variant": "desc",
     "o_quarternary": "desc",
@@ -417,11 +374,15 @@ def page_analytics_table() -> None:
         if query_id == "finds_arch":
             layer_filters_map: dict[str, list[str] | None] | None = None
         else:
-            layer_filters_map = {}
-            layer_filters_map["Site"] = _select_to_list(sel_site_t)
-            layer_filters_map["Sector"] = _select_to_list(sel_sector_t)
-            layer_filters_map["Square"] = _select_to_list(sel_square_t)
-            layer_filters_map["Layer"] = _select_to_list(sel_layer_t)
+            # Widget tuple follows LAYER_FILTER_COLS order.
+            layer_filters_map = {
+                label: _select_to_list(widget)
+                for label, widget in zip(
+                    LAYER_FILTER_COLS,
+                    (sel_site_t, sel_sector_t, sel_square_t, sel_layer_t),
+                    strict=True,
+                )
+            }
 
         limit_raw = inp_limit.value
         if limit_raw == "max":
@@ -432,8 +393,6 @@ def page_analytics_table() -> None:
 
         # Persist and expose selected query id.
         state["query_id"] = query_id
-        app.storage.general["analytics_last_query_id"] = query_id
-        ui.run_javascript(f"window.__gkrp_query_id = {json.dumps(query_id)};")
 
         return {
             "query_id": query_id,
@@ -477,7 +436,7 @@ def page_analytics_table() -> None:
                 status.set_text(t("status_no_results"))
                 return
 
-            ui_cols = ui_columns(res.columns) or list(res.columns)
+            ui_cols = ui_columns(res.columns)
 
             state["last_items"] = res.items
             state["last_columns"] = ui_cols
@@ -525,7 +484,9 @@ def page_analytics_table() -> None:
 
     # --- Help dialog (outside the row) ---
     with ui.dialog() as help_dialog, ui.card().classes("w-[1200px] max-h-[80vh]"):
-        ui.markdown(_load_table_guide()).classes("max-w-full").style("max-width: none")
+        ui.markdown(TABLE_GUIDE_PATH.read_text(encoding="utf-8")).classes(
+            "max-w-full"
+        ).style("max-width: none")
         ui.button(t("chart_help_close"), on_click=help_dialog.close).classes(
             "w-full mt-2"
         )

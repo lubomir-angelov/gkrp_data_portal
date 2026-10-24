@@ -1,7 +1,7 @@
 """NiceGUI page: Analytics Chart — Fragments.
 
 Layout:
-- Left: layer filters (Site, Sector, Square, Layer) + limit selector
+- Left: layer filters (Site, Sector, Square, Layer)
 - Center: chart (Plotly) with X-axis, series, chart type selectors
 - Right: Fragments + Ornaments filter panels
 
@@ -12,16 +12,13 @@ This page is a dedicated view for the q2 query
 from __future__ import annotations
 
 import json
-import pathlib
 from typing import Any
 
-import markdown
 from nicegui import ui
 
 from .analytics_common import (
+    CHART_GUIDE_PATH,
     CHART_FRAGMENTS_ROUTE,
-    DEFAULT_LIMIT,
-    TABLE_MAX_LIMIT,
     build_histogram,
     build_histogram_series,
     plotly_bar,
@@ -34,22 +31,21 @@ from .analytics_common import (
 from gkrp_data_portal.ui.lang import t
 from gkrp_data_portal.db.session import session_scope
 from gkrp_data_portal.ui.repository.analytics_repo import (
+    FRAGMENT_FILTER_COLS,
+    LAYER_FILTER_COLS,
+    ORNAMENT_FILTER_COLS,
     build_chart_histogram,
     get_distinct_values,
     get_groupby_columns,
     get_layer_hierarchy,
 )
 
-_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
-_CHART_GUIDE_PATH = _PROJECT_ROOT / "CHART.md"
-
-
-def _load_chart_guide() -> str:
-    """Load and render CHART.md as HTML."""
-    if _CHART_GUIDE_PATH.exists():
-        md = _CHART_GUIDE_PATH.read_text(encoding="utf-8")
-        return markdown.markdown(md, extensions=["tables", "fenced_code"])
-    return "<p>Chart guide not found.</p>"
+# Group-by options hidden from the dropdowns (members of get_groupby_columns("q2")).
+_GROUPBY_EXCLUDE = frozenset({"f_note", "f_inventory", "o_color1", "o_encrustcolor1"})
+GROUPBY_OPTIONS: list[str] = [
+    c for c in get_groupby_columns("q2") if c not in _GROUPBY_EXCLUDE
+]
+DEFAULT_X = "l_site"
 
 
 @ui.page(CHART_FRAGMENTS_ROUTE)
@@ -57,9 +53,7 @@ def page_analytics_chart_fragments() -> None:
     ui.label(t("title_analytics_chart_fragments")).classes("text-h5 text-blue-600")
 
     state: dict[str, Any] = {
-        "query_id": "q2",
         "_refreshing": False,
-        "_suppress_x_change": False,
         "_hierarchy": {},
         "_all_sites": [],
         "_all_sectors": [],
@@ -127,13 +121,6 @@ def page_analytics_chart_fragments() -> None:
                     .props("dense")
                 )
 
-            sel_limit = ui.select(
-                options=[100, 200, 500, 1000, 2500, 5000, "max"],
-                value=DEFAULT_LIMIT,
-                label=t("label_limit"),
-            ).classes("w-full")
-            ui.label(t("limit_max_info")).classes("text-xs text-gray-400 mt-1")
-
         # Center panel — chart
         with ui.column().classes("flex-1 min-w-0"):
             with ui.row().classes("w-full items-center justify-between"):
@@ -165,29 +152,27 @@ def page_analytics_chart_fragments() -> None:
             with ui.row().classes("w-full items-center justify-between gap-2"):
                 with ui.column().classes("gap-0"):
                     sel_x = ui.select(
-                        options=[], label=t("label_group_by")
+                        options=GROUPBY_OPTIONS,
+                        value=DEFAULT_X,
+                        label=t("label_group_by"),
                     ).classes("w-[300px]")
-                    ui.label(
-                        t("chart_help_groupby")
-                    ).classes("text-xs text-gray-400")
+                    ui.label(t("chart_help_groupby")).classes("text-xs text-gray-400")
                 with ui.column().classes("gap-0"):
                     sel_series = ui.select(
-                        options=[],
+                        options=GROUPBY_OPTIONS,
                         label=t("label_series"),
                         clearable=True,
                     ).classes("w-[200px]")
-                    ui.label(
-                        t("chart_help_series")
-                    ).classes("text-xs text-gray-400")
+                    ui.label(t("chart_help_series")).classes("text-xs text-gray-400")
                 with ui.column().classes("gap-0"):
                     sel_chart_type = ui.select(
                         options=["Bar", "Pie", "Donut"],
                         value="Pie",
                         label=t("label_chart_type"),
                     ).classes("w-[160px]")
-                    ui.label(
-                        t("chart_help_chart_type")
-                    ).classes("text-xs text-gray-400")
+                    ui.label(t("chart_help_chart_type")).classes(
+                        "text-xs text-gray-400"
+                    )
 
                 with ui.row().classes("gap-2"):
                     ui.button(
@@ -205,20 +190,9 @@ def page_analytics_chart_fragments() -> None:
                     ui.button(
                         t("btn_print_pdf"),
                         on_click=lambda: ui.run_javascript(
-                            "window.open('/api/analytics/chart.html?query_id=' + encodeURIComponent(window.__gkrp_query_id || 'q2'), '_blank');"
+                            f"window.__gkrpPlotlyPrint({chart_id});"
                         ),
                     )
-
-            with ui.column().classes("w-full mt-2"):
-                with ui.row().classes("items-center gap-2"):
-                    ui.label(t("chart_fetch_info")).classes(
-                        "text-sm text-gray-500"
-                    )
-                    use_all_rows = ui.toggle(
-                        {True: t("toggle_on"), False: t("toggle_off")},
-                        value=False,
-                    ).classes("text-sm")
-                    ui.label(t("enable_all_rows"))
 
         # Right panel — fragments filters
         with ui.column().classes("w-[320px] shrink-0"):
@@ -230,186 +204,18 @@ def page_analytics_chart_fragments() -> None:
             ):
                 frag_filters: list[tuple[str, Any]] = [
                     (
-                        "Piecetype",
+                        label,
                         ui.select(
                             options=[],
-                            label="Piecetype",
-                            value=[],
+                            label=label,
                             multiple=True,
                             clearable=True,
                             with_input=True,
                         )
                         .classes("w-full")
                         .props("dense"),
-                    ),
-                    (
-                        "Technology",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Technology",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Baking",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Baking",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Color / Primary color",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Color / Primary color",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Covering",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Covering",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Surface",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Surface",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Wall thickness",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Wall thickness",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Handle type",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Handle type",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Handle size",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Handle size",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Bottom type",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Bottom type",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Category",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Category",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Form",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Form",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Type",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Type",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Subtype",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Subtype",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Variant",
-                        ui.select(
-                            options=[],
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                            label="Variant",
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
+                    )
+                    for label in FRAGMENT_FILTER_COLS
                 ]
 
             # Ornaments section
@@ -420,77 +226,18 @@ def page_analytics_chart_fragments() -> None:
                 )
                 orn_filters: list[tuple[str, Any]] = [
                     (
-                        "Primary",
+                        label,
                         ui.select(
                             options=[],
-                            label="Primary",
+                            label=label,
                             multiple=True,
                             clearable=True,
                             with_input=True,
                         )
                         .classes("w-full")
                         .props("dense"),
-                    ),
-                    (
-                        "Secondary",
-                        ui.select(
-                            options=[],
-                            label="Secondary",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Tertiary",
-                        ui.select(
-                            options=[],
-                            label="Tertiary",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Quarternary",
-                        ui.select(
-                            options=[],
-                            label="Quarternary",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Color / color1",
-                        ui.select(
-                            options=[],
-                            label="Color / color1",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
-                    (
-                        "Encrust color",
-                        ui.select(
-                            options=[],
-                            label="Encrust color",
-                            multiple=True,
-                            clearable=True,
-                            with_input=True,
-                        )
-                        .classes("w-full")
-                        .props("dense"),
-                    ),
+                    )
+                    for label in ORNAMENT_FILTER_COLS
                 ]
 
     # --- local state ---
@@ -522,13 +269,14 @@ def page_analytics_chart_fragments() -> None:
         xs: list[str],
         ys: list[int],
         title: str,
-        series_data: dict[str, list[int]] | None = None,
-        series_label: str = "Series",
+        series: tuple[dict[str, list[int]], str] | None = None,
     ) -> dict[str, Any]:
         chart_type = (sel_chart_type.value or "Bar").lower()
-        chart_type_debug.set_text(f"chart_type={chart_type} series={bool(series_data)}")
-        if series_data:
-            return plotly_grouped_bar(xs, series_data, title, series_label=series_label)
+        chart_type_debug.set_text(
+            f"chart_type={chart_type} series={series is not None}"
+        )
+        if series is not None:
+            return plotly_grouped_bar(xs, series[0], title, series_label=series[1])
         if chart_type == "pie":
             return plotly_pie(xs, ys, title)
         if chart_type == "donut":
@@ -544,53 +292,24 @@ def page_analytics_chart_fragments() -> None:
         return None
 
     def _read_filters() -> dict[str, Any]:
+        # Widget tuple follows LAYER_FILTER_COLS order.
         layer_filters_map: dict[str, list[str] | None] = {
-            "Site": _select_to_list(sel_site),
-            "Sector": _select_to_list(sel_sector),
-            "Square": _select_to_list(sel_square),
-            "Layer": _select_to_list(sel_layer),
+            label: _select_to_list(widget)
+            for label, widget in zip(
+                LAYER_FILTER_COLS,
+                (sel_site, sel_sector, sel_square, sel_layer),
+                strict=True,
+            )
         }
 
-        limit_raw = sel_limit.value
-        if limit_raw == "max":
-            limit = TABLE_MAX_LIMIT
-        else:
-            limit = int(limit_raw or DEFAULT_LIMIT)
-            limit = max(1, min(limit, TABLE_MAX_LIMIT))
-
-        frag_filters_map: dict[str, list[str] | None] = {}
-        for label, widget in frag_filters:
-            if isinstance(widget, ui.select):
-                vals = widget.value
-                if isinstance(vals, list) and vals:
-                    frag_filters_map[label] = [
-                        str(v).strip() for v in vals if str(v).strip()
-                    ]
-                elif isinstance(vals, str) and vals.strip():
-                    frag_filters_map[label] = [vals.strip()]
-                else:
-                    frag_filters_map[label] = None
-
-        for label, widget in orn_filters:
-            if isinstance(widget, ui.select):
-                vals = widget.value
-                if isinstance(vals, list) and vals:
-                    frag_filters_map[label] = [
-                        str(v).strip() for v in vals if str(v).strip()
-                    ]
-                elif isinstance(vals, str) and vals.strip():
-                    frag_filters_map[label] = [vals.strip()]
-                else:
-                    frag_filters_map[label] = None
-
-        state["query_id"] = "q2"
-        ui.run_javascript(f"window.__gkrp_query_id = {json.dumps('q2')};")
+        frag_filters_map: dict[str, list[str] | None] = {
+            label: _select_to_list(widget)
+            for label, widget in [*frag_filters, *orn_filters]
+        }
 
         return {
             "query_id": "q2",
             "layer_filters": layer_filters_map,
-            "limit": limit,
-            "offset": 0,
             "frag_filters": frag_filters_map,
         }
 
@@ -695,62 +414,9 @@ def page_analytics_chart_fragments() -> None:
         try:
             f = _read_filters()
 
-            # --- Build group-by column options from known definitions ---
-            _GROUPBY_EXCLUDE = frozenset(
-                {
-                    "l_layername",
-                    "l_context",
-                    "f_fragmenttype",
-                    "f_fract",
-                    "f_secondarycolor",
-                    "f_includesconc",
-                    "f_includessize",
-                    "f_onepot",
-                    "f_includestype",
-                    "f_han",
-                    "f_note",
-                    "f_inventory",
-                    "f_imageurl",
-                    "p_ornamentid",
-                    "o_fragmentid",
-                    "o_relationship",
-                    "o_ornament",
-                    "o_color1",
-                    "o_color2",
-                    "encrustcolor",
-                    "o_encrustcolor1",
-                    "o_encrustcolor2",
-                    "o_recordenteredon",
-                }
-            )
-            all_cols = get_groupby_columns("q2")
-            groupby_cols = [c for c in all_cols if c.lower() not in _GROUPBY_EXCLUDE]
-            sel_x.options = groupby_cols
-            sel_x.update()
-            sel_series.options = groupby_cols
-            sel_series.update()
-
-            # Default X if not set or invalid
-            preferred = [
-                "l_site",
-                "l_sector",
-                "l_square",
-                "f_piecetype",
-                "f_category",
-                "f_form",
-                "f_technology",
-            ]
-            if not sel_x.value or sel_x.value not in groupby_cols:
-                default_x = next((c for c in preferred if c in groupby_cols), None) or (
-                    groupby_cols[0] if groupby_cols else None
-                )
-                state["_suppress_x_change"] = True
-                sel_x.set_value(default_x)
-                state["_suppress_x_change"] = False
-
             # --- Chart: SQL-side aggregation (no raw row fetch needed) ---
-            x_key = sel_x.value or "l_site"
-            series_key = sel_series.value
+            x_key: str = sel_x.value
+            series_key: str | None = sel_series.value
 
             with session_scope() as db:
                 chart_agg = build_chart_histogram(
@@ -760,7 +426,6 @@ def page_analytics_chart_fragments() -> None:
                     series_key=series_key,
                     layer_filters=f.get("layer_filters"),
                     frag_filters=f.get("frag_filters"),
-                    top_n=30,
                 )
 
             if not chart_agg:
@@ -773,30 +438,23 @@ def page_analytics_chart_fragments() -> None:
                 status.set_text(t("status_no_results"))
                 return
 
-            if series_key and series_key in (sel_x.options or []):
-                series_label = _column_to_label(series_key)
-                xs, series_data = build_histogram_series(
-                    [], x_key, series_key, top_n=30,
-                    pre_aggregated=chart_agg,
-                )
+            if series_key is not None:
+                xs, series_data = build_histogram_series(chart_agg)
                 _set_chart(
                     _build_figure(
                         xs,
                         [],
                         f"Count by {x_key} grouped by {series_key} (q2)",
-                        series_data=series_data,
-                        series_label=series_label,
+                        series=(series_data, _column_to_label(series_key)),
                     )
                 )
             else:
-                xs, ys = build_histogram(
-                    [], x_key, top_n=30, pre_aggregated=chart_agg
-                )
+                xs, ys = build_histogram(chart_agg)
                 _set_chart(_build_figure(xs, ys, f"Count by {x_key} (q2)"))
 
             dbg.set_text(
-                f"query=q2 chart_buckets={len(xs)} "
-                f"x={x_key} series={series_key or 'none'}"
+                f"query=q2 chart_buckets={len(xs)} x={x_key}"
+                + ("" if series_key is None else f" series={series_key}")
             )
 
             # --- Filter dropdowns: still need distinct-value queries ---
@@ -811,8 +469,7 @@ def page_analytics_chart_fragments() -> None:
         Separate from chart rendering so dropdowns can refresh independently.
         """
         needed: set[str] = set()
-        for label in ["Site", "Sector", "Square", "Layer"]:
-            needed.add(label)
+        needed.update(LAYER_FILTER_COLS)
         for label, widget in frag_filters:
             if isinstance(widget, ui.select):
                 needed.add(label)
@@ -854,22 +511,17 @@ def page_analytics_chart_fragments() -> None:
     sel_sector.on("change", lambda e: _on_layer_change())
     sel_square.on("change", lambda e: _on_layer_change())
     sel_layer.on("change", lambda e: _on_layer_change())
-    sel_limit.on("change", lambda e: refresh())
 
-    def _on_x_change(e) -> None:
-        if state.get("_suppress_x_change"):
-            return
-        refresh()
-
-    sel_x.on("change", _on_x_change)
+    sel_x.on("change", lambda e: refresh())
     sel_chart_type.on("change", lambda e: refresh())
-    use_all_rows.on("change", lambda e: refresh())
 
     refresh()
 
     # --- Help dialog (outside the 3-column row) ---
     with ui.dialog() as help_dialog, ui.card().classes("w-[1200px] max-h-[80vh]"):
-        ui.markdown(_load_chart_guide()).classes("max-w-full").style("max-width: none")
+        ui.markdown(CHART_GUIDE_PATH.read_text(encoding="utf-8")).classes(
+            "max-w-full"
+        ).style("max-width: none")
         ui.button(t("chart_help_close"), on_click=help_dialog.close).classes(
             "w-full mt-2"
         )
